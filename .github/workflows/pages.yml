@@ -1,0 +1,64 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - run: npm run build
+
+      # production ビルドは config.json を除外し、copy-default-config.mjs が
+      # config.json.example（プレースホルダ）を dist/assets/config.json に置く。
+      # それを Secret の値で上書きする（上流 deploy.yml と同じ手法）。
+      - name: Inject backend URL
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+        run: |
+          if [ -z "$BACKEND_URL" ]; then
+            echo "::error::BACKEND_URL secret is not set"; exit 1
+          fi
+          mkdir -p dist/assets
+          jq --arg url "$BACKEND_URL" '.backend.url = $url' \
+            src/assets/config.json.example > dist/assets/config.json
+          test -s dist/assets/config.json
+          cat dist/assets/config.json
+
+      # zip-dist.mjs が作る配布用 zip は Pages に載せない
+      - name: Drop release zip
+        run: rm -f dist/axe_*.zip
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,38 @@
+# このフォークについて
+
+`kakapo-105/udonarium_axe` — [Xelltis/udonarium_axe](https://github.com/Xelltis/udonarium_axe) の個人フォーク。
+独自機能を加えつつ、ビルド結果を GitHub Pages で公開する。
+
+## 公開
+
+- URL: https://kakapo-105.github.io/udonarium_axe/
+- `main` に push すると [.github/workflows/pages.yml](.github/workflows/pages.yml) が
+  `npm ci && npm run build` → `dist/assets/config.json` にバックエンド URL を注入 → Pages へ配信。
+- バックエンド URL はソースに入れず、リポジトリ Secret `BACKEND_URL` から注入する
+  （Settings → Secrets and variables → Actions）。
+
+## 上流の取り込み（リリースタグ単位）
+
+```sh
+git fetch upstream --tags
+git merge v1.52.0        # 新しいタグが出たとき
+# コンフリクトを解決してコミット
+git push                 # → 自動でビルド＆公開
+```
+
+`upstream` remote: `https://github.com/Xelltis/udonarium_axe.git`
+
+## 独自機能
+
+- feature ブランチで作って `main` にマージする。
+- コミットは小さく、全体整形はしない（上流マージのコンフリクトを局所化するため）。
+
+## 上流から削除したワークフロー
+
+フォークに合わないため削除済み（`git` 履歴に残る）:
+
+- `release.yml` — semantic-release が自分の `main` にリリースコミットを push してしまう
+- `deploy.yml` — 上流の AWS S3 / CloudFront 用（Secret を持っていない）
+- `docs.yml` — `website/` の VitePress サイトを同じ `github-pages` 環境へ出すのでアプリ配信と衝突
+
+`ci.yml`（Pull Request 時の lint / test / build）は残してある。
