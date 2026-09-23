@@ -10,6 +10,7 @@ import {
   ViewContainerRef,
 } from '@angular/core';
 import { OverlayLayers } from '@axe/application/ui/overlay-layers';
+import { PanelFrame, PanelService } from '@axe/application/ui/panel.service';
 import { AttachedDocuments } from '@axe/domain/ui/attached-documents';
 import { PanelWindowLayerComponent } from '@axe/features/panels/panel-window-layer.component';
 
@@ -21,11 +22,14 @@ import { PanelWindowLayerComponent } from '@axe/features/panels/panel-window-lay
  * to describe, and a second set of window controls inside a window is only confusing. What
  * the panel's content put in the bar is left alone: those work on what it is showing, not on
  * the frame, and are the same use here as anywhere.
+ *
+ * Only the window's own panel is told this. A panel opened from it stands in the window as it
+ * would on the table, frame and all.
  */
 const WINDOW_SHEET = `
   html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: var(--ui-bg); }
-  [data-panel-frame-controls] { display: none !important; }
-  .draggable-panel {
+  [data-panel-window-frame] [data-panel-frame-controls] { display: none !important; }
+  [data-panel-window-frame] .draggable-panel {
     position: static !important;
     inset: auto !important;
     width: 100% !important;
@@ -48,6 +52,13 @@ export interface PanelWindowRequest {
   open: (host: ViewContainerRef) => void;
   /** Draws it on the table again, once the window has gone. */
   restore: () => void;
+  /**
+   * Called while the window is still standing, for panels that moved rather than reopened.
+   *
+   * A moved panel is the same view over there, so it has to be brought home before the
+   * window's layer is taken down, or it goes down with it. Given one, `restore` is not used.
+   */
+  leaving?: () => void;
 }
 
 interface OpenWindow {
@@ -70,7 +81,7 @@ interface OpenWindow {
  * same component, told about the same room, without a copy of the application behind it.
  *
  * The component itself stays in this application. Only its nodes are over there, so what it
- * is showing goes on arriving the same way it always did. How a panel is opened is not known
+ * is showing arrives the same way as in the main window. How a panel is opened is not known
  * here — the caller brings that, which is how a panel belonging to one piece on the table can
  * be taken out as readily as one belonging to the room.
  *
@@ -85,6 +96,11 @@ export class PanelWindowService {
 
   private readonly windows = new Map<string, OpenWindow>();
 
+  /** Watches the app's head for sheets added while a window is out, and is let go once none is. */
+  private sheetWatch: MutationObserver | null = null;
+  /** The copies made of each such sheet, so they can go when it does. */
+  private sheetCopies = new WeakMap<Node, Element[]>();
+
   /** Which panels are currently in windows of their own. */
   readonly detached = signal<readonly string[]>([]);
 
@@ -97,6 +113,7 @@ export class PanelWindowService {
     return typeof this.document.defaultView?.open === 'function';
   }
 
+  /** Whether the panel with this key is out in a window of its own right now. */
   isDetached(key: string): boolean {
     return this.windows.has(key);
   }
@@ -121,6 +138,7 @@ export class PanelWindowService {
 
     const target = opened.document;
     this.dress(target);
+    this.watchSheets();
     AttachedDocuments.attach(target);
 
     const layer = createComponent(PanelWindowLayerComponent, {
@@ -129,7 +147,7 @@ export class PanelWindowService {
     });
     this.appRef.attachView(layer.hostView);
     layer.changeDetectorRef.detectChanges();
-    OverlayLayers.attach(target, layer.instance.layer());
+    OverlayLayers.attach(target, layer.instance.overlay());
     request.open(layer.instance.layer());
 
     const watchdog = setInterval(() => this.look(request.key), 500);
@@ -138,6 +156,43 @@ export class PanelWindowService {
     this.windows.set(request.key, { request, window: opened, document: target, layer, watchdog, arrived: false });
     this.detached.set([...this.windows.keys()]);
     return true;
+  }
+
+  /**
+   * Takes a whole group of panels out into one window, and brings them back as one.
+   *
+   * The panels are not opened again over there: their views are moved into a frame belonging
+   * to that window, so a half-typed line and the place a log was read to go with them, and
+   * come home the same way when the window is shut.
+   */
+  popOutGroup(frame: PanelFrame, panels: PanelService): boolean {
+    let abroad: PanelFrame | null = null;
+    const box = frame.frameSize();
+    const home = { ...frame.framePlace(), ...box };
+    return this.popOut({
+      key: `group:${frame.frameKey}`,
+      width: box.width,
+      height: box.height,
+      open: (host) => {
+        abroad = panels.openFrame(undefined, host);
+        for (const handoff of frame.handOverAll()) {
+          handoff.panel.windowed.set(true);
+          abroad.takeIn(handoff);
+        }
+        frame.dismissFrame();
+      },
+      leaving: () => {
+        const gone = abroad;
+        if (!gone) return;
+        const back = panels.openFrame(home);
+        for (const handoff of gone.handOverAll()) {
+          handoff.panel.windowed.set(false);
+          back.takeIn(handoff);
+        }
+        gone.dismissFrame();
+      },
+      restore: () => undefined,
+    });
   }
 
   /**
@@ -169,20 +224,32 @@ export class PanelWindowService {
     if (!held) return;
 
     const wentOnItsOwn = held.arrived && !this.holds(held);
+    const comingHome = restore && !wentOnItsOwn;
 
     this.windows.delete(key);
     this.detached.set([...this.windows.keys()]);
     clearInterval(held.watchdog);
+    if (this.windows.size === 0) {
+      this.sheetWatch?.disconnect();
+      this.sheetWatch = null;
+      this.sheetCopies = new WeakMap();
+    }
 
+    if (comingHome && held.request.leaving) held.request.leaving();
     AttachedDocuments.detach(held.document);
     OverlayLayers.detach(held.document);
     held.layer.destroy();
     this.appRef.detachView(held.layer.hostView);
     if (!held.window.closed) held.window.close();
 
-    if (restore && !wentOnItsOwn) held.request.restore();
+    if (comingHome && !held.request.leaving) held.request.restore();
   }
 
+  /**
+   * Shuts every panel window without putting the panels back on the table.
+   *
+   * Called as the app's page goes away, when there is no table left to put them on.
+   */
   closeAll(): void {
     for (const key of [...this.windows.keys()]) this.bringBack(key, false);
   }
@@ -201,5 +268,43 @@ export class PanelWindowService {
     const sheet = target.createElement('style');
     sheet.textContent = WINDOW_SHEET;
     target.head.appendChild(sheet);
+  }
+
+  /**
+   * Carries a sheet the app adds to its head while a window is out over to every window.
+   *
+   * A window is given the app's sheets as they stand when it opens, and some come later: the
+   * rules a select's list is laid out by are put in the first time a list is opened, which can
+   * be over in a window. Without them that list is laid out as if it were part of the page.
+   */
+  private watchSheets(): void {
+    if (this.sheetWatch) return;
+    const Observer = this.document.defaultView?.MutationObserver;
+    if (!Observer) return;
+    this.sheetWatch = new Observer((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) if (PanelWindowService.isSheet(node)) this.copySheet(node);
+        for (const node of record.removedNodes) {
+          for (const copy of this.sheetCopies.get(node) ?? []) copy.remove();
+          this.sheetCopies.delete(node);
+        }
+      }
+    });
+    this.sheetWatch.observe(this.document.head, { childList: true });
+  }
+
+  private copySheet(sheet: Element): void {
+    const copies = this.sheetCopies.get(sheet) ?? [];
+    for (const held of this.windows.values()) {
+      const copy = held.document.importNode(sheet, true);
+      held.document.head.appendChild(copy);
+      copies.push(copy);
+    }
+    this.sheetCopies.set(sheet, copies);
+  }
+
+  private static isSheet(node: Node): node is Element {
+    if (node.nodeName === 'STYLE') return true;
+    return node.nodeName === 'LINK' && (node as Element).getAttribute('rel') === 'stylesheet';
   }
 }

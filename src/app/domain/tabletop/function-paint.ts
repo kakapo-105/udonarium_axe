@@ -1,4 +1,5 @@
 import { CellRect, rectCells } from '@axe/domain/tabletop/cell-rectangles';
+import { encodeSlopeSides, parseSlopeSides } from '@axe/domain/tabletop/terrain-slope';
 import {
   asTriggerMoment,
   asTriggerTarget,
@@ -22,6 +23,9 @@ export type MapFunctionRole = (typeof MAP_FUNCTION_ROLES)[number];
 
 export const DEFAULT_FUNCTION_ROLE: MapFunctionRole = 'moveBlock';
 
+/**
+ * Reads a stored map editor function role, falling back to blocking movement for anything unknown.
+ */
 export function asFunctionRole(value: unknown): MapFunctionRole {
   return typeof value === 'string' && (MAP_FUNCTION_ROLES as readonly string[]).includes(value)
     ? (value as MapFunctionRole)
@@ -70,6 +74,8 @@ export interface TerrainPaintSpec {
   mode: number;
   blocksSight: boolean;
   blocksLight: boolean;
+  /** Whether a piece walks around it rather than up onto it. */
+  blocksClimb: boolean;
   /** Whether the picture repeats across the block rather than being stretched over it. */
   tiledTexture: boolean;
   showsGrid: boolean;
@@ -81,6 +87,8 @@ export interface TerrainPaintSpec {
   doorMirrored: boolean;
   slope: boolean;
   slopeDirection: number;
+  /** The sides the slope runs down to, written as their names; empty falls back to the direction. */
+  slopeSides: string;
   light: TerrainLightSpec;
   images: TerrainFaceImages;
   /** Null where the block sits square on its cells, which is where the brush put it. */
@@ -174,6 +182,7 @@ export const DEFAULT_FUNCTION_SPEC: FunctionSpec = {
     mode: 3,
     blocksSight: true,
     blocksLight: true,
+    blocksClimb: false,
     tiledTexture: false,
     showsGrid: false,
     dropShadow: true,
@@ -184,6 +193,7 @@ export const DEFAULT_FUNCTION_SPEC: FunctionSpec = {
     doorMirrored: false,
     slope: false,
     slopeDirection: 0,
+    slopeSides: '',
     light: {
       enabled: false,
       preset: 'custom',
@@ -259,6 +269,10 @@ function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
+/**
+ * Reads the face pictures of a painted wall from loose saved data. A face that is missing or not
+ * text comes back empty.
+ */
 export function sanitizeFaceImages(value: unknown): TerrainFaceImages {
   const held = asRecord(value);
   const images = { ...NO_FACE_IMAGES };
@@ -286,6 +300,12 @@ function sanitizeLight(value: unknown): TerrainLightSpec {
   };
 }
 
+/**
+ * Reads a function spec from loose saved data, such as a stored map editor scene.
+ *
+ * Every field that is missing or of the wrong type takes its default, and numbers are held to their
+ * allowed ranges, so the result is always complete.
+ */
 export function sanitizeFunctionSpec(value: unknown): FunctionSpec {
   const held = asRecord(value);
   const terrain = asRecord(held['terrain']);
@@ -303,6 +323,7 @@ export function sanitizeFunctionSpec(value: unknown): FunctionSpec {
       mode: countIn(terrain, 'mode', fallback.terrain.mode, 0, 3),
       blocksSight: flagIn(terrain, 'blocksSight', fallback.terrain.blocksSight),
       blocksLight: flagIn(terrain, 'blocksLight', fallback.terrain.blocksLight),
+      blocksClimb: flagIn(terrain, 'blocksClimb', fallback.terrain.blocksClimb),
       tiledTexture: flagIn(terrain, 'tiledTexture', fallback.terrain.tiledTexture),
       showsGrid: flagIn(terrain, 'showsGrid', fallback.terrain.showsGrid),
       dropShadow: flagIn(terrain, 'dropShadow', fallback.terrain.dropShadow),
@@ -313,6 +334,7 @@ export function sanitizeFunctionSpec(value: unknown): FunctionSpec {
       doorMirrored: flagIn(terrain, 'doorMirrored', fallback.terrain.doorMirrored),
       slope: flagIn(terrain, 'slope', fallback.terrain.slope),
       slopeDirection: countIn(terrain, 'slopeDirection', fallback.terrain.slopeDirection, 0, 4),
+      slopeSides: encodeSlopeSides(parseSlopeSides(textIn(terrain, 'slopeSides', fallback.terrain.slopeSides))),
       light: sanitizeLight(terrain['light']),
       images: sanitizeFaceImages(terrain['images']),
       placement: sanitizePlacement(terrain['placement']),
@@ -358,15 +380,18 @@ export interface TriggerBlock extends CellRect {
   spec: TriggerPaintSpec;
 }
 
-/**
- * How high each block stands, counted in the cells of the blocks beneath it.
- *
- * Blocks are walked from the ground up, so a wall laid over a wall is told that it starts
- * where the one below leaves off. A block spanning cells of unequal standing takes the
- * highest of them, since a wall cannot begin at two heights at once.
- */
+/** A block as far as stacking cares: the cells it covers, the altitude it is laid by and its height in cells. */
 type StandingBlock = CellRect & { spec: { altitude: number; height: number } };
 
+/**
+ * How many cells up each block starts, given the blocks stacked beneath it, in the same order as
+ * the blocks were given.
+ *
+ * Blocks are laid from the ground up, lowest altitude first and in the order given where two are
+ * level, so a wall laid over a wall starts where the one below leaves off. A block spanning cells
+ * of unequal standing starts on the tallest stack under any of them, since a wall cannot begin at
+ * two heights at once.
+ */
 export function terrainStackLevels(blocks: readonly StandingBlock[]): number[] {
   const order = blocks
     .map((_, index) => index)

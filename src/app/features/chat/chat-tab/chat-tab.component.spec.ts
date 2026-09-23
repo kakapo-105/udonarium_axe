@@ -7,6 +7,7 @@ import { GameCharacter } from '@axe/domain/character/game-character';
 import { ChatMessage } from '@axe/domain/chat/chat-message';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabComponent } from '@axe/features/chat/chat-tab/chat-tab.component';
+import { beMyself } from '@axe/testing/peer-context-stub';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 
 describe('ChatTabComponent', () => {
@@ -172,6 +173,7 @@ describe('ChatTabComponent', () => {
         await new Promise<void>((resolve) => queueMicrotask(resolve));
       };
 
+      beMyself('me');
       const secret = chatTab.addMessage({ from: 'me', name: 'ダイス', text: '→ 6', timestamp: 1000, tag: 'secret' });
       const said = chatTab.addMessage({ from: 'me', name: 'アリス', text: 'そのあと', timestamp: 2000 });
       TestBed.inject(ChatMessageService).discloseMessage(secret);
@@ -194,6 +196,7 @@ describe('ChatTabComponent', () => {
         await new Promise<void>((resolve) => queueMicrotask(resolve));
       };
 
+      beMyself('me');
       const secret = chatTab.addMessage({ from: 'me', name: 'ダイス', text: '→ 6', timestamp: 1000, tag: 'secret' });
       chatTab.addMessage({ from: 'me', name: 'アリス', text: 'そのあと', timestamp: 2000 });
       await flush();
@@ -232,6 +235,73 @@ describe('ChatTabComponent', () => {
 
       // and the bottom moves on because it was at the bottom
       expect(internalFull().bottomIndex).toBe(1);
+    });
+
+    it('draws no more than a reader at the bottom needs when many lines arrive at once', () => {
+      type Range = { topIndex: number; bottomIndex: number };
+      const range = () => component as unknown as Range;
+      for (let i = 0; i < 300; i++) {
+        const message = new ChatMessage();
+        message.initialize();
+        chatTab.appendChild(message);
+        emitMessageAdded({ tabIdentifier: chatTab.identifier, messageIdentifier: message.identifier });
+      }
+
+      const drawn = component.chatMessages;
+
+      expect(range().bottomIndex).toBe(299);
+      expect(drawn.length).toBeLessThanOrEqual(150);
+      expect(drawn[drawn.length - 1]).toBe(chatTab.chatMessages[299]);
+    });
+
+    describe('on iOS, which never narrows the lines while it scrolls', () => {
+      type InternalIOS = {
+        isIOS: boolean;
+        topIndex: number;
+        bottomIndex: number;
+        trimRenderedRangeOnIOS: () => void;
+      };
+      const ios = () => component as unknown as InternalIOS;
+
+      function renderEveryLineOf(count: number): void {
+        for (let i = 0; i < count; i++) {
+          chatTab.addMessage({ from: 'reader', name: '読者', text: `${i}`, timestamp: 1000 + i });
+        }
+        ios().isIOS = true;
+        ios().topIndex = 0;
+        ios().bottomIndex = count - 1;
+      }
+
+      it('lets go of the lines far above once the reader rests at the bottom', () => {
+        renderEveryLineOf(300);
+
+        ios().trimRenderedRangeOnIOS();
+
+        expect(ios().bottomIndex).toBe(299);
+        expect(ios().bottomIndex - ios().topIndex + 1).toBeLessThanOrEqual(150);
+      });
+
+      it('keeps the lines a reader scrolled far up is reading when a new one arrives', () => {
+        renderEveryLineOf(300);
+        Object.defineProperty(panelService.scrollablePanel!, 'scrollHeight', { value: 20000 });
+        const message = new ChatMessage();
+        message.initialize();
+        chatTab.appendChild(message);
+
+        emitMessageAdded({ tabIdentifier: chatTab.identifier, messageIdentifier: message.identifier });
+
+        expect(ios().topIndex).toBe(0);
+        expect(ios().bottomIndex).toBe(300);
+      });
+
+      it('keeps them for a reader scrolled away from the bottom', () => {
+        renderEveryLineOf(300);
+        Object.defineProperty(panelService.scrollablePanel!, 'scrollHeight', { value: 20000 });
+
+        ios().trimRenderedRangeOnIOS();
+
+        expect(ios().topIndex).toBe(0);
+      });
     });
   });
 

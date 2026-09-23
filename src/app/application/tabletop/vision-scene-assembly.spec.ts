@@ -1,4 +1,5 @@
 import {
+  characterSceneKey,
   collectLights,
   collectSegments,
   collectShadowCasters,
@@ -7,6 +8,7 @@ import {
 } from '@axe/application/tabletop/vision-scene-assembly';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { GameTable } from '@axe/domain/tabletop/game-table';
+import { segmentBlocks } from '@axe/domain/tabletop/los/segments';
 import { Terrain } from '@axe/domain/tabletop/terrain';
 import { LightSpec } from '@axe/domain/tabletop/vision-types';
 
@@ -28,6 +30,35 @@ function standing(name: string, x: number, y: number): GameCharacter {
 }
 
 describe('vision scene assembly', () => {
+  describe('what a piece gives the scene', () => {
+    it('stays as it was for a change the scene is not made of', () => {
+      const character = standing('c', 100, 100);
+      const before = characterSceneKey(character);
+
+      character.name = 'renamed';
+
+      expect(characterSceneKey(character)).toBe(before);
+    });
+
+    it.each<[string, (character: GameCharacter) => void]>([
+      ['moving it', (character) => (character.location.x = 150)],
+      ['raising it', (character) => (character.altitude = 1)],
+      ['lighting it', (character) => (character.lightEnabled = true)],
+      ['widening its sight', (character) => (character.visionRange = 12)],
+      ['turning it', (character) => (character.rotate = 90)],
+      ['handing it to somebody', (character) => (character.owner = 'p2')],
+      ['showing its sight', (character) => (character.showVisionRange = true)],
+      ['letting it cast a shadow or not', (character) => (character.castsShadow = !character.castsShadow)],
+    ])('changes for %s', (_, change) => {
+      const character = standing('c', 100, 100);
+      const before = characterSceneKey(character);
+
+      change(character);
+
+      expect(characterSceneKey(character)).not.toBe(before);
+    });
+  });
+
   it('walls the table with the perimeter and only the walls that are shown', () => {
     const table = makeTable();
     table.showNorthWall = true;
@@ -52,6 +83,54 @@ describe('vision scene assembly', () => {
     const segments = collectSegments(table, 50, 500, 400);
     expect(segments.sight).toHaveLength(8);
     expect(segments.sight[4].heightPx).toBe(100);
+  });
+
+  it('gives the edges a bottom as well, so an arch can be seen under', () => {
+    const table = makeTable();
+    const arch = Terrain.create('アーチ', 2, 1, 1, '', '');
+    arch.location.x = 100;
+    arch.location.y = 100;
+    arch.altitude = 3;
+    table.appendChild(arch);
+
+    const segments = collectSegments(table, 50, 500, 400);
+
+    const wall = segments.sight.slice(4).find((seg) => seg.x1 === 100 && seg.x2 === 100)!;
+    expect(wall.basePx).toBe(150);
+    expect(wall.heightPx).toBe(200);
+    expect(segmentBlocks(50, 125, 25, 400, 125, 25, wall)).toBe(false);
+    expect(segmentBlocks(50, 125, 175, 400, 125, 175, wall)).toBe(true);
+  });
+
+  it('holds a wall standing on a pedestal down to the floor, since the pedestal is under it', () => {
+    const table = makeTable();
+    const wall = Terrain.create('壁', 2, 1, 1, '', '');
+    wall.location.x = 100;
+    wall.location.y = 100;
+    // Gravity settled it onto a cell-high pedestal that stops nothing itself.
+    wall.posZ = 50;
+    table.appendChild(wall);
+
+    const segments = collectSegments(table, 50, 500, 400);
+    const stood = segments.sight.slice(4).find((seg) => seg.x1 === 100 && seg.x2 === 100)!;
+
+    expect(stood.basePx).toBe(0);
+    expect(stood.heightPx).toBe(100);
+    expect(segmentBlocks(50, 125, 25, 400, 125, 25, stood)).toBe(true);
+  });
+
+  it('reads a block resting on something at the height it really stands', () => {
+    const table = makeTable();
+    const terrain = Terrain.create('棚', 2, 1, 1, '', '');
+    terrain.location.x = 100;
+    terrain.location.y = 100;
+    terrain.altitude = 1;
+    terrain.posZ = 25;
+    table.appendChild(terrain);
+
+    const segments = collectSegments(table, 50, 500, 400);
+
+    expect(segments.sight[4].heightPx).toBe(125);
   });
 
   it('turns a light spec into pixels, keeping the direction it was given', () => {

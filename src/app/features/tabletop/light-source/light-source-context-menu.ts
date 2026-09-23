@@ -4,7 +4,11 @@ import {
   ContextMenuRadialGroup,
   ContextMenuSeparator,
 } from '@axe/application/ui/context-menu.service';
-import { buildAltitudeAction, buildLockToggleAction } from '@axe/application/ui/tabletop-context-menu-actions';
+import {
+  buildAltitudeAction,
+  buildCopyAction,
+  buildLockToggleAction,
+} from '@axe/application/ui/tabletop-context-menu-actions';
 import { LIGHT_SKIN_IDS, LightSkinId } from '@axe/domain/media/light-skins';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
 import { LightSource } from '@axe/domain/tabletop/light-source';
@@ -30,6 +34,10 @@ export interface LightSourceContextMenuModel {
   radialGroups: ContextMenuRadialGroup[];
 }
 
+/**
+ * The flat list of entries for a light's context menu, as `buildLightSourceContextMenuModel` builds
+ * them, without the radial grouping.
+ */
 export function buildLightSourceContextMenu(
   light: LightSource,
   gridSize: number,
@@ -41,6 +49,14 @@ export function buildLightSourceContextMenu(
   return buildLightSourceContextMenuModel(light, gridSize, characters, onEdit, t, onSkin).actions;
 }
 
+/**
+ * Builds a light's context menu, both as a flat list and grouped for the radial menu.
+ *
+ * The entries act on the light directly: following a character, switching it on or off, applying a
+ * preset (which also switches it on), altitude, lock, copy and delete. Settings go through
+ * `onEdit`, and the skin entry is offered only when `onSkin` is given. The follow list ticks the
+ * character the light follows.
+ */
 export function buildLightSourceContextMenuModel(
   light: LightSource,
   gridSize: number,
@@ -110,16 +126,10 @@ export function buildLightSourceContextMenuModel(
   };
   const altitudeAction = buildAltitudeAction(light, t);
   const lockAction = buildLockToggleAction(light.isLock, (next) => (light.isLock = next), t);
-  const copyAction: ContextMenuAction = {
-    name: t('feature.tabletop.contextMenu.copy'),
-    action: () => {
-      const clone = light.clone();
-      clone.location.x += gridSize;
-      clone.location.y += gridSize;
-      clone.isLock = false;
-      SoundEffect.play(PresetSound.cardPut);
-    },
-  };
+  const copyAction = buildCopyAction(light, gridSize, t, {
+    sound: PresetSound.cardPut,
+    afterClone: (clone) => (clone.isLock = false),
+  });
   const deleteAction: ContextMenuAction = {
     name: t('feature.tabletop.contextMenu.delete'),
     action: () => {

@@ -12,7 +12,11 @@
       "no": "아니요"
     },
     "dialog": {
-      "confirmTitle": "확인"
+      "confirmTitle": "확인",
+      "updatedTitle": "Udonarium Axe가 업데이트되었습니다",
+      "updatedMessage": "새 버전으로 바꾸려면 페이지를 새로고침해 주세요. 새로고침하기 전까지는 열리지 않는 화면이 있습니다.",
+      "reload": "새로고침",
+      "later": "나중에"
     },
     "language": {
       "ja": "日本語",
@@ -25,14 +29,19 @@
       "logClearedBy": "{{user}}님의 요청으로 로그를 지웠습니다."
     },
     "theme": {
-      "auto": "자동",
-      "dark": "다크",
-      "light": "라이트"
+      "auto": "테마: 자동",
+      "dark": "테마: 다크",
+      "light": "테마: 라이트"
     },
     "motion": {
-      "auto": "이펙트: 자동",
-      "on": "이펙트: 항상 재생",
-      "off": "이펙트: 끄기"
+      "auto": "애니메이션: 자동",
+      "on": "애니메이션: 항상 재생",
+      "off": "애니메이션: 끄기"
+    },
+    "renderLite": {
+      "auto": "렌더링: 자동",
+      "on": "렌더링: 가볍게",
+      "off": "렌더링: 기본"
     },
     "panel": {
       "peerMenu": "접속 정보",
@@ -104,7 +113,40 @@
       "stair_down": "내려가는 계단",
       "stair_spiral": "나선 계단",
       "poison_pool": "독 늪",
-      "cactus_skin": "선인장 껍질"
+      "cactus_skin": "선인장 껍질",
+      "asphalt": "아스팔트",
+      "sidewalk": "보도블록",
+      "concrete_floor": "콘크리트 바닥",
+      "neon_floor": "네온 타일 바닥",
+      "rooftop": "옥상",
+      "slum_ground": "쓰레기 진흙길",
+      "wall_concrete": "콘크리트 벽",
+      "wall_neon": "네온관 벽",
+      "wall_corrugated": "함석판",
+      "wall_facade": "빌딩 외벽",
+      "door_steel": "철문",
+      "felt": "도박판 펠트",
+      "warehouse_floor": "창고 바닥",
+      "sf_road": "금속 포장 도로",
+      "sf_walkway": "빛나는 보도",
+      "sf_rooftop": "미래형 옥상",
+      "tar_roof": "타르 지붕",
+      "wall_facade_concrete": "콘크리트 빌딩 외벽",
+      "wall_sf_glass": "빛줄기 흑유리",
+      "wall_sf_panel": "빛나는 이음새 흰 패널",
+      "wall_brick_tenement": "벽돌 연립주택",
+      "wall_brownstone": "브라운스톤",
+      "wall_warehouse": "창고 강판 벽",
+      "container_red": "컨테이너(빨강)",
+      "container_blue": "컨테이너(파랑)",
+      "container_green": "컨테이너(초록)",
+      "door_shutter": "셔터"
+    },
+    "reorder": {
+      "toTop": "맨 위로",
+      "up": "한 칸 위로",
+      "down": "한 칸 아래로",
+      "toBottom": "맨 아래로"
     }
   },
   "feature": {
@@ -137,7 +179,8 @@
       "persona": {
         "title": "페르소나(플레이어 시점으로 확인)",
         "self": "GM 시점(자신)",
-        "empty": "플레이어가 없습니다"
+        "empty": "플레이어가 없습니다",
+        "guestHint": "관전자에게 보이는 테이블을 확인합니다. 관전자가 접속해 있지 않아도 선택할 수 있습니다"
       },
       "party": {
         "title": "동행",
@@ -153,7 +196,10 @@
         "emptyMembers": "소속 캐릭터가 없습니다.",
         "emptyParties": "파티가 없습니다. \"파티 추가\"로 만들어 주세요.",
         "unnamedCharacter": "이름 없음",
-        "focus": "말로 이동"
+        "focus": "말로 이동",
+        "gather": "이 지점을 중심으로 파티 배치",
+        "gatherOnTable": "{{name}}（테이블의 {{count}}명）",
+        "gatherWithAway": "{{name}}（테이블 밖 {{count}}명도 내보내기）"
       }
     },
     "hotbar": {
@@ -613,6 +659,8 @@
         "presetdropOut": "떨어지며 사라지기",
         "endMsHint": "종료가 0이면 장면 끝까지 표시합니다.",
         "toggleKey": "이 위치에 키 찍기 / 지우기",
+        "removeKeysHere": "재생 헤드 위치의 키 제거",
+        "removeSoundHere": "재생 헤드 위치의 SE 제거",
         "easing": "보간",
         "easingMixed": "(키마다 다름)",
         "easinglinear": "등속",
@@ -796,6 +844,16 @@
       }
     },
     "dice": {
+      "createDialog": {
+        "title": "주사위 여러 개 만들기",
+        "type": "종류",
+        "count": "개수",
+        "owner": "소유자",
+        "ownerNone": "없음",
+        "hidden": "나만 보기(뒤집어 놓기)",
+        "cancel": "취소",
+        "create": "만들기"
+      },
       "contextMenu": {
         "rollDice": "주사위 굴리기",
         "showDice": "주사위 공개",
@@ -806,6 +864,8 @@
         "storeToOwner": "말에 넣어두기",
         "hideNameOn": "☑ 이름 숨기기",
         "hideNameOff": "☐ 이름 숨기기",
+        "usedOn": "☑ 사용함",
+        "usedOff": "☐ 사용함",
         "editDice": "주사위 설정 편집",
         "diceSheet": "주사위 눈 시트"
       },
@@ -1119,7 +1179,9 @@
       "beforeRound": "라운드 시작 전",
       "afterRound": "라운드 종료",
       "noTurn": "차례 미지정",
+      "unseenTurn": "보이지 않는 상대의 차례",
       "announce": "{{name}}의 차례입니다.",
+      "announceUnseen": "보이지 않는 상대가 행동합니다.",
       "next": "다음으로",
       "prev": "이전으로",
       "round": "라운드 {{n}}",
@@ -1158,6 +1220,7 @@
         "collapseAll": "모두 접기",
         "expandAll": "모두 펼치기",
         "selectFolder": "이 폴더 전체 선택",
+        "showOnTable": "테이블에서 보기",
         "moveTable": "테이블로 이동",
         "moveCommon": "공유 인벤토리로 이동",
         "movePersonal": "개인 인벤토리로 이동",
@@ -1188,7 +1251,7 @@
         "sortAsc": "오름차순",
         "sortDesc": "내림차순",
         "displayItems": "표시 항목",
-        "dataTagPlaceholder": "공백으로 태그 이름 구분, 슬래시로 줄바꿈 예: HP MP / 메모",
+        "dataTagPlaceholder": "공백으로 태그 이름 구분, 슬래시로 줄바꿈, 인용부호로 경로나 공백 포함 이름 예: HP MP / \"리소스/이성\"",
         "multiMoveLabel": "일괄 이동",
         "selectAll": "전체 선택",
         "deselectAll": "전체 해제",
@@ -1223,8 +1286,6 @@
         "popupMaxHeight": "팝업 세로 최대",
         "limitHeight": "height 설정값으로 높이 제한",
         "color": "색상",
-        "changeColor": "드러난 부분 색상",
-        "scratchMaskNote": "※ width, height 항목은 최대 50",
         "tabSheet": "시트",
         "tabSettings": "설정",
         "portrait": "포트레이트",
@@ -1318,7 +1379,10 @@
         "convertLegacyTables": "구조화 테이블로 일괄 변환",
         "popupSetting": "팝업 설정",
         "popupWidth": "가로 폭",
-        "popupMaxHeight": "높이 최대"
+        "popupMaxHeight": "높이 최대",
+        "templates": "템플릿",
+        "addTemplateToSheet": "시트에 추가",
+        "noTemplates": "저장된 템플릿이 아직 없습니다"
       },
       "panel": {
         "folder": "폴더",
@@ -1345,7 +1409,7 @@
         "asc": "오름차순",
         "desc": "내림차순",
         "displayItems": "표시 항목",
-        "dataTagPlaceholder": "공백으로 태그 이름 구분, 슬래시로 줄바꿈 예: HP MP / 메모",
+        "dataTagPlaceholder": "공백으로 태그 이름 구분, 슬래시로 줄바꿈, 인용부호로 경로나 공백 포함 이름 예: HP MP / \"리소스/이성\"",
         "selectAll": "전체 선택",
         "deselectAll": "전체 해제",
         "moveTargetLabel": "이동 대상:",
@@ -1610,7 +1674,11 @@
         "light_brazier": "화로",
         "light_lantern": "랜턴",
         "light_candle": "양초",
-        "light_chandelier": "샹들리에"
+        "light_chandelier": "샹들리에",
+        "light_neon": "네온사인",
+        "light_streetlamp": "가로등",
+        "light_fluorescent": "형광등",
+        "light_neon_pole": "네온 가로등"
       }
     },
     "vision": {
@@ -1702,12 +1770,12 @@
         "createBlankCard": "빈 카드 만들기",
         "createTrump": "트럼프 덱 만들기",
         "createDice": "주사위 만들기",
+        "createDiceMany": "개수를 지정해 만들기…",
         "createCoin": "코인 만들기",
         "createRange": "사거리 범위 만들기",
         "createLight": "광원 만들기",
         "defaultCharacterName": "새 캐릭터",
         "defaultMaskName": "맵 마스크",
-        "defaultScratchMaskName": "스크래치 마스크",
         "defaultTerrainName": "지형",
         "defaultNoteName": "공유 메모",
         "defaultNoteText": "텍스트를 입력해 주세요",
@@ -1733,7 +1801,6 @@
         "range": "사거리 범위 설정",
         "rangeFollow": "캐릭터를 따라가기",
         "mask": "맵 마스크 설정",
-        "scratchMask": "스크래치 마스크 설정",
         "textNote": "공유 메모 설정"
       },
       "rangeDocking": {
@@ -1746,6 +1813,31 @@
         "confirm": "확정",
         "finish": "종료",
         "cancel": "취소"
+      },
+      "maskSheet": {
+        "basicSection": "기본 설정",
+        "name": "이름",
+        "width": "너비",
+        "height": "높이",
+        "opacity": "불투명도",
+        "maskSection": "마스크",
+        "scratchedSection": "스크래치 후",
+        "scratchedHint": "스크래치로 열린 칸에 테이블 대신 표시됩니다.",
+        "image": "이미지",
+        "color": "색",
+        "maskImageAlt": "마스크 이미지",
+        "scratchedImageAlt": "스크래치 후 이미지",
+        "setLabel": "설정",
+        "setImage": "이미지 설정",
+        "clearLabel": "해제",
+        "clearImage": "이미지 해제",
+        "none": "없음",
+        "clearColor": "색 지우기",
+        "dataSheet": "상세 데이터",
+        "openDataSheet": "모든 데이터 항목을 시트로 열기",
+        "copy": "복제 만들기",
+        "saving": "저장 중 {{percent}}%",
+        "save": "저장"
       },
       "contextMenu": {
         "altitudeSetting": "고도 설정",
@@ -1777,13 +1869,19 @@
         "lightSection": "어둠(시야·발광)",
         "blocksSight": "시야를 막음",
         "blocksLight": "빛을 막음(창문이면 끔)",
+        "blocksClimb": "오를 수 없음",
         "terrainGlow": "빛을 냄",
         "slope": "경사",
         "slopeNone": "없음",
-        "slopeTop": "위(북)",
-        "slopeBottom": "아래(남)",
-        "slopeLeft": "왼쪽(서)",
-        "slopeRight": "오른쪽(동)",
+        "slopeSide_n": "북",
+        "slopeSide_ne": "북동",
+        "slopeSide_e": "동",
+        "slopeSide_se": "남동",
+        "slopeSide_s": "남",
+        "slopeSide_sw": "남서",
+        "slopeSide_w": "서",
+        "slopeSide_nw": "북서",
+        "slopeEverySide": "모든 방향(각뿔)",
         "wallShow": "벽 표시",
         "wallHide": "벽 숨기기",
         "surfaceShadingOn": "벽에 음영 넣기",
@@ -1815,7 +1913,6 @@
         "aliasTerrain": "지형",
         "aliasCharacter": "캐릭터",
         "aliasMask": "마스크",
-        "aliasScratchMask": "스크래치 마스크",
         "aliasTextNote": "메모",
         "aliasRange": "사거리",
         "aliasDiceSymbol": "주사위",
@@ -1840,6 +1937,10 @@
         "doorStyleSink": "아래로 가라앉음",
         "doorStyleSlide": "옆으로 미닫이",
         "doorFlip": "열리는 방향 반전"
+      },
+      "holdHint": {
+        "footing": "휠로 발판을 오르내리기",
+        "lift": "Shift＋휠로 높이를 한 칸씩"
       },
       "tableSetting": {
         "title": "테이블 설정",
@@ -1957,7 +2058,7 @@
         "piecesShareCells": "같은 칸에 여러 말을 놓을 수 있음 (끄면 다른 말이 있는 칸은 이동 대상에서 제외)",
         "moveRangeElementNames": "참조할 항목",
         "cellDistanceUnit": "칸 단위",
-        "moveRangeHint": "항목 이름은 쉼표로 구분하며 시트에서 먼저 찾은 것을 사용합니다. 시트의 값을 한 칸의 거리로 나누어 칸 수로 만듭니다(0이면 나누지 않음). 시트의 단위가 탁자와 다르면 피트와 미터를 환산하고, 시트가 칸이면 그대로 칸 수로 읽습니다.",
+        "moveRangeHint": "항목 이름은 쉼표로 구분하며 시트에서 먼저 찾은 것을 사용합니다. 시트의 값을 한 칸의 거리로 나누어 칸 수로 만듭니다(0이면 나누지 않음). 단위가 칸이어도 마찬가지라서, 한 칸의 거리를 0.5로 하면 시트의 1칸이 탁자의 2칸이 됩니다. 시트의 단위가 탁자와 다르면 피트와 미터를 환산하고, 탁자가 미터나 피트인데 시트가 칸이면 그대로 칸 수로 읽습니다.",
         "zocMode": "ZOC(지배 영역)",
         "zocMode_none": "없음",
         "zocMode_stop": "발묶기 (들어가면 이동 종료)",
@@ -2014,7 +2115,10 @@
           "cavern": "동굴",
           "lavaCavern": "용암굴",
           "iceCave": "얼음굴",
-          "sandTomb": "모래 무덤"
+          "sandTomb": "모래 무덤",
+          "illegalBar": "불법 바",
+          "abandonedBuilding": "폐건물",
+          "containerWarehouse": "컨테이너 창고"
         },
         "role": {
           "entrance": "입구의 방",
@@ -2024,12 +2128,61 @@
           "deadEnd": "막다른 길",
           "chamber": "작은 방"
         },
+        "roleIn": {
+          "illegalBar": {
+            "entrance": "위장 가게",
+            "hall": "술집",
+            "treasure": "도박장",
+            "boss": "두목의 방",
+            "deadEnd": "밀주 창고",
+            "chamber": "밀실"
+          },
+          "building": {
+            "entrance": "로비",
+            "hall": "사무실 층",
+            "treasure": "금고실",
+            "boss": "임원실",
+            "deadEnd": "창고",
+            "chamber": "사무실"
+          },
+          "warehouse": {
+            "entrance": "반입구",
+            "hall": "중앙 창고",
+            "treasure": "보세 구역",
+            "boss": "관리 사무소",
+            "deadEnd": "자재 보관소",
+            "chamber": "보관 구역"
+          }
+        },
         "piece": {
           "wall": "벽",
           "door": "문",
           "doorLocked": "문(잠김)",
           "entrance": "입구",
-          "exit": "출구"
+          "exit": "출구",
+          "tree": "나무",
+          "bush": "덤불",
+          "boulder": "바위",
+          "outcrop": "암반",
+          "hill": "언덕",
+          "cactus": "선인장",
+          "junk": "고철 더미",
+          "streetTree": "가로수",
+          "building": "건물",
+          "roofUnit": "옥상 설비",
+          "counter": "카운터",
+          "stool": "스툴",
+          "table": "테이블",
+          "pillar": "기둥",
+          "desk": "사무용 책상",
+          "crate": "나무 상자",
+          "rubble": "잔해",
+          "shopCounter": "가게 카운터",
+          "gamingTable": "도박 테이블",
+          "containerRed": "컨테이너",
+          "containerBlue": "컨테이너",
+          "containerGreen": "컨테이너",
+          "hiddenDoor": "비밀 문"
         },
         "summary": {
           "title": "던전 개요",
@@ -2041,7 +2194,8 @@
           "doors": "문",
           "ground": "지면",
           "standing": "지형",
-          "fires": "불빛"
+          "fires": "불빛",
+          "hidden": "비밀 문"
         },
         "title": "맵 생성",
         "gmOnly": "이 도구는 게임 마스터 전용입니다",
@@ -2054,6 +2208,7 @@
           "tableName": "테이블 이름",
           "placeDoors": "문 배치",
           "placeStairs": "입구와 출구 배치",
+          "sheerWalls": "벽을 오를 수 없게 함(열린 문은 통과 가능)",
           "wallHeight": "벽 높이(칸)",
           "entrance": "입구",
           "kind": "종류",
@@ -2066,6 +2221,10 @@
           "corridorWidth": "통로의 폭",
           "corridorLeast": "최소",
           "corridorMost": "최대",
+          "doorWidth": "문의 폭",
+          "doorLeast": "최소",
+          "doorMost": "최대",
+          "doubleDoors": "양문의 비율(%)",
           "muster": "입구에 모을 파티",
           "musterNobody": "모으지 않음",
           "fog": "전장의 안개를 씌운 상태로 시작"
@@ -2088,6 +2247,8 @@
           "roomsDiffer": "배치된 방은 {{found}}개입니다. 동굴은 공동이 이어지므로 요청보다 적어집니다",
           "squareOnly": "생성되는 테이블은 정사각 그리드 고정입니다",
           "corridorWidth": "넓힐수록 방과 간격도 커져서 놓을 수 있는 방이 줄어듭니다",
+          "doorWidth": "문이 통로보다 넓으면 그만큼 입구의 벽을 깎습니다. 입구가 더 넓으면 문이 나란히 놓입니다",
+          "doubleDoors": "양문은 폭을 절반씩 나눈 문 2개가 됩니다. 폭이 4라면 2칸짜리 문 2개입니다",
           "muster": "선택한 파티의 말을 입구 근처에 세웁니다. 다른 말은 움직이지 않습니다"
         },
         "entrance": {
@@ -2104,7 +2265,11 @@
           "coast": "해안",
           "marsh": "습지",
           "snowfield": "설원",
-          "wasteland": "황야"
+          "wasteland": "황야",
+          "city": "빌딩 숲",
+          "sfCity": "빌딩 숲(SF)",
+          "slum": "슬럼가",
+          "dump": "쓰레기 처리장"
         },
         "prop": {
           "tree": "나무",
@@ -2112,7 +2277,10 @@
           "boulder": "바위",
           "outcrop": "암반",
           "hill": "언덕",
-          "cactus": "선인장"
+          "cactus": "선인장",
+          "junk": "고철 더미",
+          "streetTree": "가로수",
+          "building": "건물"
         },
         "grid": {
           "0": "사각",
@@ -2121,7 +2289,11 @@
         }
       },
       "movePlan": {
-        "hint": "클릭하면 이동 / 우클릭으로 경유지 지정(같은 자리를 다시 누르면 취소) / Enter로 확정 / Esc로 중지"
+        "hint": "클릭하면 이동 / 우클릭으로 경유지 지정(같은 자리를 다시 누르면 취소) / Enter로 확정 / Esc로 중지",
+        "jump": "뛰기",
+        "walk": "걷기",
+        "hintTouch": "탭하면 이동 / 길게 누르면 경유지 / 말을 탭하면 중지",
+        "modeLabel": "이동 방식"
       },
       "displaySetting": {
         "title": "탁상 디스플레이",
@@ -2186,7 +2358,7 @@
       "diagonalMoveHint": "번갈아 계산하는 방식은 D&D 3.5e나 패스파인더 1e의 계산법으로, 첫 대각선은 한 칸, 두 번째는 두 칸이 됩니다.",
       "piecesShareCells": "같은 칸에 여러 말을 놓을 수 있음 (끄면 다른 말이 있는 칸은 이동 대상에서 제외)",
       "moveRangeElementNames": "참조할 항목",
-      "moveRangeHint": "항목 이름은 쉼표로 구분하며 시트에서 먼저 찾은 것을 사용합니다. 시트의 값을 한 칸의 거리로 나누어 칸 수로 만듭니다(0이면 나누지 않음). 시트의 단위가 탁자와 다르면 피트와 미터를 환산하고, 시트가 칸이면 그대로 칸 수로 읽습니다.",
+      "moveRangeHint": "항목 이름은 쉼표로 구분하며 시트에서 먼저 찾은 것을 사용합니다. 시트의 값을 한 칸의 거리로 나누어 칸 수로 만듭니다(0이면 나누지 않음). 단위가 칸이어도 마찬가지라서, 한 칸의 거리를 0.5로 하면 시트의 1칸이 탁자의 2칸이 됩니다. 시트의 단위가 탁자와 다르면 피트와 미터를 환산하고, 탁자가 미터나 피트인데 시트가 칸이면 그대로 칸 수로 읽습니다.",
       "cellDistance": "한 칸의 거리",
       "cellDistanceUnit": "칸 단위",
       "cellUnit": {
@@ -2215,6 +2387,12 @@
       "engagementCountsSizeHint": "큰 말일수록 무겁게 계산 (끄면 한 명을 하나로 계산)",
       "zocHint": "NPC 여부가 다른 말을 적으로 보고, 그 주위 칸이 이동을 방해합니다. 자신에게 보이지 않는 말은 ZOC를 만들지 않습니다.",
       "diceBotHint": "방에 들어올 때 선택되는 다이스봇입니다",
+      "sectionControllerResources": "리모컨에 표시할 수치와 리소스",
+      "controllerResourcesShowAll": "모두 표시",
+      "controllerResourcesHideAll": "모두 끄기",
+      "controllerResourcesHintAll": "방의 말이 가진 수치와 리소스를 이름별로 나열했습니다. 지금은 모두 표시합니다. 끈 항목은 리모컨의 리소스 조작에도 말 카드에도 나오지 않습니다.",
+      "controllerResourcesHintPicked": "고른 항목만 리모컨에 표시합니다. 나중에 시트에 추가한 항목은 여기서 고를 때까지 나오지 않습니다.",
+      "controllerResourcesEmpty": "수치나 리소스를 가진 말이 방에 없습니다.",
       "facingMark": "캐릭터의 방향",
       "facingMark_none": "표시하지 않음",
       "facingMark_turn": "말째로 회전",
@@ -2232,7 +2410,7 @@
       "uiTab_tabletop": "탁상",
       "characterImportHint": "외부 캐릭터 시트 보관소에서 말을 가져옵니다. 가져온 말은 탁자에 놓이고 다른 참가자에게도 전달됩니다.",
       "moveStrict": "엄밀한 이동",
-      "moveStrictHint": "말을 집어 올리면 포인터 위치까지의 최단 경로가 선으로 표시됩니다. 말은 그 선을 따라 내려놓이므로 손이 흔들려도 돌아간 것으로 계산하지 않습니다. 벽과 출입 금지 칸은 넘을 수 없고, 이동력이 닿지 않는 곳까지는 선이 뻗지 않습니다. 움직이는 모습은 방의 모든 사람에게 보입니다. 이동력 항목이 없는 말은 지금까지처럼 어디에나 놓을 수 있습니다. GM만은 Shift를 누른 채로 집으면 경로를 그리지 않고 그대로 옮길 수 있습니다.",
+      "moveStrictHint": "말을 집어 올리면 포인터 위치까지의 최단 경로가 선으로 표시됩니다. 말은 그 선을 따라 내려놓이므로 손이 흔들려도 돌아간 것으로 계산하지 않습니다. 벽과 출입 금지 칸은 넘을 수 없고, 이동력이 닿지 않는 곳까지는 선이 뻗지 않습니다. 움직이는 모습은 방의 모든 사람에게 보입니다. 이동력 항목이 없는 말은 지금까지처럼 어디에나 놓을 수 있습니다. GM만은 Shift를 누른 채로 집으면 경로를 그리지 않고 그대로 옮길 수 있습니다. 경로를 그리는 동안 스페이스를 누르면 뛰어넘기로 바뀌어, 오를 수 없는 지형 외에는 높이에 상관없이 목적지로 고를 수 있습니다. 말은 앞 칸에서 뛰어올라 착지합니다.",
       "sectionFlatTable": "위에서 내려다볼 때 (2D)",
       "flatTableHint": "테이블을 바로 위에서 볼 때만 적용됩니다.",
       "orthographicProjection": "원근 없애기 (화면을 눕혀 둘러앉을 때)",
@@ -2294,7 +2472,8 @@
       "panelRotationHint": "공통 창의 제목 표시줄에 회전 버튼이 나타납니다. 테이블을 둘러싼 각자의 방향으로 돌려 놓을 수 있습니다.",
       "tickerEnabled": "가장자리 티커 표시",
       "tickerSpeed": "속도",
-      "tickerSpeedUnit": "px/초"
+      "tickerSpeedUnit": "px/초",
+      "replayHint": "기록한 세션을 다시 읽거나 탁자째로 재생합니다. 기록은 이 기기에만 남습니다."
     },
     "skin": {
       "title": "화면 색(스킨)",
@@ -2357,7 +2536,7 @@
         "menuPicked": "선택 중",
         "menuOff": "누를 수 없음"
       },
-      "revert": "열었을 때로 되돌리기",
+      "revert": "초기화",
       "state": {
         "live": "이 화면에 적용 중",
         "tryingOn": "입어보는 중 — 누르면 적용",
@@ -2568,7 +2747,8 @@
         "cancelQuote": "인용 취소",
         "textareaPlaceholderShort": "메시지를 입력하세요",
         "sendToTicker": "티커",
-        "sendToTickerHint": "이 발언을 화면 외곽에도 흘려보냅니다"
+        "sendToTickerHint": "이 발언을 화면 외곽에도 흘려보냅니다",
+        "tools": "입력 설정"
       },
       "tab": {
         "unnamedCharacter": "이름 없는 캐릭터",
@@ -2596,7 +2776,9 @@
         "jumpToOriginal": "원래 메시지로 이동",
         "shareAsMemo": "공유 메모로 보내기",
         "ticker": "티커",
-        "copyToTab": "다른 탭으로 복사"
+        "copyToTab": "다른 탭으로 복사",
+        "copyText": "본문 복사",
+        "selectText": "텍스트 선택"
       },
       "stream": {
         "title": "발언의 흐름",
@@ -2621,11 +2803,16 @@
         "editPlaceholder": "채팅 팔레트",
         "noDisplayInfo": "표시할 정보가 없습니다",
         "noCharacterSelected": "캐릭터가 선택되지 않았습니다",
-        "footerHint": "클릭: 입력 ／ 두 번 클릭: 전송",
+        "inputHint": "줄을 클릭하면 입력, 두 번이면 전송",
         "indexTitle": "인덱스",
         "noTarget": "대상이 선택되지 않았습니다",
         "headingBullet": "◆",
-        "footerHintTouch": "탭: 입력 ／ 두 번 탭: 전송"
+        "inputHintTouch": "줄을 탭하면 입력, 두 번이면 전송",
+        "searchPlaceholder": "팔레트 줄 검색",
+        "searchResults": "검색 결과",
+        "searchCount": "{{count}}개",
+        "searchNoMatch": "일치하는 줄이 없습니다",
+        "searchClear": "검색 지우기"
       },
       "messageSetting": {
         "sectionText": "글자",
@@ -2695,7 +2882,6 @@
         "logSaveSection": "로그 저장",
         "saveThisTab": "이 탭",
         "saveAllTabs": "전체 탭",
-        "cocLogMode": "CoC 로그 형식으로 내보내기",
         "logDeleteSection": "로그 삭제",
         "allowDeleteLog": "삭제 사용",
         "deleteLogThisTab": "이 탭",
@@ -2704,6 +2890,106 @@
         "noneMark": "—",
         "allTabsLogName": "전체 탭",
         "systemTabNote": "알림 게시판입니다. 전원에게 보이고 아무도 쓸 수 없습니다. 이름과 순서는 고정이며 방 데이터에도 저장되지 않습니다."
+      },
+      "log": {
+        "styleLabel": "형식",
+        "preview": "미리보기",
+        "previewTitle": "로그 미리보기",
+        "previewSave": "이 형식으로 저장",
+        "previewFrameTitle": "내보낼 로그 견본",
+        "previewLimited": "최근 {{count}}건으로 표시하고 있습니다. 저장하면 탭 전체가 내보내집니다.",
+        "previewSample": "아직 발언이 없어 견본 대화로 표시하고 있습니다.",
+        "styles": {
+          "standard": {
+            "name": "표준",
+            "description": "장식 없는 기존 형식"
+          },
+          "parchment": {
+            "name": "양피지",
+            "description": "검과 마법의 모험담에"
+          },
+          "eerie": {
+            "name": "괴기",
+            "description": "공포와 광기의 기록에"
+          },
+          "neon": {
+            "name": "전뇌",
+            "description": "근미래·사이버 세션에"
+          },
+          "washi": {
+            "name": "화지",
+            "description": "일본풍·시대물에"
+          },
+          "messenger": {
+            "name": "토크",
+            "description": "현대물·일상물에"
+          },
+          "gothic": {
+            "name": "고딕",
+            "description": "흡혈귀·탐미적인 이야기에"
+          },
+          "noir": {
+            "name": "누아르",
+            "description": "탐정·하드보일드에"
+          },
+          "terminal": {
+            "name": "터미널",
+            "description": "해커·레트로 SF에"
+          },
+          "cosmos": {
+            "name": "성해",
+            "description": "우주 모험·환상담에"
+          },
+          "military": {
+            "name": "작전",
+            "description": "밀리터리·메카물에"
+          },
+          "steampunk": {
+            "name": "증기",
+            "description": "스팀펑크·기계 문명에"
+          },
+          "ocean": {
+            "name": "대해원",
+            "description": "해양 모험·항해물에"
+          },
+          "notebook": {
+            "name": "노트",
+            "description": "학원물·청춘물에"
+          },
+          "pop": {
+            "name": "팝",
+            "description": "코미디·떠들썩한 세션에"
+          },
+          "coc": {
+            "name": "CoC 로그 형식",
+            "description": "다른 도구에서 읽을 수 있는 기존 형식"
+          }
+        },
+        "labels": {
+          "secret": "시크릿 다이스",
+          "edited": "편집됨",
+          "quote": "인용",
+          "reply": "답장 대상",
+          "critical": "크리티컬",
+          "fumble": "펌블",
+          "success": "성공",
+          "failure": "실패",
+          "allTabs": "전체 탭",
+          "everyTab": "전체",
+          "messages": "발언 {{count}}건",
+          "exportedWith": "Udonarium Axe에서 내보냄"
+        },
+        "sample": {
+          "gm": "GM",
+          "hero": "아리아",
+          "sage": "노아",
+          "narration1": "안개 자욱한 숲속, 이끼 낀 돌문이 모습을 드러냈다.",
+          "hero1": "……문에 뭔가 새겨져 있어. 노아, 읽을 수 있겠어?",
+          "sage1": "맡겨 줘. 옛말이라면 조금은 알아.",
+          "narration2": "새겨진 글자가 희미하게 빛나며 문이 천천히 열린다.",
+          "hero2": "좋아, 가자!",
+          "aside": "(슬슬 쉬었다 할까요?)"
+        }
       },
       "colorSetting": {
         "sample": "안녕하세요!",
@@ -2728,6 +3014,7 @@
         "title": "다이스봇",
         "titleWith": "다이스봇＜{{name}}＞",
         "descSuffix": " 설명",
+        "unreachable": "다이스봇「{{name}}」을(를) 불러오지 못해 이 발언의 주사위는 굴리지 않았습니다. 다시 보내도 굴려지지 않으면 페이지를 새로고침하세요.",
         "intro": "【다이스봇】채팅에 주사위용 문자를 입력하면 주사위를 굴릴 수 있습니다\n입력 예) 2d6+1 공격!\n출력 예) 2d6+1 공격!\n　　　　  diceBot: (2d6) → 7\n위처럼 주사위 문자 뒤에 공백을 두고 발언할 수도 있습니다.\n아래는 사용 예\n　3D6+1>=9 : 3d6+1로 목표값 9 이상인지 판정\n　1D100<=50 : D100으로 50% 목표의 하방 굴림 예\n　3U6[5] : 3d6의 눈이 5 이상이면 다시 굴려 합산(상방 무한)\n　3B6 : 3d6의 눈을 따로따로 출력(합산하지 않음)\n　10B6>=4 : 10d6을 굴려 4 이상인 눈의 개수를 셈\n　2R6[>3]>=5 : 2D6의 눈이 3보다 크면 다시 굴려 5 이상인 눈의 개수를 셈\n　(8/2)D(4+6)<=(5*3): 개수·주사위·달성값에 사칙연산도 사용 가능\n　c(10-4*3/2+2): c(계산식)으로 계산만 실행 가능\n　choice[a,b,c]: 나열한 요소에서 하나를 골라 표시. 무작위 공격 대상 결정 등에\n　S3d6 : 각 명령 앞에 \"S\"를 붙이면 남에게 결과가 보이지 않는 시크릿 굴림\n　3d6/2 : 주사위 눈을 나눗셈(끝수 처리는 게임 시스템에 따름). 올림은 /2C, 반올림은 /2R, 버림은 /2F\n　D66 : D66 주사위. 순서는 게임에 따름. D66N: 그대로, D66A: 오름차순, D66D: 내림차순\n\n자세한 내용은 아래 URL의 명령어 가이드를 참고하세요\nhttps://docs.bcdice.org/\n===================================\n"
       }
     },
@@ -2943,6 +3230,7 @@
         "terrainHeight": "벽 높이",
         "terrainBlocksSight": "시선을 막음",
         "terrainBlocksLight": "빛을 막음",
+        "terrainBlocksClimb": "오를 수 없음",
         "maskColor": "마스크 색",
         "maskOpacity": "마스크 농도",
         "terrainMode": "표시 방식",
@@ -3209,7 +3497,13 @@
         "withAssets": "이미지도 포함",
         "noRecordings": "저장된 기록이 없습니다",
         "soloRoom": "혼자인 탁상",
-        "showIncidental": "딸린 소리도 내기"
+        "showIncidental": "딸린 소리도 내기",
+        "showSystem": "입퇴장과 설정 변경도 표시",
+        "boardGroup": "보드 움직임 ×{{count}}"
+      },
+      "face": {
+        "front": "앞면",
+        "back": "뒷면"
       },
       "line": {
         "chat": "{{speaker}}: \"{{text}}\"",
@@ -3236,6 +3530,7 @@
         "marker": "― {{label}} ―",
         "moveHeight": "{{actor}}이(가) {{target}}을(를) ({{fromX}}, {{fromY}}) 높이 {{fromZ}}에서 ({{toX}}, {{toY}}) 높이 {{toZ}}로 옮겼습니다",
         "moveSurface": "{{actor}}이(가) {{target}}을(를) {{fromSurface}}의 ({{fromX}}, {{fromY}})에서 {{toSurface}}의 ({{toX}}, {{toY}})로 옮겼습니다",
+        "moveBrief": "{{actor}}이(가) {{target}}을(를) 옮겼습니다",
         "movePlace": "{{actor}}이(가) {{target}}을(를) {{fromPlace}}에서 {{toPlace}}(으)로 옮겼습니다",
         "effectOn": "{{actor}}이(가) {{targets}}에게 〈{{effect}}〉을(를) 걸었습니다",
         "effectFrom": "{{actor}}이(가) {{caster}}에게서 {{targets}}(으)로 〈{{effect}}〉을(를) 날렸습니다",
@@ -3302,7 +3597,14 @@
         "rewrite": "고쳐 쓰기",
         "undo": "취소하기",
         "undoHint": "Ctrl+Z",
-        "drag": "잡아서 순서 바꾸기"
+        "drag": "잡아서 순서 바꾸기",
+        "discardConfirm": "편집 중인 변경을 버리고 다른 기록을 열까요?",
+        "writeAfter": "이 뒤에 쓰기",
+        "stageAfter": "이 뒤부터 녹화",
+        "removeCount": "{{count}}행 지우기",
+        "insertAfter": "{{time}} 행 뒤에 들어갑니다",
+        "insertAtEnd": "맨 끝에 들어갑니다",
+        "keysHint": "Delete로 지우기 · Alt+↑↓로 옮기기 · Enter로 다시 쓰기"
       },
       "surface": {
         "floor": "바닥",
@@ -3352,27 +3654,56 @@
         "unsupported": "이 브라우저에서는 동영상을 내보낼 수 없습니다",
         "size": "크기",
         "fps": "부드러움",
-        "view": "판이 보이는 방식",
         "pacing": "사이 두는 법",
-        "scope": "넣을 것",
         "pace": {
           "reading": "읽을 수 있는 속도",
           "recorded": "그날과 같은 간격"
         },
-        "of": {
-          "top": "바로 위에서",
-          "table": "탁상과 같은 기울기",
-          "lines": "대사와 장만",
-          "everything": "판의 움직임도 넣기"
-        },
-        "estimate": "{{shots}}컷 · 약 {{length}}",
+        "estimate": "{{count}}개 장면 · 약 {{length}} · {{size}}",
+        "inMemory": "이 브라우저는 동영상 전체를 메모리에 모은 뒤 저장합니다. 이만큼 크면 도중에 실패할 수 있습니다. 크기를 낮추거나 저장 위치를 고를 수 있는 브라우저(Chrome, Edge)에서 내보내 주세요.",
         "start": "내보내기",
         "rendering": "내보내는 중({{percent}}%)",
         "cancel": "그만두기",
+        "keepInView": "이 탭을 화면에 띄워 두세요. 뒤로 가면 절전 설정의 브라우저가 내보내기를 멈출 수 있습니다.",
+        "paused": "탭이 뒤에 있는 동안 브라우저가 내보내기를 멈췄습니다. 화면에 띄워 두면 이어서 진행합니다.",
         "realtime": "이 브라우저에서는 길이만큼 시간이 걸립니다(내보내는 동안 열어 두세요)",
         "withEffects": "효과음 넣기",
         "withMusic": "BGM 넣기",
-        "failed": "내보내지 못했습니다. 세밀함이나 크기를 낮추면 될 때가 있습니다."
+        "round": "라운드 {{round}}",
+        "turn": "{{name}}의 차례",
+        "roundTurn": "라운드 {{round}} · {{name}}의 차례",
+        "preview": "동영상 미리보기",
+        "previewHint": "내보낼 동영상을 그 자리에서 재생합니다",
+        "empty": "동영상으로 만들 장면이 없습니다",
+        "building": "구성 중",
+        "play": "재생",
+        "pause": "일시정지",
+        "styles": {
+          "novel": "노벨",
+          "tabletop": "테이블"
+        },
+        "audience": "보여줄 대상",
+        "audiences": {
+          "public": "공개용 (견학자와 동일)",
+          "player": "나 (PL 시점)",
+          "gm": "GM (비밀 모두 포함)"
+        },
+        "lang": "언어",
+        "audienceWarning": "이 시점에서는 공개하지 않은 정보가 보입니다. YouTube 등에 올릴 때는 \"공개용\"을 선택하세요.",
+        "style": "보여주는 방식",
+        "speed": "자막 속도",
+        "speeds": {
+          "0": "느리게",
+          "1": "보통",
+          "2": "조금 빠르게",
+          "3": "빠르게"
+        },
+        "withOpening": "처음에 방 이름과 날짜 표시",
+        "failures": {
+          "empty": "동영상으로 만들 장면이 없습니다.",
+          "sound": "소리를 섞지 못했습니다. 효과음이나 BGM을 빼면 내보낼 수 있습니다.",
+          "encode": "내보내지 못했습니다. 크기나 프레임 수를 낮추면 될 수 있습니다."
+        }
       },
       "script": {
         "title": "읽을거리로 만들기",
@@ -3501,7 +3832,21 @@
       "nowMarker": "지금",
       "zoomIn": "넓히기",
       "zoomOut": "좁히기",
-      "backToNow": "지금으로 돌아가기"
+      "backToNow": "지금으로 돌아가기",
+      "sweepTitle": "버프 일괄 해제 (GM)",
+      "sweepHeldWhat": "사라지지 않는 버프",
+      "sweepByRounds": "남은 라운드로 선택",
+      "sweepByName": "이름으로 선택",
+      "sweepRoundsLabel": "남은",
+      "sweepNoBuffs": "테이블에 버프가 없습니다",
+      "sweepCount": "{{characters}}명·{{buffs}}건이 대상입니다",
+      "sweepNone": "해당하는 버프가 없습니다",
+      "sweepRun": "테이블 전체에서 해제",
+      "sweepChatHint": "채팅에서 &&none- / &&2R- / &&독- 처럼 써도 해제할 수 있습니다",
+      "sweepRoundsWhat": "남은 {{n}}R 버프",
+      "sweepNameWhat": "「{{name}}」",
+      "sweepConfirm": "테이블 전체에서 {{what}}을(를) 해제합니다({{characters}}명·{{buffs}}건). 계속할까요?",
+      "sweepDone": "테이블 전체에서 {{what}}을(를) 해제했습니다({{characters}}명·{{buffs}}건)"
     },
     "controller": {
       "input": {
@@ -3518,6 +3863,7 @@
         "sendTarget": "발언 대상",
         "buffSectionTitle": "버프 부여",
         "counterSectionTitle": "리소스 조작",
+        "noResources": "조작할 수 있는 항목이 없습니다",
         "paletteEdit": "팔레트 편집",
         "confirm": "확정",
         "editing": "편집 중",
@@ -3538,8 +3884,14 @@
         "execute": "조작",
         "maxLimit": "최대값 제한",
         "minLimit": "0 하한 제한",
-        "currentValueSuffix": "현재값",
-        "maxValueSuffix": "최대값",
+        "slotSectionTitle": "슬롯",
+        "slotNameSeparator": " ",
+        "slotNow": "현재값",
+        "slotMax": "최대값",
+        "slotMaxBase": "최대값 기준",
+        "slotMaxCorrection": "최대값 보정",
+        "slotMinBase": "최소값 기준",
+        "slotMinCorrection": "최소값 보정",
         "tabTable": "테이블",
         "tabPersonal": "개인",
         "tabGraveyard": "무덤",
@@ -3713,7 +4065,11 @@
         "deleteRow": "이 행 삭제",
         "deleteSection": "이 섹션 삭제",
         "normalView": "일반 표시",
-        "tableView": "테이블 표시"
+        "tableView": "테이블 표시",
+        "duplicate": "복제",
+        "saveTemplate": "템플릿으로 저장",
+        "addFromTemplate": "템플릿에서 추가",
+        "deleteTemplate": "템플릿 삭제"
       },
       "defaults": {
         "newGroup": "그룹",
@@ -3726,7 +4082,8 @@
       },
       "tableView": {
         "judgeCalc": "판정 산출 모드",
-        "skillLearned": "기능 습득 모드"
+        "skillLearned": "기능 습득 모드",
+        "checkColumn": "이 열을 한꺼번에 체크"
       },
       "judgement": {
         "title": "{{label}}의 판정 후보",
@@ -3917,6 +4274,12 @@
       "effectPlaceholder": "버프에 붙는 한 줄(예: 매 라운드 HP-1)",
       "iconImage": "이미지",
       "pickIconImage": "이미지에서 고르기"
+    },
+    "seatDisplay": {
+      "title": "이 기기의 표시",
+      "widgets": {
+        "label": "위젯"
+      }
     }
   },
   "app": {
@@ -3931,6 +4294,9 @@
       "jukebox": "주크박스",
       "cutIn": "컷인",
       "inventory": "인벤토리",
+      "table": "테이블",
+      "gameResources": "게임 리소스",
+      "media": "미디어",
       "clock": "시계",
       "connectionQuality": "통신 품질",
       "miniPlayer": "미니 플레이어",
@@ -3939,6 +4305,7 @@
       "plTools": "PL 도구",
       "ownedCharacters": "내 캐릭터 목록",
       "handCards": "패 열고 닫기",
+      "hand": "패",
       "objectList": "오브젝트 목록(GM)",
       "npcBar": "NPC 바",
       "darknessOn": "어둠: 켬(클릭하면 끔)",
@@ -3947,6 +4314,7 @@
       "releaseOwnershipConfirm": "오프라인 소유자가 가진 소유 {{count}}건을 해제할까요? (해제 후에는 각자 다시 가져갈 수 있습니다)",
       "zipLoad": "ZIP 불러오기",
       "save": "저장",
+      "saveLoad": "저장 & 불러오기",
       "importCharacter": "캐릭터 가져오기",
       "roomSnapshot": "자동 저장 / 복원",
       "createObject": "말 만들기",
@@ -3954,12 +4322,20 @@
       "recording": "녹화",
       "fogOn": "전장의 안개: 켬(클릭하면 끔)",
       "fogOff": "전장의 안개: 끔(클릭하면 켬)",
+      "resourceBarsShown": "리소스 바: 표시 중 (클릭하면 숨김)",
+      "resourceBarsHidden": "리소스 바: 숨김 (클릭하면 표시)",
+      "buffsShown": "버프: 표시 중 (클릭하면 숨김)",
+      "buffsHidden": "버프: 숨김 (클릭하면 표시)",
       "viewFlat": "2D 표시(클릭하면 3D)",
       "viewPerspective": "3D 표시(클릭하면 2D)",
       "viewAutoFlat": "시점: 자동 (2D)",
       "viewAutoPerspective": "시점: 자동 (3D)",
       "tabletopDisplay": "탁상 디스플레이",
-      "skin": "스킨"
+      "skin": "스킨",
+      "display": "표시",
+      "widgets": "위젯",
+      "foldToolbar": "도구 모음 접기",
+      "unfoldToolbar": "도구 모음 펼치기"
     },
     "roomDataDefault": "룸 데이터"
   },
@@ -3979,7 +4355,11 @@
       "tagUnset": "미설정",
       "tagAll": "전체",
       "imageEmpty": "이미지 없음",
-      "noImagesInTag": "이 분류에 이미지가 없습니다"
+      "noImagesInTag": "이 분류에 이미지가 없습니다",
+      "upload": "업로드",
+      "uploading": "불러오는 중…",
+      "uploadLimit": "파일당 2MB까지",
+      "oversized": "2MB를 넘어 추가하지 못했습니다: {{names}}"
     },
     "contextMenu": {
       "index": "인덱스",
@@ -4002,7 +4382,8 @@
       "menuTitle": "메뉴",
       "rotate90": "시계 방향으로 90도 회전",
       "transparency": "투명도",
-      "ghost": "투명 모드"
+      "ghost": "투명 모드",
+      "tabClose": "이 패널 닫기"
     },
     "portraitPicker": {
       "title": "입화",

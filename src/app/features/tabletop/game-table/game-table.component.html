@@ -38,7 +38,7 @@
   }
 </ng-template>
 <div
-  class="pointer-events-none absolute inset-0 -m-1.25 bg-cover bg-center bg-no-repeat [&.is-filter]:filter-[blur(5px)] [&.is-filter]:will-change-[filter] [&.is-filter]:after:block [&.is-filter]:after:size-full [&.is-filter]:after:content-[''] [&.is-filter.black]:after:bg-[hsl(0,0%,10%)] [&.is-filter.black]:after:filter-[opacity(0.3)] [&.is-filter.white]:after:bg-[hsl(0,0%,97%)] [&.is-filter.white]:after:filter-[opacity(0.2)]"
+  class="pointer-events-none absolute inset-0 -m-1.25 bg-cover bg-center bg-no-repeat [&.is-filter]:filter-[blur(5px)] [&.is-filter]:will-change-[filter] [&.is-filter]:after:block [&.is-filter]:after:size-full [&.is-filter]:after:content-[''] [&.is-filter.black]:after:bg-[hsl(0,0%,10%)] [&.is-filter.black]:after:opacity-30 [&.is-filter.white]:after:bg-[hsl(0,0%,97%)] [&.is-filter.white]:after:opacity-20"
   [ngClass]="[backgroundFilterType ? 'is-filter' : '', backgroundFilterType]"
   [style.background-image]="'url(' + backgroundImage.url + ')' | safe: 'style'"
 ></div>
@@ -182,12 +182,10 @@
       }
       @if (terrainsBySurface().floor.length) {
         <div class="pointer-events-none absolute inset-0 m-auto transform-3d">
-          <div
-            class="pointer-events-none absolute size-px transform-[translate3d(0,0,0)] will-change-[opacity] backface-hidden transform-3d"
-          ></div>
-          @for (terrain of terrainsBySurface().floor; track terrain.identifier) {
+          @for (terrain of floorTerrainsDrawnAlone(); track terrain.identifier) {
             <terrain class="absolute will-change-transform backface-visible transform-3d" [terrain]="terrain"></terrain>
           }
+          <terrain-batch-layer />
         </div>
       }
       @for (beamGrid of beamTopGrids(); track beamGrid.identifier) {
@@ -212,13 +210,6 @@
         <game-table-mask class="absolute will-change-transform backface-visible transform-3d" [gameTableMask]="mask">
         </game-table-mask>
       }
-      @for (scratchMask of tableScratchMasks(); track scratchMask.identifier) {
-        <game-table-scratch-mask
-          class="absolute will-change-transform backface-visible transform-3d"
-          [gameTableScratchMask]="scratchMask"
-        >
-        </game-table-scratch-mask>
-      }
       @for (ambience of ambiences(); track ambience.identifier) {
         <table-ambience
           class="absolute will-change-transform backface-visible transform-3d"
@@ -227,9 +218,6 @@
       }
       @if (textNotesBySurface().floor.length) {
         <div class="pointer-events-none absolute inset-0 m-auto transform-3d">
-          <div
-            class="pointer-events-none absolute size-px transform-[translate3d(0,0,0)] will-change-[opacity] backface-hidden transform-3d"
-          ></div>
           @for (textNote of textNotesBySurface().floor; track textNote.identifier) {
             <text-note
               class="absolute will-change-transform backface-visible transform-3d"
@@ -273,17 +261,6 @@
           }"
         ></coin>
       }
-      <div>
-        <div
-          class="pointer-events-none absolute size-px transform-[translate3d(0,0,0)] will-change-[opacity] backface-hidden transform-3d"
-        ></div>
-        @for (cursor of peerCursors(); track cursor.identifier) {
-          <peer-cursor
-            class="absolute will-change-transform backface-visible transform-3d"
-            [cursor]="cursor"
-          ></peer-cursor>
-        }
-      </div>
       @for (range of ranges(); track range.identifier) {
         <range class="absolute will-change-transform backface-visible transform-3d" [range]="range"></range>
       }
@@ -299,9 +276,6 @@
       }
       @if (diceSymbolsBySurface().floor.length) {
         <div class="pointer-events-none absolute inset-0 m-auto transform-3d">
-          <div
-            class="pointer-events-none absolute size-px transform-[translate3d(0,0,0)] will-change-[opacity] backface-hidden transform-3d"
-          ></div>
           @for (diceSymbol of diceSymbolsBySurface().floor; track diceSymbol.identifier) {
             <dice-symbol
               class="absolute will-change-transform backface-visible transform-3d"
@@ -313,9 +287,6 @@
       }
       @if (charactersBySurface().floor.length) {
         <div class="pointer-events-none absolute inset-0 m-auto transform-3d">
-          <div
-            class="pointer-events-none absolute size-px transform-[translate3d(0,0,0)] will-change-[opacity] backface-hidden transform-3d"
-          ></div>
           @for (character of charactersBySurface().floor; track character.identifier) {
             <game-character
               class="absolute will-change-transform backface-visible transform-3d"
@@ -326,9 +297,6 @@
         </div>
       }
       <div class="pointer-events-none absolute inset-0 m-auto transform-3d">
-        <div
-          class="pointer-events-none absolute size-px transform-[translate3d(0,0,0)] will-change-[opacity] backface-hidden transform-3d"
-        ></div>
         @for (cursor of peerCursors(); track cursor.identifier) {
           <peer-cursor
             class="absolute will-change-transform backface-visible transform-3d"
@@ -344,6 +312,7 @@
       <table-move-block-overlay class="contents"></table-move-block-overlay>
       <table-trigger-overlay class="contents"></table-trigger-overlay>
       <table-move-range-overlay class="contents"></table-move-range-overlay>
+      <table-altitude-guide-overlay class="contents"></table-altitude-guide-overlay>
       <table-target-overlay class="contents"></table-target-overlay>
       <table-effect-overlay class="contents"></table-effect-overlay>
       <effect-target-overlay class="contents"></effect-target-overlay>
@@ -362,22 +331,62 @@
 -->
 @if (isPlanningMove()) {
   <div
-    class="bg-ui-panel shadow-ui-md pointer-events-none absolute bottom-28 left-1/2 z-160 max-w-[90vw] -translate-x-1/2 rounded-full px-4 py-1.5 text-center text-sm text-[whitesmoke] opacity-95"
+    class="bg-ui-panel shadow-ui-md text-ui-text pointer-events-none absolute bottom-28 left-1/2 z-160 flex max-w-[92vw] -translate-x-1/2 items-center gap-3 rounded-full py-1.5 pr-4 pl-1.5 text-sm opacity-95"
     data-testid="move-plan-hint"
   >
-    {{ 'feature.tabletop.movePlan.hint' | transloco }}
+    <div
+      class="border-ui-border-panel pointer-events-auto flex shrink-0 rounded-full border border-solid p-0.5"
+      role="group"
+      data-move-plan-control
+      [attr.aria-label]="'feature.tabletop.movePlan.modeLabel' | transloco"
+    >
+      @for (mode of moveModes; track mode.jumping) {
+        <button
+          type="button"
+          class="inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-full border-none px-3.5 text-[0.86em] whitespace-nowrap transition-[background,color] [&_.material-icons]:text-[16px]!"
+          [class.bg-ui-accent]="isJumpingMove() === mode.jumping"
+          [class.text-white]="isJumpingMove() === mode.jumping"
+          [class.bg-transparent]="isJumpingMove() !== mode.jumping"
+          [class.text-ui-muted]="isJumpingMove() !== mode.jumping"
+          [attr.aria-pressed]="isJumpingMove() === mode.jumping"
+          [attr.data-testid]="mode.testId"
+          (click)="onChooseMoveMode(mode.jumping, $event)"
+        >
+          <i class="material-icons">{{ mode.icon }}</i>
+          {{ mode.label | transloco }}
+        </button>
+      }
+    </div>
+    <span class="text-ui-muted min-w-0 text-[0.86em] leading-snug">{{ movePlanHintKey() | transloco }}</span>
+  </div>
+}
+<!--
+  Said in the same band the planned move speaks from, and only when that band is quiet, so a
+  piece in hand never has two things talking over each other at the foot of the screen.
+-->
+@if (holdHint(); as hint) {
+  <div
+    class="bg-ui-panel shadow-ui-md text-ui-muted pointer-events-none absolute bottom-28 left-1/2 z-160 flex max-w-[92vw] -translate-x-1/2 items-center gap-2 rounded-full px-4 py-1.5 text-[0.86em] leading-snug opacity-95"
+    data-testid="hold-hint"
+  >
+    <i class="material-icons text-ui-dim text-[15px]!">mouse</i>
+    <span class="min-w-0">{{ hint.footing | transloco }}</span>
+    @if (hint.lift) {
+      <span class="text-ui-dim">/</span>
+      <span class="min-w-0">{{ hint.lift | transloco }}</span>
+    }
   </div>
 }
 @if (isPickingEffectTarget()) {
   <div
-    class="bg-ui-panel pointer-events-none absolute top-4 left-1/2 z-20 -translate-x-1/2 rounded-full px-4 py-1.5 text-sm text-[whitesmoke] opacity-90"
+    class="bg-ui-panel text-ui-text pointer-events-none absolute top-4 left-1/2 z-20 -translate-x-1/2 rounded-full px-4 py-1.5 text-sm opacity-90"
   >
     {{ 'feature.effect.pickingHint' | transloco }}
   </div>
 }
 @if (isPickingTarget()) {
   <div
-    class="bg-ui-panel pointer-events-none absolute top-4 left-1/2 z-20 -translate-x-1/2 rounded-full px-4 py-1.5 text-sm text-[whitesmoke] opacity-90"
+    class="bg-ui-panel text-ui-text pointer-events-none absolute top-4 left-1/2 z-20 -translate-x-1/2 rounded-full px-4 py-1.5 text-sm opacity-90"
   >
     {{ 'feature.card.targetPickingHint' | transloco }}
   </div>

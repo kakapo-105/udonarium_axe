@@ -29,7 +29,7 @@ import {
 import { blockOrigin, MapGrid, tableSizeFor } from '@axe/domain/tabletop/map-grid';
 import { cornerShiftOf } from '@axe/domain/tabletop/move/piece-on-grid';
 import { TableAmbience } from '@axe/domain/tabletop/table-ambience';
-import { DoorStyle, SlopeDirection, Terrain, TerrainViewState } from '@axe/domain/tabletop/terrain';
+import { DoorStyle, Terrain, TerrainViewState } from '@axe/domain/tabletop/terrain';
 import { EYE_HEIGHT_CELLS } from '@axe/domain/tabletop/vision-scene';
 import { applyLightPreset, LightPreset } from '@axe/domain/tabletop/vision-types';
 
@@ -48,6 +48,10 @@ const LIGHT_PRESET: Record<MapLightKind, LightPreset> = {
   brazier: LightPreset.BRAZIER,
   stand: LightPreset.LANTERN,
   lantern: LightPreset.LANTERN,
+  neon: LightPreset.NEON,
+  streetlamp: LightPreset.LANTERN,
+  fluorescent: LightPreset.NEON,
+  neonpole: LightPreset.NEON,
 };
 
 /** A stand and a lantern burn alike but do not look alike, so the picture follows the kind. */
@@ -57,8 +61,14 @@ const LIGHT_SKIN: Record<MapLightKind, LightSkinId> = {
   brazier: 'light_brazier',
   stand: 'light_stand',
   lantern: 'light_lantern',
+  neon: 'light_neon',
+  streetlamp: 'light_streetlamp',
+  fluorescent: 'light_fluorescent',
+  neonpole: 'light_neon_pole',
 };
-const WALL_MOUNTED: readonly MapLightKind[] = ['sconce', 'lantern'];
+const WALL_MOUNTED: readonly MapLightKind[] = ['sconce', 'lantern', 'neon', 'fluorescent'];
+/** What is fixed flat to the stone, and so set back against it rather than left hanging a half cell out. */
+const WALL_FIXED: readonly MapLightKind[] = ['sconce', 'neon', 'fluorescent'];
 
 /** How far out from its wall a sconce is meant to throw the middle of its pool. */
 const SCONCE_THROW_CELLS = 2;
@@ -82,8 +92,8 @@ export function wallLightInset(facing: number, cells: number): { x: number; y: n
  * How far down a lamp on a wall is turned, so that its light lands in front of it.
  *
  * A sconce comes out of the preset turned a little upward, which is how a torch stands in a
- * bracket but not where it throws anything: hung high on a wall, it lit the stone above itself
- * and left the floor to the dark. Aiming it is a right-angled triangle — the drop is how high
+ * bracket but not where it throws anything: hung high on a wall, it would light the stone above
+ * itself and leave the floor to the dark. Aiming it is a right-angled triangle — the drop is how high
  * it hangs, the run is how far out the pool should sit — so the angle follows from the two
  * rather than being guessed at.
  */
@@ -158,12 +168,25 @@ export class DungeonBuildService {
     return image.identifier;
   }
 
+  /**
+   * The image identifier a wall material stands for.
+   *
+   * A picture from the image library is used as it is; a bundled texture is registered on first
+   * use. An id `urls` does not know answers empty.
+   */
   resolveMaterial(material: DungeonMaterial, urls: Record<string, string>): string {
     if (material.kind === 'library') return material.identifier;
     const url = urls[material.id];
     return url ? this.registerAsset(url) : '';
   }
 
+  /**
+   * Builds a new table from generated blocks: the terrain, the ground effects, the lights, and the
+   * party stood on the cells it was given.
+   *
+   * Terrain goes in a few dozen blocks at a time, handing the thread back between batches so
+   * `onProgress` can move a bar. The table is made but not switched to.
+   */
   async build(
     size: MapSize,
     mood: MapMood,
@@ -251,6 +274,7 @@ export class DungeonBuildService {
     terrain.isLocked = true;
     terrain.blocksSight = block.blocksSight;
     terrain.blocksLight = block.blocksSight;
+    terrain.blocksClimb = block.blocksClimb === true;
 
     // A door slab is thinner than its cell, so it is set in the middle of the way it bars.
     const inset = ((1 - DOOR_THICKNESS) / 2) * GRID_SIZE;
@@ -282,16 +306,20 @@ export class DungeonBuildService {
     const { rect } = block;
     switch (block.kind) {
       case 'wall': {
-        const terrain = Terrain.create(name, rect.w, rect.h, wallHeight, images.wallSide, images.wallTop);
+        const width = block.footprint?.w ?? rect.w;
+        const depth = block.footprint?.d ?? rect.h;
+        const terrain = Terrain.create(name, width, depth, wallHeight, images.wallSide, images.wallTop);
         terrain.mode = TerrainViewState.ALL;
         return terrain;
       }
       case 'door': {
-        const door = this.registerAsset(DUNGEON_PROP_ASSET_URLS[block.prop ?? 'door_wood']);
+        const door = block.disguised
+          ? images.wallSide
+          : this.registerAsset(DUNGEON_PROP_ASSET_URLS[block.prop ?? 'door_wood']);
         const acrossX = block.across === 'x';
         const width = acrossX ? DOOR_THICKNESS : rect.w;
         const depth = acrossX ? rect.h : DOOR_THICKNESS;
-        const terrain = Terrain.create(name, width, depth, wallHeight, door, door);
+        const terrain = Terrain.create(name, width, depth, wallHeight, door, block.disguised ? images.wallTop : door);
         terrain.mode = TerrainViewState.ALL;
         terrain.doorStyle = block.doorStyle ?? DoorStyle.SWING;
         if (block.doorMirrored) terrain.doorMirrored = true;
@@ -315,8 +343,7 @@ export class DungeonBuildService {
         const image = this.registerAsset(DUNGEON_PROP_ASSET_URLS[block.prop ?? 'stair_up']);
         const terrain = Terrain.create(name, rect.w, rect.h, STAIR_HEIGHT, image, image);
         terrain.mode = TerrainViewState.FLOOR;
-        terrain.isSlope = true;
-        terrain.slopeDirection = block.kind === 'stairUp' ? SlopeDirection.TOP : SlopeDirection.BOTTOM;
+        terrain.slopeSides = [block.kind === 'stairUp' ? 'n' : 's'];
         terrain.isDropShadow = false;
         return terrain;
       }
@@ -325,10 +352,12 @@ export class DungeonBuildService {
 
   private terrainName(block: MapBlock): string {
     if (block.name) return block.name;
+    if (block.thing) return this.t(`feature.tabletop.dungeonGenerator.piece.${block.thing}`);
     switch (block.kind) {
       case 'wall':
         return this.t('feature.tabletop.dungeonGenerator.piece.wall');
       case 'door':
+        if (block.disguised) return this.t('feature.tabletop.dungeonGenerator.piece.hiddenDoor');
         return block.locked
           ? this.t('feature.tabletop.dungeonGenerator.piece.doorLocked')
           : this.t('feature.tabletop.dungeonGenerator.piece.door');
@@ -363,13 +392,16 @@ export class DungeonBuildService {
     for (const light of lights) {
       const source = LightSource.create(this.t(`feature.light.skin.${LIGHT_SKIN[light.kind]}`));
       applyLightPreset(source, LIGHT_PRESET[light.kind]);
+      if (light.color) source.lightColor = light.color;
       source.lightEnabled = true;
       source.lightDirection = light.kind === 'sconce' ? light.facing : 0;
       source.isLock = true;
       const element = source.imageDataElement?.getFirstElementByName('imageIdentifier');
       if (element) element.value = this.registerAsset(LIGHT_SKIN_ASSET_URLS[LIGHT_SKIN[light.kind]]);
       const at = blockOrigin({ x: light.x, y: light.y, w: 1, h: 1 }, grid);
-      const back = light.kind === 'sconce' ? wallLightInset(light.facing, SCONCE_WALL_INSET_CELLS) : { x: 0, y: 0 };
+      const back = WALL_FIXED.includes(light.kind)
+        ? wallLightInset(light.facing, SCONCE_WALL_INSET_CELLS)
+        : { x: 0, y: 0 };
       source.location = { name: 'table', x: at.x + back.x * GRID_SIZE, y: at.y + back.y * GRID_SIZE };
       source.posZ = 0;
       source.altitude = WALL_MOUNTED.includes(light.kind) ? Math.max(0, wallHeight - 1) : 0;

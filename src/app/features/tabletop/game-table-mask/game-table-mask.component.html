@@ -22,6 +22,28 @@
         class="pointer-events-none size-full transform-3d"
         [ngStyle]="hexOutlineMask ? { '-webkit-mask': hexOutlineMask, mask: hexOutlineMask } : null"
       >
+        @if (scratchedLayerMask; as scratchedMask) {
+          <div
+            class="pointer-events-none absolute size-full backface-hidden transform-3d"
+            data-scratched-layer
+            [ngStyle]="{
+              opacity: operateOpacity,
+              'background-color': scratchedColor() || null,
+              '-webkit-mask': scratchedMask,
+              mask: scratchedMask,
+            }"
+          >
+            @if (scratchedImageFile().url.length >= 1) {
+              <div class="pointer-events-none absolute isolate size-full">
+                <img
+                  class="pointer-events-none absolute size-full"
+                  [style.mix-blend-mode]="blendType === 1 ? null : 'hard-light'"
+                  [src]="scratchedImageFile().url | safe: 'resourceUrl'"
+                />
+              </div>
+            }
+          </div>
+        }
         <div
           class="pointer-events-auto absolute size-full backface-hidden transform-3d"
           [class.block!]="imageFile().url.length >= 1"
@@ -326,7 +348,7 @@
           class="pointer-events-none absolute inset-x-0 -top-2.5 left-px z-10 m-auto translate-z-[0.5px] backface-hidden transform-3d"
         >
           <div
-            class="bg-ui-panel pointer-events-none inline-block max-w-[18em] truncate rounded-3xl px-2.25 py-0.75 text-[15px] whitespace-nowrap text-[whitesmoke]"
+            class="bg-ui-panel text-ui-text pointer-events-none inline-block max-w-[18em] truncate rounded-3xl px-2.25 py-0.75 text-[15px] whitespace-nowrap"
             [ngStyle]="{ 'background-color': ownerColor + 'E6' }"
           >
             <span class="inline-block" [class.transform-[rotateZ(180deg)]]="isInverse"

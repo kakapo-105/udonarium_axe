@@ -38,6 +38,7 @@ export type BreakOutMode = (typeof BREAK_OUT_MODES)[number];
 export const DEFAULT_BREAK_OUT_MODE: BreakOutMode = 'weighed';
 export const DEFAULT_BREAK_OUT_COST = 1;
 
+/** The value as a break-out mode, reading anything unknown, such as an empty setting, as the default. */
 export function asBreakOutMode(value: unknown): BreakOutMode {
   return typeof value === 'string' && (BREAK_OUT_MODES as readonly string[]).includes(value)
     ? (value as BreakOutMode)
@@ -171,7 +172,21 @@ export function fightsByCell(
   // it: a golem three across is beside an enemy its middle cell is nowhere near.
   const across = Math.max(1, Math.round(mover.size));
   const back = Math.floor((across - 1) / 2);
+  // A board is mostly empty ground, and only a cell near somebody standing can hold a fight.
+  // The ground around them is marked out first, generously, so the rest is never asked about:
+  // what is left out is what would have found nobody and been passed over anyway.
+  const nearby = new Uint8Array(total);
+  for (const cell of standingOn.keys()) {
+    const { col, row } = cellColRow(grid, cell);
+    for (let atCol = col - across; atCol <= col + across + 1; atCol++) {
+      for (let atRow = row - across; atRow <= row + across + 1; atRow++) {
+        const at = cellIndexOf(grid, atCol, atRow);
+        if (at >= 0) nearby[at] = 1;
+      }
+    }
+  }
   for (let cell = 0; cell < total; cell++) {
+    if (!nearby[cell]) continue;
     const touched: number[] = [];
     const gather = (met: number): void => {
       for (const index of standingOn.get(met) ?? []) {

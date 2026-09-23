@@ -85,6 +85,7 @@
   --color-ui-danger-glow: var(--ui-danger-glow);
   --color-ui-danger-bg: var(--ui-danger-bg);
   --color-ui-success: var(--ui-success);
+  --color-ui-warning: var(--ui-warning);
 
   /* トランプの黒スート (♣♠) — ダークモードでは視認性のため青、ライトモードでは伝統通り黒 */
   --color-ui-suit-black: var(--ui-suit-black);
@@ -262,6 +263,55 @@
   background: var(--ui-accent);
   border: none;
   cursor: pointer;
+}
+
+/* The portrait slider in the chat input: the seek bar's thin track and small knob. The selectors
+   outrank the global input[type='range'] rules, which would otherwise draw the thick framed bar.
+   How far along it is comes in as --seek-progress. */
+input[type='range'].portrait-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  border: none;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--ui-accent) var(--seek-progress, 0%),
+    var(--ui-panel-border) var(--seek-progress, 0%)
+  );
+}
+
+input[type='range'].portrait-slider::-webkit-slider-thumb {
+  width: 10px;
+  height: 10px;
+  margin-top: -3.5px;
+  border: none;
+  border-radius: 50%;
+  background: var(--ui-accent);
+  transition: transform 0.1s;
+}
+
+input[type='range'].portrait-slider:hover::-webkit-slider-thumb {
+  transform: scale(1.3);
+}
+
+input[type='range'].portrait-slider::-moz-range-track {
+  height: 3px;
+  border: none;
+  border-radius: 2px;
+  background: var(--ui-panel-border);
+}
+
+input[type='range'].portrait-slider::-moz-range-progress {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--ui-accent);
+}
+
+input[type='range'].portrait-slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: none;
+  border-radius: 50%;
+  background: var(--ui-accent);
 }
 
 /* Tailwind v4 のテキストサイズユーティリティ (text-base / text-sm 等) は
@@ -526,6 +576,9 @@ chat-message > div > div {
   /* 成功 */
   --ui-success: #3fb950;
 
+  /* 警告 */
+  --ui-warning: #d29922;
+
   /* トランプ黒スート色 (♣♠) — ダーク背景での視認性確保のため青系に */
   --ui-suit-black: #58a6ff;
 
@@ -596,6 +649,7 @@ chat-message > div > div {
   --ui-danger-bg: rgba(210, 15, 57, 0.1);
 
   --ui-success: #40a02b;
+  --ui-warning: #8c5a00;
 
   /* ライトモード: 黒スート (♣♠) は伝統通り黒 */
   --ui-suit-black: #000000;
@@ -879,6 +933,10 @@ chat-message > div > div {
   }
   .ng-select.ud-select.chat-select.chat-select--game-type {
     flex-basis: 100%;
+  }
+  /* A packed input keeps the help and settings buttons beside the dice bot, giving that row to the list below. */
+  .ng-select.ud-select.chat-select.chat-select--game-type.chat-select--shares-row {
+    flex-basis: 6rem;
   }
 }
 
@@ -1382,6 +1440,44 @@ input[type='range']::-moz-range-thumb {
   to {
     opacity: 1;
   }
+}
+
+/*
+ * The lighter way of drawing (RenderLiteService): nothing blurs what lies behind it. A frosted
+ * panel over a table that moves is blurred afresh every frame, which Firefox and small machines
+ * cannot keep up with.
+ */
+:root.render-lite *,
+:root.render-lite *::before,
+:root.render-lite *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/*
+ * Nor does every object on the table ask for a compositing layer of its own. The host element
+ * only moves when its stacking order does; the element inside that follows the pointer is
+ * promoted while it is dragged (MovableDirective), and that inline style still applies.
+ * Firefox gives up on will-change past an area budget, and small machines pay for every layer.
+ */
+:root.render-lite
+  :is(
+    text-note,
+    card-stack,
+    card,
+    game-character,
+    coin,
+    dice-symbol,
+    terrain,
+    game-table-mask,
+    game-table-scratch-mask,
+    table-ambience,
+    peer-cursor,
+    range,
+    white-board,
+    light-source
+  ).will-change-transform {
+  will-change: auto;
 }
 
 :root.motion-reduced
@@ -3006,8 +3102,69 @@ body.mobile-layout visual-novel-overlay button:not(.material-icons) {
   min-height: 40px;
 }
 
-body.touch-input :is(ui-panel, app-mobile-shell, modal, context-menu, app-hand-rail, app-hotbar) {
+body.touch-input :is(ui-panel, app-mobile-shell, modal, context-menu, app-hand-rail, app-hotbar, visual-novel-overlay) {
   -webkit-touch-callout: none;
+}
+
+/*
+ * A press held on a line of chat opens what can be done with it, copying its words among them.
+ * Left selectable, the same press would also start picking the words out under the menu. The box
+ * a line is edited in stays selectable.
+ */
+body.touch-input chat-message .msg-text {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body.touch-input chat-message .msg-text textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/*
+ * A small button that stays on a phone is given a larger place to be pressed than it is drawn.
+ * The button keeps its drawn size, so a row of them keeps its room. Beside another such button it
+ * reaches sideways only half the narrowest gap written between them, 2px, so neither takes a
+ * press on the edge of the other.
+ */
+body.touch-input .touch-target {
+  position: relative;
+}
+
+body.touch-input .touch-target::after {
+  content: '';
+  position: absolute;
+  inset: -8px -4px;
+}
+
+body.touch-input .touch-target:has(+ .touch-target)::after {
+  right: -1px;
+}
+
+body.touch-input .touch-target + .touch-target::after {
+  left: -1px;
+}
+
+/*
+ * The table takes long presses and drags on whatever lies under the finger. iOS answers a long
+ * press on a picture with the menu that saves it, in place of moving the piece; a mouse never
+ * brings that menu up, so it is kept off everywhere, whether or not the screen has been told
+ * apart as a touch screen yet.
+ */
+game-table {
+  -webkit-touch-callout: none;
+}
+
+/*
+ * iPadOS lifts a picture under a finger out of the page to be dropped somewhere else. A mouse
+ * dragging a picture the table has not taken the drag for may still carry it out to be saved,
+ * so this holds only where the primary pointer is coarse, which is how an iPad reports itself
+ * with or without a trackpad, and is read by the browser before any script has run.
+ */
+@media (pointer: coarse) {
+  game-table img {
+    -webkit-user-drag: none;
+  }
 }
 
 body.mobile-layout app-mobile-chat-pane .chat-input,

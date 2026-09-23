@@ -3,6 +3,13 @@ import { SyncObject, SyncVar } from '@axe/core/sync/decorator';
 import { DataElement } from '@axe/domain/data/data-element';
 import { TabletopObject } from '@axe/domain/tabletop/tabletop-object';
 import {
+  encodeSlopeSides,
+  legacySlopeDirection,
+  parseSlopeSides,
+  SlopeDirection,
+  SlopeSide,
+} from '@axe/domain/tabletop/terrain-slope';
+import {
   DEFAULT_LIGHT_COLOR,
   LightAnimation,
   LightCategory,
@@ -15,14 +22,6 @@ export enum TerrainViewState {
   FLOOR = 1,
   WALL = 2,
   ALL = 3,
-}
-
-export enum SlopeDirection {
-  NONE = 0,
-  TOP = 1,
-  BOTTOM = 2,
-  LEFT = 3,
-  RIGHT = 4,
 }
 
 export enum DoorStyle {
@@ -56,12 +55,44 @@ export class Terrain extends TabletopObject {
   @SyncVar() isSlope: boolean = false;
   @SyncVar() isSurfaceShading: boolean = true;
   @SyncVar() slopeDirection: number = SlopeDirection.NONE;
+  /**
+   * The sides the slope runs down to, as their names in one line, such as `n,e`.
+   *
+   * {@link slopeSides} reads and writes it. A room saved before a block could slope to more
+   * than one side carries nothing here and is read from {@link slopeDirection} instead.
+   */
+  @SyncVar() slopeSideNames: string = '';
+
+  /**
+   * The sides this block's top runs down to, as the block holds them.
+   *
+   * A block sloping to one side is a ramp up to the side across from it, the way a slope has
+   * always read; sloping to every side raises a pyramid over the middle. Setting them turns
+   * the slope on or off with them, and leaves an older peer the single direction it knows.
+   */
+  get slopeSides(): SlopeSide[] {
+    if (!this.isSlope) return [];
+    return parseSlopeSides(this.slopeSideNames, this.slopeDirection);
+  }
+  set slopeSides(sides: readonly SlopeSide[]) {
+    this.slopeSideNames = encodeSlopeSides(sides);
+    this.slopeDirection = legacySlopeDirection(sides);
+    this.isSlope = sides.length > 0;
+  }
 
   @SyncVar() isGrid: boolean = false;
   @SyncVar() isTiledTexture: boolean = false;
 
   @SyncVar() blocksSight: boolean = true;
   @SyncVar() blocksLight: boolean = true;
+
+  /**
+   * A face too sheer to get up, which a piece goes around rather than over.
+   *
+   * Terrain otherwise reads as something to be stood on: walk a piece at a low wall and it
+   * steps up onto it. A cliff, a chasm wall or a pane of glass is not that, and says so here.
+   */
+  @SyncVar() blocksClimb: boolean = false;
 
   @SyncVar() doorStyle: string = DoorStyle.NONE;
   @SyncVar() isDoorOpen: boolean = false;
@@ -73,6 +104,7 @@ export class Terrain extends TabletopObject {
    */
   @SyncVar() doorMirrored: boolean = false;
 
+  /** Whether this terrain is a door of any style. */
   get isDoor(): boolean {
     return this.doorStyle !== DoorStyle.NONE;
   }
@@ -86,6 +118,7 @@ export class Terrain extends TabletopObject {
   get blocksSightNow(): boolean {
     return this.blocksSight && !(this.isDoor && this.isDoorOpen);
   }
+  /** The light counterpart of blocksSightNow: blocks light only while it is not an open door. */
   get blocksLightNow(): boolean {
     return this.blocksLight && !(this.isDoor && this.isDoorOpen);
   }
@@ -100,6 +133,10 @@ export class Terrain extends TabletopObject {
   @SyncVar() lightPitch: number = 0;
   @SyncVar() lightAnimation: string = LightAnimation.NONE;
 
+  /**
+   * The terrain's light settings gathered into the shape the vision scene reads, with the direction
+   * turned along with the terrain.
+   */
   get lightSpec(): LightSpec {
     return {
       enabled: this.lightEnabled,
@@ -118,50 +155,68 @@ export class Terrain extends TabletopObject {
     };
   }
 
+  /** How many grid cells wide the terrain is, kept in its common data. */
   get width(): number {
     return this.getCommonValue('width', 1);
   }
   set width(width: number) {
     this.setCommonValue('width', width);
   }
+  /** How many grid cells tall the terrain stands, kept in its common data. */
   get height(): number {
     return this.getCommonValue('height', 1);
   }
   set height(height: number) {
     this.setCommonValue('height', height);
   }
+  /** How many grid cells deep the terrain is, kept in its common data. */
   get depth(): number {
     return this.getCommonValue('depth', 1);
   }
   set depth(depth: number) {
     this.setCommonValue('depth', depth);
   }
+  /**
+   * The picture shared by every upright face without one of its own, or null when unset or not in
+   * storage.
+   */
   get wallImage(): ImageFile | null {
     return this.getImageFile('wall');
   }
+  /**
+   * The picture shared by the top and the underside when they have none of their own, or null when
+   * unset or not in storage.
+   */
   get floorImage(): ImageFile | null {
     return this.getImageFile('floor');
   }
 
+  /** The top face's picture, falling back to the floor picture. */
   get topImage(): ImageFile | null {
     return this.getImageFile('top') ?? this.floorImage;
   }
+  /** The underside's picture, falling back to the floor picture. */
   get bottomImage(): ImageFile | null {
     return this.getImageFile('bottom') ?? this.floorImage;
   }
+  /** The north face's picture, falling back to the wall picture. */
   get northImage(): ImageFile | null {
     return this.getImageFile('north') ?? this.wallImage;
   }
+  /** The south face's picture, falling back to the wall picture. */
   get southImage(): ImageFile | null {
     return this.getImageFile('south') ?? this.wallImage;
   }
+  /** The east face's picture, falling back to the wall picture. */
   get eastImage(): ImageFile | null {
     return this.getImageFile('east') ?? this.wallImage;
   }
+  /** The west face's picture, falling back to the wall picture. */
   get westImage(): ImageFile | null {
     return this.getImageFile('west') ?? this.wallImage;
   }
 
+  /** The picture one face is drawn with, after falling back to the shared wall or floor picture. */
   faceImage(face: TerrainFace): ImageFile | null {
     switch (face) {
       case 'top':
@@ -203,6 +258,10 @@ export class Terrain extends TabletopObject {
     return false;
   }
 
+  /**
+   * Sets the picture for one face or shared slot, making its image element when missing. Does
+   * nothing when the terrain has no image section.
+   */
   setFaceImage(face: TerrainImageSlot, imageIdentifier: string): void {
     const imageEl = this.imageDataElement;
     if (!imageEl) return;
@@ -214,13 +273,18 @@ export class Terrain extends TabletopObject {
     imageEl.appendChild(DataElement.create(face, imageIdentifier, { type: 'image' }, `${face}_${this.identifier}`));
   }
 
+  /** Whether the terrain's view mode draws its walls. */
   get hasWall(): boolean {
     return (this.mode & TerrainViewState.WALL) !== 0;
   }
+  /** Whether the terrain's view mode draws its floor. */
   get hasFloor(): boolean {
     return (this.mode & TerrainViewState.FLOOR) !== 0;
   }
 
+  /**
+   * Makes a terrain with its name, size, and wall and floor pictures, and registers it for sync.
+   */
   static create(
     name: string,
     width: number,

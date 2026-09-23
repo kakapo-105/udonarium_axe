@@ -38,6 +38,8 @@ export interface MapBlock {
   kind: MapBlockKind;
   rect: MapRect;
   blocksSight: boolean;
+  /** Whether a piece walks around it rather than up onto it. Left out, it may be climbed. */
+  blocksClimb?: boolean;
   locked: boolean;
   rooms: number[];
   /** For a door, the axis it bars. A slab thin along x stands across an east-west passage. */
@@ -68,7 +70,15 @@ export interface MapBlock {
   doorStyle?: string;
   /** Whether this one opens the other way round, which is what makes a pair of doors a pair. */
   doorMirrored?: boolean;
+  /** Whether a door is dressed as the wall it stands in rather than as a door. */
+  disguised?: boolean;
   name?: string;
+  /**
+   * What it is - a tree, a counter, a building - which is what it is called on the table.
+   *
+   * Left out, it is called after its kind: a wall, a door, a stair.
+   */
+  thing?: string;
 }
 
 /**
@@ -84,13 +94,31 @@ export interface MapPaint {
   material?: MapMaterial;
 }
 
-export type MapLightKind = 'sconce' | 'campfire' | 'brazier' | 'stand' | 'lantern';
+export type MapLightKind =
+  'sconce' | 'campfire' | 'brazier' | 'stand' | 'lantern' | 'neon' | 'streetlamp' | 'fluorescent' | 'neonpole';
 
 export interface MapLight extends MapPoint {
   kind: MapLightKind;
   room: number;
   /** Which way it throws its light, measured away from whatever it is fixed to. */
   facing: number;
+  /** The colour it burns, where it is not the colour a light of its kind usually is. */
+  color?: string;
+}
+
+/**
+ * Which lights a place is lit by, where it is not lit by fire.
+ *
+ * A dungeon puts a bracket on the wall where a room is cramped and a fire in the middle where
+ * it is roomy; a bar is lit by tubes on the wall whatever the size of the room.
+ */
+export interface MapLighting {
+  /** What is fixed to a wall, taken in turn. */
+  wall: readonly MapLightKind[];
+  /** What stands out in the open, taken in turn. Left empty, the wall lights go everywhere. */
+  open: readonly MapLightKind[];
+  /** The colours they burn, taken in turn. Left out, each burns the colour of its kind. */
+  colors?: readonly string[];
 }
 
 /** An effect laid over a patch of the board and left there: a poisoned pool, a vent, a mire. */
@@ -124,6 +152,10 @@ export const MAP_HEAVY_TERRAINS = 350;
 /** What one terrain costs to sync: itself, the five it is built from, and its six values. */
 export const SYNC_OBJECTS_PER_TERRAIN = 12;
 
+/**
+ * How many synced objects laying these blocks on a table would make, so the generator can warn
+ * before a map gets too heavy.
+ */
 export function syncObjectCount(blocks: readonly MapBlock[]): number {
   return blocks.length * SYNC_OBJECTS_PER_TERRAIN;
 }

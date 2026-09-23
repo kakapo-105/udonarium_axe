@@ -268,6 +268,14 @@ function firstOpenCell(layout: DungeonLayout): { x: number; y: number } {
   return { x: 1, y: 1 };
 }
 
+/**
+ * Grows a cave map: random rock is dug into chambers joined by tunnels, smoothed into natural walls, and cut
+ * down to its largest connected cavern.
+ *
+ * Chambers that the smoothing filled in are dropped from the room list. Hazard pools are poured afterwards,
+ * and the entrance and exit both start at the first chamber's centre. The same random source gives the same
+ * cave.
+ */
 export function generateCave(params: CaveParams, rng: () => number): DungeonLayout {
   const layout: DungeonLayout = {
     width: params.width,
@@ -275,6 +283,7 @@ export function generateCave(params: CaveParams, rng: () => number): DungeonLayo
     cells: new Uint8Array(params.width * params.height).fill(DungeonCell.Rock),
     rooms: [],
     doors: [],
+    doorLeaves: [],
     links: [],
     entrance: { x: 1, y: 1 },
     exit: { x: 1, y: 1 },

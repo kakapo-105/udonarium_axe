@@ -1,10 +1,4 @@
-const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-
-const BASE64_LOOKUP = (() => {
-  const table = new Int8Array(128).fill(-1);
-  for (let i = 0; i < BASE64_ALPHABET.length; i++) table[BASE64_ALPHABET.charCodeAt(i)] = i;
-  return table;
-})();
+import { decodeBytesInto, encodeBytes } from '@axe/core/util/base64-bytes';
 
 export class CellBits {
   private readonly words: Uint8Array;
@@ -13,29 +7,39 @@ export class CellBits {
     this.words = new Uint8Array(Math.max(0, Math.ceil(count / 8)));
   }
 
+  /** Whether the cell at this index is set. An index off the grid reads as unset. */
   get(index: number): boolean {
     if (index < 0 || index >= this.count) return false;
     return (this.words[index >> 3] & (1 << (index & 7))) !== 0;
   }
 
+  /** Marks one cell. An index off the grid is ignored. */
   set(index: number): void {
     if (index < 0 || index >= this.count) return;
     this.words[index >> 3] |= 1 << (index & 7);
   }
 
+  /** Clears one cell. An index off the grid is ignored. */
   unset(index: number): void {
     if (index < 0 || index >= this.count) return;
     this.words[index >> 3] &= ~(1 << (index & 7));
   }
 
+  /** Clears every cell. */
   clear(): void {
     this.words.fill(0);
   }
 
+  /** Whether no cell is set at all. */
   get isEmpty(): boolean {
     return this.words.every((word) => word === 0);
   }
 
+  /**
+   * Adds every cell set in the other set to this one, and reports whether anything was added.
+   *
+   * Only the bytes both sets have are merged, so a larger other set is cut down to this one's size.
+   */
   or(other: CellBits): boolean {
     let changed = false;
     const limit = Math.min(this.words.length, other.words.length);
@@ -48,6 +52,37 @@ export class CellBits {
     return changed;
   }
 
+  /**
+   * Keeps only the cells the other set has as well, and reports whether anything was dropped.
+   *
+   * Cells beyond the end of the other set are dropped: a set that does not reach them does not
+   * hold them either.
+   */
+  and(other: CellBits): boolean {
+    let changed = false;
+    for (let i = 0; i < this.words.length; i++) {
+      const kept = this.words[i] & (other.words[i] ?? 0);
+      if (kept === this.words[i]) continue;
+      this.words[i] = kept;
+      changed = true;
+    }
+    return changed;
+  }
+
+  /** Drops every cell the other set has, and reports whether anything was dropped. */
+  without(other: CellBits): boolean {
+    let changed = false;
+    const limit = Math.min(this.words.length, other.words.length);
+    for (let i = 0; i < limit; i++) {
+      const left = this.words[i] & ~other.words[i];
+      if (left === this.words[i]) continue;
+      this.words[i] = left;
+      changed = true;
+    }
+    return changed;
+  }
+
+  /** Whether every cell set in the other set is also set here. */
   covers(other: CellBits): boolean {
     for (let i = 0; i < other.words.length; i++) {
       const mine = this.words[i] ?? 0;
@@ -56,52 +91,42 @@ export class CellBits {
     return true;
   }
 
+  /** Whether both sets are for the same number of cells and hold the same cells. */
   equals(other: CellBits): boolean {
     if (this.count !== other.count) return false;
     return this.words.every((word, i) => word === other.words[i]);
   }
 
+  /** An independent copy of the set. */
   copy(): CellBits {
     const clone = new CellBits(this.count);
     clone.words.set(this.words);
     return clone;
   }
 
+  /**
+   * The backing bytes, eight cells to a byte with the lowest bit first.
+   *
+   * This is the live buffer rather than a copy: writing into it changes the set.
+   */
   bytes(): Uint8Array {
     return this.words;
   }
 }
 
+/** Packs a cell set into base64 text, the form a synced field carries it in. */
 export function encodeCellBits(bits: CellBits): string {
-  const bytes = bits.bytes();
-  let out = '';
-  for (let i = 0; i < bytes.length; i += 3) {
-    const a = bytes[i];
-    const b = i + 1 < bytes.length ? bytes[i + 1] : 0;
-    const c = i + 2 < bytes.length ? bytes[i + 2] : 0;
-    out += BASE64_ALPHABET[a >> 2];
-    out += BASE64_ALPHABET[((a & 3) << 4) | (b >> 4)];
-    out += i + 1 < bytes.length ? BASE64_ALPHABET[((b & 15) << 2) | (c >> 6)] : '=';
-    out += i + 2 < bytes.length ? BASE64_ALPHABET[c & 63] : '=';
-  }
-  return out;
+  return encodeBytes(bits.bytes());
 }
 
+/**
+ * Reads a cell set back from base64 text for a grid of `count` cells.
+ *
+ * The count comes from the caller rather than from the text, so the caller has to know the text was
+ * written for a grid of that size.
+ */
 export function decodeCellBits(text: string, count: number): CellBits {
   const bits = new CellBits(count);
-  const bytes = bits.bytes();
-  let byteAt = 0;
-  let held = 0;
-  let heldBits = 0;
-  for (let i = 0; i < text.length && byteAt < bytes.length; i++) {
-    const code = text.charCodeAt(i);
-    const value = code < 128 ? BASE64_LOOKUP[code] : -1;
-    if (value < 0) continue;
-    held = (held << 6) | value;
-    heldBits += 6;
-    if (heldBits < 8) continue;
-    heldBits -= 8;
-    bytes[byteAt++] = (held >> heldBits) & 0xff;
-  }
+  decodeBytesInto(text, bits.bytes());
   return bits;
 }

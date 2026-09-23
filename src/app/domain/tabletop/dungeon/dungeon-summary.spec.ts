@@ -1,4 +1,5 @@
 import { seededRandom } from '@axe/core/util/seeded-random';
+import { generateDungeon } from '@axe/domain/tabletop/dungeon/dungeon-generator';
 import { DungeonLayout, DungeonRoomRoleValue } from '@axe/domain/tabletop/dungeon/dungeon-layout';
 import { buildDungeonSummary, DungeonSummaryLabels } from '@axe/domain/tabletop/dungeon/dungeon-summary';
 import { assignRoomRoles } from '@axe/domain/tabletop/dungeon/room-roles';
@@ -12,6 +13,7 @@ const labels: DungeonSummaryLabels = {
   locked: 'locked',
   torch: 'torch',
   doors: 'doors',
+  hidden: 'hidden',
 };
 
 function build(seed = 7): DungeonLayout {
@@ -90,7 +92,7 @@ describe('buildDungeonSummary()', () => {
 
   it('marks the room that is shut', () => {
     const layout = build();
-    if (!layout.doors.some((door) => door.locked)) return;
+    if (!layout.doorLeaves.some((leaf) => leaf.locked)) return;
 
     const text = buildDungeonSummary({ layout, name: 'x', torchRooms: [], labels });
 
@@ -102,9 +104,21 @@ describe('buildDungeonSummary()', () => {
     const lines = buildDungeonSummary({ layout, name: 'x', torchRooms: [], labels }).split('\n').slice(3);
 
     layout.rooms.forEach((room, index) => {
-      const ways = layout.doors.filter((door) => door.rooms.includes(room.index)).length;
+      const ways = layout.doorLeaves.filter((leaf) => leaf.rooms.includes(room.index)).length;
       expect(lines[index]).toContain(`doors ${ways}`);
     });
+  });
+
+  it('counts a door widened across four cells as the one door it is', () => {
+    const layout = build();
+    const room = layout.rooms[0];
+    layout.doorLeaves = [{ x: 0, y: 0, w: 4, h: 1, across: 'y', rooms: [room.index], locked: false, mirrored: false }];
+    // A leaf that wide fills four cells, and every one of them is a door cell.
+    layout.doors = [0, 1, 2, 3].map((step) => ({ x: step, y: 0, rooms: [room.index], locked: false }));
+
+    const lines = buildDungeonSummary({ layout, name: 'x', torchRooms: [], labels }).split('\n').slice(3);
+
+    expect(lines[0]).toContain('doors 1');
   });
 
   it('copes with a dungeon that has no rooms', () => {
@@ -115,5 +129,18 @@ describe('buildDungeonSummary()', () => {
     const text = buildDungeonSummary({ layout, name: 'x', torchRooms: [], labels });
 
     expect(text.split('\n').length).toBe(3);
+  });
+});
+
+describe('buildDungeonSummary() of a place with hidden doors', () => {
+  it('says how many doors of a room are hidden in its walls, and says nothing of hidden doors elsewhere', () => {
+    const layout = generateDungeon({ atmosphere: 'illegalBar', roomCount: 8, seed: 7 });
+    const text = buildDungeonSummary({ layout, name: 'Bar', torchRooms: [], labels });
+    const lines = text.split('\n');
+    const hidden = layout.doorLeaves.filter((leaf) => leaf.rooms.includes(0)).length;
+
+    expect(hidden).toBeGreaterThan(0);
+    expect(lines.find((line) => line.startsWith('#1 '))).toContain(`hidden ${hidden}`);
+    expect(lines.filter((line) => line.includes('hidden'))).toHaveLength(1);
   });
 });

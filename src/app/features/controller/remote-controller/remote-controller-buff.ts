@@ -1,9 +1,11 @@
 import { BuffAppearance, parseBuffAppearance } from '@axe/domain/character/buff-appearance';
 import { GameCharacter } from '@axe/domain/character/game-character';
+import type { ResourceSlot } from '@axe/domain/data/resource-slot';
 
 export interface RemoteControllerSelect {
+  /** The item the buttons point at. Empty where none has been picked out. */
   name: string;
-  nowOrMax: string;
+  nowOrMax: ResourceSlot;
   dispName: string;
 }
 
@@ -15,6 +17,14 @@ export interface ParsedBuffInput {
   appearance: BuffAppearance;
 }
 
+/**
+ * Reads a line typed into the remote controller's buff field as a buff to put on the targets.
+ *
+ * The words are, separated by spaces: the buff's name, an optional note such as `攻撃+2`, an optional
+ * number of rounds (3 when missing or not a number), and then any colour, timing, `@trigger` or
+ * icon words. The chat line announcing it joins them with slashes and marks the rounds with `R`. An
+ * empty line is null.
+ */
 export function parseBuffInput(text: string): ParsedBuffInput | null {
   const parts = text.split(/\s+/);
   if (parts.length === 0 || parts[0] === '') return null;
@@ -36,6 +46,10 @@ export function parseBuffInput(text: string): ParsedBuffInput | null {
   return { buffname, sub, round, bufftext, appearance };
 }
 
+/**
+ * Puts the same buff on each of the given characters for the given number of rounds; a buff one
+ * already has starts over with the new values.
+ */
 export function addBuffRound(
   characters: GameCharacter[],
   name: string,

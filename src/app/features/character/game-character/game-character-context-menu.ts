@@ -16,6 +16,7 @@ import { BUFF_VIEW_MODES } from '@axe/domain/character/buff-view-mode';
 import { heldDiceOf } from '@axe/domain/character/character-dice';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { DataElement, DataElementFieldType } from '@axe/domain/data/data-element';
+import { sheetElementsOf } from '@axe/domain/data/data-element-templates';
 import { decodeRangeShapeField, RangeShapeFieldValue } from '@axe/domain/data/range-shape-field';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
@@ -49,6 +50,13 @@ export interface GameCharacterContextMenuModel {
   radialGroups: ContextMenuRadialGroup[];
 }
 
+/**
+ * Collects the range shapes registered on a character sheet, in sheet order, for the menu's
+ * invoke-range entry.
+ *
+ * Each is labelled with the shape's own name, else the field's name, else left empty. Fields whose
+ * value does not decode as a shape are skipped.
+ */
 export function collectRegisteredRangeShapes(char: GameCharacter): RegisteredRangeShape[] {
   const result: RegisteredRangeShape[] = [];
   const walk = (element: DataElement): void => {
@@ -61,9 +69,7 @@ export function collectRegisteredRangeShapes(char: GameCharacter): RegisteredRan
     }
     for (const child of element.children) walk(child);
   };
-  for (const child of char.children) {
-    if (child instanceof DataElement) walk(child);
-  }
+  for (const child of sheetElementsOf(char)) walk(child);
   return result;
 }
 
@@ -77,9 +83,7 @@ export function collectRegisteredEffects(char: GameCharacter): string[] {
     }
     for (const child of element.children) walk(child);
   };
-  for (const child of char.children) {
-    if (child instanceof DataElement) walk(child);
-  }
+  for (const child of sheetElementsOf(char)) walk(child);
   return names;
 }
 
@@ -87,6 +91,10 @@ function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+/**
+ * The flat list of entries for a character's context menu, as `buildGameCharacterContextMenuModel`
+ * builds them, without the radial grouping.
+ */
 export function buildGameCharacterContextMenu(
   char: GameCharacter,
   gridSize: number,
@@ -109,6 +117,14 @@ export function buildGameCharacterContextMenu(
   ).actions;
 }
 
+/**
+ * Builds a character's context menu, both as a flat list and grouped for the radial menu.
+ *
+ * An entry whose callback is left out is left out of the menu, as are range shapes, effects and
+ * held dice the character does not have. Overlap entries lead the flat list and surface entries
+ * close it. The display toggles write the character directly and tell the inventory to refresh, and
+ * the NPC toggle is offered only to the game master.
+ */
 export function buildGameCharacterContextMenuModel(
   char: GameCharacter,
   gridSize: number,

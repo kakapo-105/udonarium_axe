@@ -17,6 +17,14 @@ export class RoomPanelService {
 
   private opened = 0;
 
+  /**
+   * Opens one of the room's named panels, loading its component on first use.
+   *
+   * Each panel opened steps a little down and right of the last, and `extra` overrides that place
+   * and the panel's default size. `setup` is handed the component once it exists. `host` is the layer
+   * of a window of its own to draw into; without it the panel stands on the table with a button to
+   * move it into one.
+   */
   open<T = unknown>(
     name: RoomPanelName,
     extra: PanelOption = {},
@@ -59,6 +67,12 @@ export class RoomPanelService {
         icon: 'open_in_new',
         label: this.t('common.panel.popOut'),
         press: (owner) => {
+          if (owner.windowed()) return;
+          const frame = owner.standingFrame;
+          if (frame && frame.panelCount() > 1) {
+            windows.popOutGroup(frame, this.panelService);
+            return;
+          }
           const went = windows.popOut({
             key: `room:${name}`,
             // Opened again the way it was opened here, so a panel asked for at a size, with a
@@ -108,7 +122,7 @@ export class RoomPanelService {
             import('@axe/features/inventory/game-object-inventory/game-object-inventory.component').then(
               (m) => m.GameObjectInventoryComponent
             ),
-          option: { width: 450, height: 600, minimizeToContent: true },
+          option: { width: 450, height: 600 },
         };
       case 'objectList':
         return {
@@ -218,7 +232,15 @@ export class RoomPanelService {
             import('@axe/features/replay/replay-workspace/replay-workspace.component').then(
               (m) => m.ReplayWorkspaceComponent
             ),
-          option: { width: 900, height: 640, minWidth: 600, minHeight: 420 },
+          option: { width: 1180, height: 760, minWidth: 720, minHeight: 480 },
+        };
+      case 'diceTableSetting':
+        return {
+          load: () =>
+            import('@axe/features/dice/dice-table-setting/dice-table-setting.component').then(
+              (m) => m.DiceTableSettingComponent
+            ),
+          option: { width: 650, height: 400 },
         };
       case 'tabletopDisplay':
         return {
