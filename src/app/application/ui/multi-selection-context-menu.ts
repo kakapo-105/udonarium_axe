@@ -1,9 +1,10 @@
 import { TranslateFn } from '@axe/application/i18n/translate.token';
 import { ContextMenuAction, ContextMenuSeparator } from '@axe/application/ui/context-menu.service';
 import { SelectionSignalService } from '@axe/application/ui/selection-signal.service';
+import { copyBeside } from '@axe/application/ui/tabletop-context-menu-actions';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { DiceSymbol } from '@axe/domain/dice/dice-symbol';
-import { isLockable } from '@axe/domain/tabletop/lockable';
+import { isLockedInPlace } from '@axe/domain/tabletop/lockable';
 import { TabletopObject } from '@axe/domain/tabletop/tabletop-object';
 
 export interface MultiSelectionContextDeps {
@@ -17,13 +18,19 @@ export interface MultiSelectionContextDeps {
   readonly storeDice?: (dice: DiceSymbol[], ownerIdentifier: string) => void;
 }
 
+/**
+ * Builds the context menu for several selected pieces at once.
+ *
+ * It offers copying the unlocked pieces, sending them to the graveyard and clearing the selection.
+ * Where the caller supplies the means, it also throws or stores the visible dice among them.
+ */
 export function buildMultiSelectionContextMenu(
   objects: readonly TabletopObject[],
   deps: MultiSelectionContextDeps
 ): ContextMenuAction[] {
   const { t, selectionSignalService, gridSize, rollDice, diceOwners, storeDice } = deps;
   const count = objects.length;
-  const movable = objects.filter((o) => !(isLockable(o) && o.isLock));
+  const movable = objects.filter((o) => !isLockedInPlace(o));
   const dice = objects.filter((o): o is DiceSymbol => o instanceof DiceSymbol && o.isVisible);
 
   return [
@@ -58,16 +65,7 @@ export function buildMultiSelectionContextMenu(
     {
       name: t('feature.tabletop.selection.copyAll'),
       action: () => {
-        const cloned: string[] = [];
-        for (const obj of movable) {
-          const copy = obj.clone();
-          if (copy.location) {
-            copy.location.x += gridSize;
-            copy.location.y += gridSize;
-          }
-          copy.update();
-          cloned.push(copy.identifier);
-        }
+        const cloned = movable.map((obj) => copyBeside(obj, gridSize).identifier);
         if (cloned.length > 0) selectionSignalService.replaceSelection(cloned);
       },
     },
@@ -99,6 +97,13 @@ export interface TryBuildMultiSelectionContextMenuOptions {
   readonly storeDice?: (dice: DiceSymbol[], ownerIdentifier: string) => void;
 }
 
+/**
+ * The multi-selection menu for a right-click on a piece, or null where the piece should get its own
+ * menu.
+ *
+ * Null unless the clicked piece is part of a selection of more than one piece that can still be
+ * found in the object store.
+ */
 export function tryBuildMultiSelectionContextMenu(
   options: TryBuildMultiSelectionContextMenuOptions
 ): ContextMenuAction[] | null {

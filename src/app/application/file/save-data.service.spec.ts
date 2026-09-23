@@ -1,12 +1,15 @@
 import { inject, TestBed } from '@angular/core/testing';
 import { SaveDataService } from '@axe/application/file/save-data.service';
+import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { FileArchiver } from '@axe/core/storage/file-archiver';
 import { ImageFile, ImageState } from '@axe/core/storage/image-file';
 import { ImageStorage } from '@axe/core/storage/image-storage';
+import * as MimeType from '@axe/core/storage/mime-type';
 import { ObjectSerializer } from '@axe/core/sync/object-serializer';
 import { CutIn } from '@axe/domain/media/cut-in';
 import { CutInLayer } from '@axe/domain/media/cut-in-layer';
 import { CutInScene } from '@axe/domain/media/cut-in-scene';
+import { GameTable } from '@axe/domain/tabletop/game-table';
 import { WhiteBoard } from '@axe/domain/tabletop/white-board';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 
@@ -121,7 +124,7 @@ describe('SaveDataService', () => {
 
   describe('the image registry in an exported log', () => {
     type RegistryApi = {
-      buildChatLogImageRegistry: (chatTabs: readonly unknown[]) => Promise<{
+      prepareChatLogImages: (chatTabs: readonly unknown[]) => Promise<{
         resolver: (image: ImageFile) => string;
         registryScript: string;
       }>;
@@ -145,7 +148,7 @@ describe('SaveDataService', () => {
       } as unknown as ImageFile;
       const tab = makeTab([{ image: portrait }, { image: portrait }, { image: portrait }]);
 
-      const { resolver, registryScript } = await api.buildChatLogImageRegistry([tab]);
+      const { resolver, registryScript } = await api.prepareChatLogImages([tab]);
 
       const key = resolver(portrait);
       expect(key).toMatch(/^i\d+$/);
@@ -165,7 +168,7 @@ describe('SaveDataService', () => {
       } as unknown as ImageFile;
       const tab = makeTab([{ image: portrait }]);
 
-      const { registryScript } = await api.buildChatLogImageRegistry([tab]);
+      const { registryScript } = await api.prepareChatLogImages([tab]);
 
       expect(registryScript).toContain("querySelectorAll('img[data-img-key]')");
       expect(registryScript).toContain("setAttribute('src'");
@@ -176,11 +179,11 @@ describe('SaveDataService', () => {
       const api = service as unknown as RegistryApi;
       const tab = makeTab([{}, {}]);
 
-      const { registryScript } = await api.buildChatLogImageRegistry([tab]);
+      const { registryScript } = await api.prepareChatLogImages([tab]);
       expect(registryScript).toBe('');
     });
 
-    it('shrinks a portrait to 48 square', async () => {
+    it('shrinks a portrait to 96 square', async () => {
       const service = TestBed.inject(SaveDataService);
       const privateApi = service as unknown as SaveDataServicePrivateApi;
       const api = service as unknown as RegistryApi;
@@ -192,9 +195,9 @@ describe('SaveDataService', () => {
       } as unknown as ImageFile;
       const tab = makeTab([{ image: portrait }]);
 
-      await api.buildChatLogImageRegistry([tab]);
+      await api.prepareChatLogImages([tab]);
 
-      expect(spy).toHaveBeenCalledWith(portrait, 48, true);
+      expect(spy).toHaveBeenCalledWith(portrait, 96, true);
     });
 
     it('shrinks an attachment to 360 on its longest side', async () => {
@@ -209,7 +212,7 @@ describe('SaveDataService', () => {
       } as unknown as ImageFile;
       const tab = makeTab([{ attachmentImages: [attachment] }]);
 
-      await api.buildChatLogImageRegistry([tab]);
+      await api.prepareChatLogImages([tab]);
 
       expect(spy).toHaveBeenCalledWith(attachment, 360, false);
     });
@@ -275,6 +278,39 @@ describe('SaveDataService', () => {
     });
   });
 
+  describe('the pictures a table hangs on its walls', () => {
+    it('bundles the picture of every wall, not the floor alone', () => {
+      const service = TestBed.inject(SaveDataService);
+      const privateApi = service as unknown as SaveDataServicePrivateApi;
+      const papers = ['north-paper', 'east-paper', 'south-paper', 'west-paper'];
+      for (const paper of papers) ImageStorage.instance.add(ImageFile.createEmpty(paper));
+
+      const table = new GameTable();
+      table.initialize();
+      table.northWallImageIdentifier = 'north-paper';
+      table.eastWallImageIdentifier = 'east-paper';
+      table.southWallImageIdentifier = 'south-paper';
+      table.westWallImageIdentifier = 'west-paper';
+      try {
+        const found = privateApi.searchImageFiles(ObjectSerializer.instance.toXml(table));
+
+        expect(found.map((image) => image.identifier).sort()).toEqual(papers.sort());
+      } finally {
+        table.destroy();
+      }
+    });
+
+    it('goes by what the attribute is called, so a picture added later is carried too', () => {
+      const service = TestBed.inject(SaveDataService);
+      const privateApi = service as unknown as SaveDataServicePrivateApi;
+      ImageStorage.instance.add(ImageFile.createEmpty('ceiling-paper'));
+
+      const found = privateApi.searchImageFiles('<game-table ceilingImageIdentifier="ceiling-paper"></game-table>');
+
+      expect(found.map((image) => image.identifier)).toEqual(['ceiling-paper']);
+    });
+  });
+
   describe('the pictures a board carries inside its drawing', () => {
     it('bundles a sticker that no walk of the XML would have found', () => {
       const service = TestBed.inject(SaveDataService);
@@ -308,6 +344,48 @@ describe('SaveDataService', () => {
       board.scene = JSON.stringify({ layers: [{ kind: 'image', items: [{ imageIdentifier: 'never-seen' }] }] });
 
       expect(privateApi.withCarried([], [board])).toEqual([]);
+    });
+  });
+
+  describe('the sounds packed with a replay', () => {
+    const packed = (audios: string[]) =>
+      TestBed.inject(SaveDataService)
+        .buildAssetFiles({ images: new Set(), audios: new Set(audios) })
+        .filter((file) => !file.name.endsWith('.xml'));
+    const hold = (identifier: string, name: string, blob: Blob | null) =>
+      AudioStorage.instance.add({ identifier, name, type: blob?.type ?? '', blob, url: '' });
+
+    afterEach(() => {
+      for (const identifier of ['bgm-1', 'bgm-2', 'bgm-3']) AudioStorage.instance.delete(identifier);
+    });
+
+    it('packs the sounds a replay uses, and only those, under the names they were added with', () => {
+      hold('bgm-1', '戦闘曲.mp3', new Blob(['mp3'], { type: 'audio/mpeg' }));
+      hold('bgm-2', 'town.ogg', new Blob(['ogg'], { type: 'audio/ogg' }));
+
+      const files = packed(['bgm-1']);
+
+      expect(files.map((file) => file.name)).toEqual(['戦闘曲.mp3']);
+      expect(MimeType.type(files[0].name).startsWith('audio/')).toBe(true);
+    });
+
+    it('gives a name without a sound extension one for its kind', () => {
+      hold('bgm-1', 'battle', new Blob(['mp3'], { type: 'audio/mpeg' }));
+
+      expect(packed(['bgm-1']).map((file) => file.name)).toEqual(['battle.mp3']);
+    });
+
+    it('numbers a sound whose name another has taken, so neither is lost', () => {
+      hold('bgm-1', 'theme.mp3', new Blob(['one'], { type: 'audio/mpeg' }));
+      hold('bgm-2', 'Theme.mp3', new Blob(['two'], { type: 'audio/mpeg' }));
+
+      expect(packed(['bgm-1', 'bgm-2']).map((file) => file.name)).toEqual(['theme.mp3', 'Theme (2).mp3']);
+    });
+
+    it('leaves out a sound whose bytes are not held here', () => {
+      hold('bgm-3', 'linked.mp3', null);
+
+      expect(packed(['bgm-3'])).toEqual([]);
     });
   });
 });

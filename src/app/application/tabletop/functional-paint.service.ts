@@ -1,6 +1,5 @@
 import { inject, Injectable } from '@angular/core';
 import { GameObject } from '@axe/core/sync/game-object';
-import { DataElement } from '@axe/domain/data/data-element';
 import { parseCellKey } from '@axe/domain/tabletop/cell-key';
 import { cellKeyOf, CellRect } from '@axe/domain/tabletop/cell-rectangles';
 import { CellBits } from '@axe/domain/tabletop/fog/cell-bits';
@@ -26,6 +25,7 @@ import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { TableSnapshot } from '@axe/domain/tabletop/table-snapshot';
 import { TableTrigger, triggersOn } from '@axe/domain/tabletop/table-trigger';
 import { Terrain, TERRAIN_FACES } from '@axe/domain/tabletop/terrain';
+import { encodeSlopeSides, parseSlopeSides } from '@axe/domain/tabletop/terrain-slope';
 
 function terrainsOn(table: GameTable): Terrain[] {
   return table.children.filter((child): child is Terrain => child instanceof Terrain);
@@ -36,7 +36,13 @@ function masksOn(table: GameTable): GameTableMask[] {
 }
 
 /** Lays one block of terrain wearing everything the block carries. */
-function layTerrainBlock(spec: TerrainPaintSpec, width: number, depth: number, placed: BlockPlacement | null): Terrain {
+function layTerrainBlock(
+  spec: TerrainPaintSpec,
+  width: number,
+  depth: number,
+  placed: BlockPlacement | null,
+  gridSize: number
+): Terrain {
   const terrain = Terrain.create(
     spec.name,
     placed ? placed.width : width,
@@ -48,19 +54,27 @@ function layTerrainBlock(spec: TerrainPaintSpec, width: number, depth: number, p
   terrain.mode = spec.mode;
   terrain.blocksSight = spec.blocksSight;
   terrain.blocksLight = spec.blocksLight;
+  terrain.blocksClimb = spec.blocksClimb;
   terrain.isTiledTexture = spec.tiledTexture;
   terrain.isGrid = spec.showsGrid;
   terrain.isDropShadow = spec.dropShadow;
   terrain.isSurfaceShading = spec.surfaceShading;
   terrain.isLocked = spec.locked;
-  terrain.posZ = spec.altitude;
+  // The height a block was built at is its altitude; posZ is whatever it later came to rest
+  // on, which gravity writes and would overwrite a height kept there.
+  terrain.altitude = gridSize > 0 ? spec.altitude / gridSize : 0;
   terrain.isAltitudeIndicate = spec.showsAltitude;
   if (spec.imageIdentifier.length > 0) terrain.setFaceImage('imageIdentifier', spec.imageIdentifier);
   terrain.doorStyle = spec.doorStyle;
   terrain.isDoorOpen = spec.doorOpen;
   terrain.doorMirrored = spec.doorMirrored;
+  // The sides come first, so a brush saved before there were any still tips the block the one
+  // way it knew.
+  const slopeSides = parseSlopeSides(spec.slopeSides, spec.slopeDirection);
+  terrain.slopeSides = spec.slope ? slopeSides : [];
+  // A brush that names no side the block still has keeps its slope on all the same, which is
+  // read as running down to the south wherever the block is drawn.
   terrain.isSlope = spec.slope;
-  terrain.slopeDirection = spec.slopeDirection;
   terrain.rotate = placed ? placed.rotate : 0;
   terrain.lightEnabled = spec.light.enabled;
   terrain.lightPreset = spec.light.preset;
@@ -82,9 +96,9 @@ function layTerrainBlock(spec: TerrainPaintSpec, width: number, depth: number, p
  * The exact placement a block is to wear, where this is the very cell it was read from.
  *
  * A placement belongs to one block standing on one cell, but it is carried on the spec, and a
- * spec is what tells one painted layer from another. Painting more cells into the layer an
- * imported wall made handed every one of them that wall's own position, so the new cells came
- * out stacked on top of it and nothing at all stood where the brush had been.
+ * spec is what tells one painted layer from another. Handed on as it stands, every cell painted
+ * into the layer an imported wall made would take that wall's own position, stacking the new
+ * cells on top of it and leaving nothing at all where the brush went.
  */
 function placementFor(
   spec: { placement: BlockPlacement | null },
@@ -113,24 +127,6 @@ function blockOrigin(placed: BlockPlacement | null, rect: CellRect, grid: CellGr
 /** A mask counts its opacity out of this, so the fraction it shows is the current value over it. */
 const MASK_OPACITY_FULL = 100;
 
-/**
- * A mask carries no colour until one is written down for it, and the setter will not write
- * what is not already there, so the element has to be laid alongside it.
- */
-function paintMaskColor(mask: GameTableMask, color: string): void {
-  const common = mask.commonDataElement;
-  if (!common) return;
-  const held = common.getFirstElementByName('color');
-  if (held) {
-    held.value = color;
-    held.currentValue = color;
-    return;
-  }
-  common.appendChild(
-    DataElement.create('color', color, { type: 'colors', currentValue: color }, `color_${mask.identifier}`)
-  );
-}
-
 function setMaskOpacity(mask: GameTableMask, fraction: number): void {
   const element = mask.commonDataElement?.getFirstElementByName('opacity');
   if (!element) return;
@@ -157,18 +153,19 @@ export function blockedCellKeysOn(table: GameTable, grid: CellGrid): string[] {
  * All of it, so that laying the block back down returns what was there rather than an
  * upright rectangle wearing its colours.
  */
-export function terrainSpecOf(terrain: Terrain, placement: BlockPlacement | null): TerrainPaintSpec {
+export function terrainSpecOf(terrain: Terrain, placement: BlockPlacement | null, gridSize: number): TerrainPaintSpec {
   const images = { ...NO_FACE_IMAGES };
   for (const face of TERRAIN_FACE_KEYS) images[face] = terrain.faceImageIdentifier(face);
   return {
     name: terrain.name,
     imageIdentifier: terrain.faceImageIdentifier('imageIdentifier'),
-    altitude: terrain.posZ,
+    altitude: terrain.altitude * gridSize + terrain.posZ,
     showsAltitude: terrain.isAltitudeIndicate,
     height: terrain.height,
     mode: terrain.mode,
     blocksSight: terrain.blocksSight,
     blocksLight: terrain.blocksLight,
+    blocksClimb: terrain.blocksClimb,
     tiledTexture: terrain.isTiledTexture,
     showsGrid: terrain.isGrid,
     dropShadow: terrain.isDropShadow,
@@ -179,6 +176,7 @@ export function terrainSpecOf(terrain: Terrain, placement: BlockPlacement | null
     doorMirrored: terrain.doorMirrored,
     slope: terrain.isSlope,
     slopeDirection: terrain.slopeDirection,
+    slopeSides: encodeSlopeSides(terrain.slopeSides),
     light: {
       enabled: terrain.lightEnabled,
       preset: terrain.lightPreset,
@@ -195,6 +193,7 @@ export function terrainSpecOf(terrain: Terrain, placement: BlockPlacement | null
   };
 }
 
+/** What a mask is painted as, so the map editor can tell one mask from another and lay it down again as it was. */
 export function maskSpecOf(mask: GameTableMask, placement: BlockPlacement | null): MaskPaintSpec {
   return {
     name: mask.name,
@@ -339,14 +338,17 @@ export class FunctionalPaintService {
     this.takeAway(
       terrainsOn(table).map((held) => {
         const stood = blockFootprintOf(held, held.width, held.depth, grid);
-        return { object: held, key: stood ? blockKey(stood.rect, terrainSpecOf(held, stood.placement)) : null };
+        return {
+          object: held,
+          key: stood ? blockKey(stood.rect, terrainSpecOf(held, stood.placement, table.gridSize)) : null,
+        };
       }),
       plan.terrain.remove
     );
 
     for (const block of plan.terrain.add) {
       const placed = placementFor(block.spec, block, grid);
-      const terrain = layTerrainBlock(block.spec, block.width, block.height, placed);
+      const terrain = layTerrainBlock(block.spec, block.width, block.height, placed, table.gridSize);
       terrain.location = blockOrigin(placed, block, grid);
       table.appendChild(terrain);
     }
@@ -369,7 +371,7 @@ export class FunctionalPaintService {
         placed ? placed.depth : block.height,
         MASK_OPACITY_FULL
       );
-      paintMaskColor(mask, block.spec.color);
+      mask.paintColor(block.spec.color);
       setMaskOpacity(mask, block.spec.opacity);
       mask.isLock = block.spec.locked;
       mask.dispLockMark = block.spec.showsLockMark;
@@ -449,7 +451,7 @@ export class FunctionalPaintService {
       terrainBlocks: terrainsOn(table)
         .map((held) => {
           const stood = blockFootprintOf(held, held.width, held.depth, grid);
-          return stood ? { ...stood.rect, spec: terrainSpecOf(held, stood.placement) } : null;
+          return stood ? { ...stood.rect, spec: terrainSpecOf(held, stood.placement, table.gridSize) } : null;
         })
         .filter((block): block is TerrainBlock => block !== null),
       maskBlocks: masksOn(table)

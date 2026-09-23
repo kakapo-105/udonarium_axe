@@ -2,7 +2,9 @@ import { DestroyRef, inject, Injectable } from '@angular/core';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { GameObjectInventoryService } from '@axe/application/inventory/game-object-inventory.service';
+import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
+import { VisionService } from '@axe/application/tabletop/vision.service';
 import { ConfirmService } from '@axe/application/ui/confirm.service';
 import { SelectionSignalService } from '@axe/application/ui/selection-signal.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
@@ -36,6 +38,8 @@ export class TurnOrderService {
   private readonly confirm = inject(ConfirmService);
   private readonly chat = inject(ChatMessageService);
   private readonly selection = inject(SelectionSignalService);
+  private readonly rolePermission = inject(RolePermissionService);
+  private readonly vision = inject(VisionService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly t = inject(TRANSLATE_FN);
 
@@ -58,10 +62,17 @@ export class TurnOrderService {
     return this.objectStore.get<Config>('Config') ?? Config.instance;
   }
 
+  /** Whether the room takes turns piece by piece or side by side. */
   get turnOrderMode(): TurnOrderMode {
     return this.config.turnOrderMode;
   }
 
+  /**
+   * How a side gets through its phase when turns go side by side.
+   *
+   * In `initiative` the turn goes to the side's first waiting piece as the phase opens; in `free`
+   * nobody is up until one is picked.
+   */
   get factionPhaseMode(): FactionPhaseMode {
     return this.config.factionPhaseMode;
   }
@@ -93,6 +104,7 @@ export class TurnOrderService {
     return describeSide(side, this.parties(), this.t('feature.turnOrder.unassignedSide')).name;
   }
 
+  /** The colour a side is shown in, taken from the party it stands for. */
   sideColor(side: string): string {
     return describeSide(side, this.parties(), '').color;
   }
@@ -111,23 +123,39 @@ export class TurnOrderService {
     return group.members.some((member) => !this.isActed(member.identifier));
   }
 
+  /** The piece whose turn it is, or empty when nobody is up. */
   get currentIdentifier(): string {
     return this.turnState.currentIdentifier;
   }
 
+  /** The round being played, which is 0 before the first has begun. */
   get round(): number {
     return this.turnState.round;
   }
 
+  /** Where in the round the table is: idle, starting a round, a piece acting, or ending a round. */
   get phase(): TurnPhase {
     return this.turnState.phase;
   }
 
+  /** Whether buffs count down as turns and rounds pass. */
   get buffDecay(): boolean {
     return this.turnState.buffDecay;
   }
 
+  /**
+   * Whether the round is this reader's to move.
+   *
+   * The round is the table's own clock: a press of it takes turns away, runs buffs out and
+   * writes the announcement everybody reads. A seat that is only watching moves none of it.
+   */
+  get canTakeTurns(): boolean {
+    return this.rolePermission.canEditTabletop;
+  }
+
+  /** Turns buff countdown on or off for the whole room. Does nothing for a reader who may not take turns. */
   setBuffDecay(enabled: boolean): void {
+    if (!this.canTakeTurns) return;
     this.turnState.buffDecay = enabled;
   }
 
@@ -141,6 +169,7 @@ export class TurnOrderService {
     return this.turnState.actedIdentifiers;
   }
 
+  /** Whether this piece has had its turn this round. */
   isActed(identifier: string): boolean {
     return this.turnState.actedIdentifiers.includes(identifier);
   }
@@ -174,6 +203,7 @@ export class TurnOrderService {
    * gets its start and its end exactly once however freely the side moves.
    */
   setCurrent(identifier: string): void {
+    if (!this.canTakeTurns) return;
     if (this.turnOrderMode === 'faction' && this.turnState.currentIdentifier === identifier) return;
     this.step(() => {
       const turnState = this.turnState;
@@ -191,7 +221,15 @@ export class TurnOrderService {
     });
   }
 
+  /**
+   * One press of the round: begins the next round, or closes whoever is up and hands the turn on.
+   *
+   * Once nobody is waiting the round ends. With buff countdown on, buffs run out at each turn's
+   * start and end and at the round's end. Each step is announced in the first chat tab, and each is
+   * recorded so it can be undone. Does nothing for a reader who may not take turns.
+   */
   next(): void {
+    if (!this.canTakeTurns) return;
     this.step(() => {
       const turnState = this.turnState;
       if (this.turnOrderMode === 'faction') {
@@ -292,6 +330,7 @@ export class TurnOrderService {
    * made a second time.
    */
   async advanceRound(): Promise<void> {
+    if (!this.canTakeTurns) return;
     if (!(await this.mayLeaveTheseBehind())) return;
     this.step(() => {
       const turnState = this.turnState;
@@ -321,6 +360,7 @@ export class TurnOrderService {
    * extra press of the round button costs one press to put right however many turns it ate.
    */
   retreatRound(): void {
+    if (!this.canTakeTurns) return;
     const startedAt = this.turnState.round;
     const steps = parseTurnHistory(this.turnState.history);
     if (steps.length < 1) return;
@@ -343,6 +383,7 @@ export class TurnOrderService {
    * put those back.
    */
   prev(): void {
+    if (!this.canTakeTurns) return;
     const steps = parseTurnHistory(this.turnState.history);
     const last = steps.pop();
     if (!last) return;
@@ -352,7 +393,13 @@ export class TurnOrderService {
     this.chat.sendSystemMessageToMainTab(this.t('feature.turnOrder.undoAnnounce'));
   }
 
+  /**
+   * Takes the round back to before the first, announced in chat and recorded so it can be undone.
+   *
+   * Does nothing for a reader who may not take turns.
+   */
   reset(): void {
+    if (!this.canTakeTurns) return;
     this.step(() => {
       this.toIdle();
       this.chat.sendSystemMessageToMainTab(this.t('feature.turnOrder.resetAnnounce'));
@@ -495,9 +542,17 @@ export class TurnOrderService {
     turnState.actedIdentifiers = [];
   }
 
+  /**
+   * Says in chat whose turn it is. A piece the players cannot see goes unnamed, since everyone
+   * reads the line and a name would give away what is standing in the dark.
+   */
   private announceCharacter(identifier: string): void {
     const character = this.objectStore.get<GameCharacter>(identifier);
     if (!character) return;
-    this.chat.sendSystemMessageToMainTab(this.t('feature.turnOrder.announce', { name: character.name }));
+    this.chat.sendSystemMessageToMainTab(
+      this.vision.isSeenByParty(character)
+        ? this.t('feature.turnOrder.announce', { name: character.name })
+        : this.t('feature.turnOrder.announceUnseen')
+    );
   }
 }

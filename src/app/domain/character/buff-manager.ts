@@ -30,6 +30,10 @@ export class BuffManager {
     return this.buffDataElement?.children[0] ?? null;
   }
 
+  /**
+   * Takes away the first buff of that name, putting back whatever it moved on the sheet. False when
+   * there is no such buff or the piece has no buff container yet.
+   */
   delete(name: string): boolean {
     const container = this.container;
     if (!container) return false;
@@ -37,6 +41,22 @@ export class BuffManager {
     if (!data) return false;
     this.remove(data);
     return true;
+  }
+
+  /**
+   * Takes away every buff the test picks, putting back whatever each moved on the sheet, and
+   * returns their names in the order they were listed.
+   */
+  removeWhere(test: (data: DataElement) => boolean): string[] {
+    const container = this.container;
+    if (!container) return [];
+    const removed: string[] = [];
+    for (const data of [...container.children]) {
+      if (!test(data)) continue;
+      removed.push(data.name);
+      this.remove(data);
+    }
+    return removed;
   }
 
   /** Takes the buff away, putting back whatever it moved on the sheet. */
@@ -76,6 +96,12 @@ export class BuffManager {
     clearBuffModifier(data);
   }
 
+  /**
+   * Counts every buff that expires down by one round, by hand and whatever its timing.
+   *
+   * Nothing is removed here, even at zero; `deleteZeroRound` does that. A buff held until cleared
+   * is left alone.
+   */
   decreaseRound(): void {
     const container = this.container;
     if (!container) return;
@@ -86,6 +112,10 @@ export class BuffManager {
     }
   }
 
+  /**
+   * Gives every buff that expires one more round, the reverse of `decreaseRound`. A buff held until
+   * cleared is left alone.
+   */
   increaseRound(): void {
     const container = this.container;
     if (!container) return;
@@ -96,6 +126,10 @@ export class BuffManager {
     }
   }
 
+  /**
+   * Removes every buff that expires and has no rounds left, putting back what each moved on the
+   * sheet. A buff held until cleared stays whatever its count reads.
+   */
   deleteZeroRound(): void {
     const container = this.container;
     if (!container) return;
@@ -233,6 +267,13 @@ export class BuffManager {
     return this.container?.getFirstElementByName(name) ?? null;
   }
 
+  /**
+   * Puts a buff of that name on the piece for a number of rounds, or starts an existing one over.
+   *
+   * Starting over first puts back whatever the old one moved on the sheet, then writes the new
+   * rounds, effect and appearance. The buff container is made when the piece has none yet; a piece
+   * with no buff element at all is left untouched.
+   */
   addRound(name: string, info: string = '', round: number = 3, appearance: BuffAppearance = {}): void {
     const container = this.ensureContainer();
     if (!container) return;

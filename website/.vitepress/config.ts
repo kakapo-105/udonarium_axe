@@ -278,6 +278,13 @@ export default defineConfig({
           text: 'リリースノート',
           items: [
             { text: '一覧', link: '/release-notes/' },
+            { text: 'v1.57.1', link: '/release-notes/v1.57.1' },
+            { text: 'v1.57.0', link: '/release-notes/v1.57.0' },
+            { text: 'v1.56.0', link: '/release-notes/v1.56.0' },
+            { text: 'v1.55.0', link: '/release-notes/v1.55.0' },
+            { text: 'v1.54.0', link: '/release-notes/v1.54.0' },
+            { text: 'v1.53.0', link: '/release-notes/v1.53.0' },
+            { text: 'v1.52.0', link: '/release-notes/v1.52.0' },
             { text: 'v1.51.0', link: '/release-notes/v1.51.0' },
             { text: 'v1.50.0', link: '/release-notes/v1.50.0' },
             { text: 'v1.49.0', link: '/release-notes/v1.49.0' },

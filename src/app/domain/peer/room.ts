@@ -1,3 +1,4 @@
+import { networkSend } from '@axe/core/network/network-messaging';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import { SyncObject } from '@axe/core/sync/decorator';
 import { GameObject } from '@axe/core/sync/game-object';
@@ -29,15 +30,23 @@ import { TextNote } from '@axe/domain/tabletop/text-note';
 @SyncObject('room')
 export class Room extends GameObject implements InnerXml {
   // GameObject Lifecycle
+  /** A room only wraps a save file, so it takes itself back out of the object store and is never synced. */
   override onStoreAdded() {
     super.onStoreAdded();
     ObjectStore.instance.remove(this); // ObjectStoreには登録しない
   }
 
+  /** The shared check that asks before a loaded room overwrites the one in play. */
   get reloadCheck(): ReloadCheck {
     return ObjectStore.instance.get<ReloadCheck>('ReloadCheck')!;
   }
 
+  /**
+   * Writes everything on the table into the save file: tables, parties, characters, ranges, lights, notes,
+   * card stacks, loose cards, dice, coins, cut-ins, dice tables, effect presets and effect fields.
+   *
+   * Cards inside a stack are written with their stack.
+   */
   innerXml(): string {
     let xml = '';
     const objects: GameObject[] = [
@@ -65,6 +74,13 @@ export class Room extends GameObject implements InnerXml {
     return xml;
   }
 
+  /**
+   * Replaces the room in play with a loaded one, once the user agrees to overwrite it.
+   *
+   * Destroys the current tables and everything on them, then reads in the saved objects. Effect presets and
+   * cut-ins are kept when the save carries none, the default sets are made when neither side has any, and every
+   * peek or hold on an object is cleared. Declining leaves the room untouched.
+   */
   parseInnerXml(element: Element) {
     // Deleted and put back under the same identifiers, the others refuse them as the return of
     // what was deleted, and only whoever loaded the room still has them. So what is made under
@@ -101,6 +117,7 @@ export class Room extends GameObject implements InnerXml {
       for (const object of objects) {
         object.destroy();
       }
+      this.announceWhatIsComingBack(element);
       for (let i = 0; i < element.children.length; i++) {
         ObjectSerializer.instance.parseXml(element.children[i]);
       }
@@ -109,5 +126,23 @@ export class Room extends GameObject implements InnerXml {
       if (ObjectStore.instance.getObjects(CutIn).length < 1) createDefaultCutIns(ImageStorage.instance);
       clearOwnership(ObjectStore.instance.getObjects());
     }
+  }
+
+  /**
+   * Says which names the room is bringing back, having just taken them away.
+   *
+   * Most of what a room carries is made afresh under a name of its own, and nobody minds. What
+   * it carries under a name of its own keeping - the effect library, the sample cut-ins - was
+   * deleted a moment ago in front of everybody, and a seat that watched that answers the first
+   * word of it by having the loader delete it again. Naming them first is what stops that.
+   */
+  private announceWhatIsComingBack(element: Element): void {
+    const returning = Array.from(element.querySelectorAll('[identifier]'))
+      .map((child) => child.getAttribute('identifier') ?? '')
+      .filter((identifier) => identifier.length > 0);
+    if (returning.length < 1) return;
+
+    ObjectStore.instance.forgetDeleted(returning);
+    networkSend('FORGET_DELETED_OBJECTS', { identifiers: returning });
   }
 }

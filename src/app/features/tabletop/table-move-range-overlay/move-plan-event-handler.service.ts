@@ -33,8 +33,8 @@ export class MovePlanEventHandlerService {
 
   private listen(opening: number): void {
     // Every move opens on a press that has yet to finish, this one included: a move opened
-    // while another was already open was closed by the very press that opened it, since the
-    // click that press ends with was taken for a choice.
+    // while another is already open would be closed by the very press that opened it, since the
+    // click that press ends with would be taken for a choice.
     if (this.armedFor !== opening) {
       this.armedFor = opening;
       this.armed = false;
@@ -109,12 +109,23 @@ export class MovePlanEventHandlerService {
     if (event.key === 'Enter') {
       event.preventDefault();
       void this.movePlan.run();
+      return;
+    }
+    // Space is the table's own key while a move is open: nothing on the page has the focus,
+    // so it would otherwise scroll the room out from under the reader.
+    if (event.key === ' ' || event.code === 'Space') {
+      event.preventDefault();
+      this.movePlan.toggleJump();
     }
   };
 
   private onTable(event: Event): boolean {
     const target = event.target;
-    return target instanceof Node && this.coordinate.tabletopOriginElement.contains(target);
+    if (!(target instanceof Node)) return false;
+    // What the move puts on the screen is not the table, however it is drawn over it: a press
+    // on the band at the foot of the screen is an answer to the move, not a place to walk to.
+    if (target instanceof Element && target.closest('[data-move-plan-control]')) return false;
+    return this.coordinate.tabletopOriginElement.contains(target);
   }
 
   private tablePoint(event: MouseEvent): { x: number; y: number } {

@@ -27,7 +27,8 @@ type Panel = DungeonGeneratorComponent & {
   kind(): 'dungeon' | 'field';
   field(): boolean;
   chooseKind(kind: 'dungeon' | 'field'): void;
-  chooseFieldAtmosphere(id: 'woodland' | 'meadow' | 'coast' | 'marsh' | 'snowfield' | 'wasteland'): void;
+  chooseFieldAtmosphere(id: string): void;
+  fieldPlan(): { blocks: { blocks: { thing?: string; skin?: { side: { kind: string; id?: string } } }[] } };
   fieldSize: { set(value: number): void; (): number };
   fieldDensity: { set(value: number): void; (): number };
   boardSize(): string;
@@ -41,12 +42,23 @@ type Panel = DungeonGeneratorComponent & {
   chooseAtmosphere(id: string): void;
   reroll(): void;
   nameFor(): string;
-  plan(): { layout: { entrance: { x: number; y: number }; mouth: { x: number; y: number } | null } };
+  plan(): {
+    layout: {
+      entrance: { x: number; y: number };
+      mouth: { x: number; y: number } | null;
+      doorLeaves: { w: number; h: number; mirrored: boolean }[];
+    };
+  };
   generate(): Promise<void>;
   discardPrevious(): void;
   corridorWidth(): { least: number; most: number };
   setCorridorLeast(width: number): void;
   setCorridorMost(width: number): void;
+  doorWidth(): { least: number; most: number };
+  setDoorLeast(width: number): void;
+  setDoorMost(width: number): void;
+  doubleDoors(): number;
+  setDoubleDoors(percent: number): void;
   fogEnabled: { (): boolean; set(value: boolean): void };
   musterParty: { (): string; set(value: string): void };
   setMusterParty(identifier: string): void;
@@ -284,6 +296,25 @@ describe('DungeonGeneratorComponent', () => {
       expect(component.summary()).toContain('20x15');
     });
 
+    it('builds a town in every facade its preset has until a wall is chosen, and in that one after', () => {
+      component.chooseFieldAtmosphere('city');
+      component.fieldSize.set(48);
+      component.fieldDensity.set(100);
+      const facades = () =>
+        new Set(
+          component
+            .fieldPlan()
+            .blocks.blocks.filter((block) => block.thing === 'building')
+            .map((block) => (block.skin?.side as { id?: string } | undefined)?.id)
+        );
+
+      expect(facades().size).toBeGreaterThan(1);
+
+      component.setWall({ kind: 'texture', id: 'wall_sf_glass' });
+
+      expect(facades()).toEqual(new Set(['wall_sf_glass']));
+    });
+
     it('leaves the dungeon alone while it is on a field', () => {
       expect(component.kind()).toBe('field');
 
@@ -374,6 +405,43 @@ describe('DungeonGeneratorComponent and what a dungeon is asked for', () => {
     component.setCorridorMost(2);
 
     expect(component.corridorWidth()).toEqual({ least: 2, most: 2 });
+  });
+
+  it('hangs a door in a single cell until a wider one is asked for', () => {
+    expect(component.doorWidth()).toEqual({ least: 1, most: 1 });
+    expect(component.plan().layout.doorLeaves.every((leaf) => Math.max(leaf.w, leaf.h) === 1)).toBe(true);
+  });
+
+  it('widens the widest door to make room for a narrowest asked past it', () => {
+    component.setDoorLeast(3);
+
+    expect(component.doorWidth()).toEqual({ least: 3, most: 3 });
+  });
+
+  it('narrows the narrowest door to keep it inside a widest asked under it', () => {
+    component.setDoorLeast(4);
+    component.setDoorMost(2);
+
+    expect(component.doorWidth()).toEqual({ least: 2, most: 2 });
+  });
+
+  it('cuts the openings wider and halves them once a pair of wide doors is asked for', () => {
+    component.setDoorLeast(4);
+    component.setDoubleDoors(100);
+
+    expect(component.doubleDoors()).toBe(100);
+    expect(component.usingDefaults()).toBe(false);
+    expect(component.plan().layout.doorLeaves.some((leaf) => Math.max(leaf.w, leaf.h) === 2)).toBe(true);
+    expect(component.plan().layout.doorLeaves.some((leaf) => leaf.mirrored)).toBe(true);
+  });
+
+  it('hangs plain doors again once the settings are reset', () => {
+    component.setDoorMost(4);
+    component.setDoubleDoors(0);
+    component.resetMaterials();
+
+    expect(component.doorWidth()).toEqual({ least: 1, most: 1 });
+    expect(component.doubleDoors()).toBe(50);
   });
 
   it('leaves the table uncovered until the fog is asked for', async () => {

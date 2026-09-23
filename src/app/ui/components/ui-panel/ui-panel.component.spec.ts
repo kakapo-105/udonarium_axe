@@ -1,3 +1,4 @@
+import { ChangeDetectionStrategy, Component, viewChild, ViewContainerRef } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { TabletopDisplayService } from '@axe/application/tabletop/tabletop-display.service';
@@ -5,6 +6,16 @@ import { PanelService } from '@axe/application/ui/panel.service';
 import { ViewportService } from '@axe/application/ui/viewport.service';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 import { UIPanelComponent } from '@axe/ui/components/ui-panel/ui-panel.component';
+
+@Component({
+  standalone: true,
+  selector: 'panel-title-test-host',
+  changeDetection: ChangeDetectionStrategy.Eager,
+  template: '<ng-template #layer></ng-template>',
+})
+class PanelTitleTestHostComponent {
+  readonly layer = viewChild.required('layer', { read: ViewContainerRef });
+}
 
 describe('UIPanelComponent', () => {
   let component: UIPanelComponent;
@@ -71,35 +82,90 @@ describe('UIPanelComponent', () => {
   });
 
   describe('shrinking when the content asks', () => {
-    it('shrinks the panel when the content asks', () => {
+    it('shrinks the panel to its content when the content asks, without folding it', () => {
+      fixture.detectChanges();
+      component.width = 450;
+
+      component.panelService.shrinkRequest$.emit(true);
       fixture.detectChanges();
 
-      component.panelService.minimizeRequest$.emit(true);
-      fixture.detectChanges();
-
-      expect(component.isMinimized()).toBe(true);
-      expect(component.panelService.isMinimized()).toBe(true);
+      expect(component.contentMinimized).toBe(true);
+      expect(component.panelService.isShrunk()).toBe(true);
+      expect(component.width).toBe(128);
+      expect(component.isMinimized()).toBe(false);
+      expect(component.panelService.isMinimized()).toBe(false);
     });
 
-    it('lets it out again', () => {
+    it('lets it out again to the size it had', () => {
       fixture.detectChanges();
-      component.panelService.minimizeRequest$.emit(true);
+      component.width = 450;
+      const panel = fixture.nativeElement.querySelector('.draggable-panel') as HTMLElement;
+      Object.defineProperty(panel, 'offsetWidth', { configurable: true, value: 450 });
+      component.panelService.shrinkRequest$.emit(true);
 
-      component.panelService.minimizeRequest$.emit(false);
+      component.panelService.shrinkRequest$.emit(false);
       fixture.detectChanges();
 
-      expect(component.isMinimized()).toBe(false);
+      expect(component.contentMinimized).toBe(false);
+      expect(component.panelService.isShrunk()).toBe(false);
+      expect(component.width).toBe(450);
     });
 
     it('does nothing when it is already the way it was asked for', () => {
       fixture.detectChanges();
-      component.panelService.minimizeRequest$.emit(true);
-      const height = component.height;
+      component.panelService.shrinkRequest$.emit(true);
+      const width = component.width;
 
-      component.panelService.minimizeRequest$.emit(true);
+      component.panelService.shrinkRequest$.emit(true);
+
+      expect(component.contentMinimized).toBe(true);
+      expect(component.width).toBe(width);
+    });
+
+    it('lets a panel shrunk while folded out to the height it had before it was folded', () => {
+      fixture.detectChanges();
+      const panel = fixture.nativeElement.querySelector('.draggable-panel') as HTMLElement;
+      let drawnHeight = 400;
+      Object.defineProperty(panel, 'offsetHeight', { configurable: true, get: () => drawnHeight });
+      component.toggleMinimize();
+      drawnHeight = 28;
+
+      component.panelService.shrinkRequest$.emit(true);
+      component.panelService.shrinkRequest$.emit(false);
+
+      expect(component.height).toBe(400);
+    });
+
+    it('unfolds a panel folded to its bar before shrinking it', () => {
+      fixture.detectChanges();
+      component.toggleMinimize();
+
+      component.panelService.shrinkRequest$.emit(true);
+
+      expect(component.isMinimized()).toBe(false);
+      expect(component.contentMinimized).toBe(true);
+    });
+  });
+
+  describe('the minimise button', () => {
+    it('folds a panel to its bar, and tells the content so', () => {
+      fixture.detectChanges();
+
+      component.toggleMinimize();
 
       expect(component.isMinimized()).toBe(true);
-      expect(component.height).toBe(height);
+      expect(component.panelService.isMinimized()).toBe(true);
+      expect(component.contentMinimized).toBe(false);
+    });
+
+    it('lets a panel shrunk to its content out again rather than folding it', () => {
+      fixture.detectChanges();
+      component.panelService.shrinkRequest$.emit(true);
+
+      component.toggleMinimize();
+
+      expect(component.contentMinimized).toBe(false);
+      expect(component.isMinimized()).toBe(false);
     });
   });
 
@@ -529,6 +595,22 @@ describe('UIPanelComponent', () => {
 
       const panel = fixture.nativeElement.querySelector('.draggable-panel') as HTMLElement;
       expect(panel.style.zIndex).not.toBe('201');
+    });
+  });
+
+  describe('the title in the bar', () => {
+    it('follows a title written after the panel was opened', async () => {
+      const host = TestBed.createComponent(PanelTitleTestHostComponent);
+      host.detectChanges();
+      const layer = host.componentInstance.layer();
+      const frame = layer.createComponent(UIPanelComponent, { index: layer.length, injector: layer.injector });
+      host.detectChanges();
+
+      frame.injector.get(PanelService).title = 'Written later';
+      host.detectChanges();
+
+      expect(host.nativeElement.textContent).toContain('Written later');
+      host.destroy();
     });
   });
 

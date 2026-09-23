@@ -11,16 +11,17 @@ import {
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
-import { VisionService } from '@axe/application/tabletop/vision.service';
+import { GUEST_PERSONA, VisionService } from '@axe/application/tabletop/vision.service';
 import { TurnOrderService } from '@axe/application/turn/turn-order.service';
 import { ConfirmService } from '@axe/application/ui/confirm.service';
 import { PanelService } from '@axe/application/ui/panel.service';
+import { PieceOverlayPreferenceService } from '@axe/application/ui/piece-overlay-preference.service';
+import { ToolbarFoldService } from '@axe/application/ui/toolbar-fold.service';
 import { ViewportService } from '@axe/application/ui/viewport.service';
 import { WidgetVisibilityService } from '@axe/application/ui/widget-visibility.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { findOrphanedOwnership } from '@axe/domain/tabletop/ownership';
-import { HandRailService } from '@axe/features/card/hand-rail/hand-rail.service';
 import { NpcBarComponent } from '@axe/features/gm-tools/npc-bar/npc-bar.component';
 import { NpcBarService } from '@axe/features/gm-tools/npc-bar/npc-bar.service';
 import { NpcDragService } from '@axe/features/gm-tools/npc-bar/npc-drag.service';
@@ -47,8 +48,6 @@ export class GmToolbarComponent {
   private readonly visionService = inject(VisionService);
   private readonly objectStore = inject(ObjectStore);
   private readonly turnOrder = inject(TurnOrderService);
-  protected readonly handRail = inject(HandRailService);
-  protected readonly widgets = inject(WidgetVisibilityService);
   private readonly t = inject(TRANSLATE_FN);
   private readonly confirm = inject(ConfirmService);
 
@@ -58,15 +57,47 @@ export class GmToolbarComponent {
 
   protected readonly personaOpen = signal(false);
 
+  private readonly folds = inject(ToolbarFoldService);
+
+  /** Whether this seat draws the resource bars and the buffs over the pieces, switched from here. */
+  protected readonly overlay = inject(PieceOverlayPreferenceService);
+
+  /** Whether the bar is folded down to its title. */
+  protected readonly folded = computed(() => this.folds.isFolded('gm'));
+
+  /** Folds the bar down to its title, or opens it again; what was open in it closes with it. */
+  protected toggleFold(): void {
+    this.personaOpen.set(false);
+    this.folds.toggle('gm');
+  }
+
   readonly isGameMaster = computed(() => {
     this.objectChange.trackMyCursor();
     return PeerCursor.isMyselfGameMaster;
   });
 
+  private readonly widgets = inject(WidgetVisibilityService);
+
+  /** Drawn for the game master unless they have hidden it from the widget menu. */
+  protected readonly shown = computed(() => this.isGameMaster() && this.widgets.gmToolbar());
+
+  /**
+   * The players whose eyes the master may look through.
+   *
+   * Guests are left out: every one of them sees the same, and the guest preview stands for them all.
+   */
   protected readonly personas = computed<PeerCursor[]>(() => {
     this.objectChange.collectionOf('PeerCursor')();
-    return this.objectStore.getObjects<PeerCursor>(PeerCursor).filter((cursor) => !cursor.isGameMaster);
+    return this.objectStore
+      .getObjects<PeerCursor>(PeerCursor)
+      .filter((cursor) => !cursor.isGameMaster && !cursor.isGuest);
   });
+
+  /** The preview that looks as a guest would, offered whether or not one is connected. */
+  protected readonly guestPersona = GUEST_PERSONA;
+
+  /** Whether the master is looking at the table as a guest would. */
+  protected readonly previewingGuest = computed(() => this.visionService.previewAsUserId() === GUEST_PERSONA);
 
   protected readonly currentPersona = computed<PeerCursor | null>(() => {
     const userId = this.visionService.previewAsUserId();
@@ -82,10 +113,6 @@ export class GmToolbarComponent {
 
   protected turnNext(): void {
     this.turnOrder.next();
-  }
-
-  protected toggleHandRail(): void {
-    this.handRail.toggle();
   }
 
   protected readonly darknessEnabled = computed(() => {
@@ -124,22 +151,6 @@ export class GmToolbarComponent {
 
   protected openPartyList(): void {
     this.roomPanels.open('partyList', { left: 120, top: 60 });
-  }
-
-  protected openBuffManager(): void {
-    this.roomPanels.open('buffManager', { left: 160, top: 100 });
-  }
-
-  protected openEffectLibrary(): void {
-    this.roomPanels.open('effectLibrary', { left: 140, top: 80 });
-  }
-
-  protected openMapEditor(): void {
-    this.roomPanels.open('mapEditor', { left: 80, top: 60 });
-  }
-
-  protected openDungeonGenerator(): void {
-    this.roomPanels.open('dungeonGenerator', { left: 100, top: 60 });
   }
 
   protected toggleNpcBar(): void {
