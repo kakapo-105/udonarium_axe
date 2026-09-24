@@ -369,6 +369,65 @@ describe('ResourceEditProcessor', () => {
       expect(systemText()).toContain('└ [k10] KeyNo.10c[10] ＞ 2D:[3,2]=5 ＞ 2');
     });
 
+    describe('if() in the amount', () => {
+      function rollsTwoD6(pips: number) {
+        mockDiceRollAsync.mockImplementation(async (command: string) => {
+          if (command === '2d6')
+            return { id: 'DiceBot', result: `DiceBot : (2D6) ＞ ${pips}[3,${pips - 3}] ＞ ${pips}`, isSecret: false };
+          const amount = Number(command.replace('+(1d1-1)', '').replace(/[()]/g, '').replace('--', ''));
+          return { id: 'DiceBot', result: `DiceBot : (${command}) ＞ ${command} ＞ ${amount}`, isSecret: false };
+        });
+      }
+
+      it('branches on a bracketed roll once it is rolled', async () => {
+        rollsTwoD6(11);
+
+        await processor.resourceEditProcess(
+          null,
+          [{ resourceCommand: 't:HP-if([2d6]>=10,5,0)', object: character }],
+          [],
+          speak('t:HP-if([2d6]>=10,5,0)'),
+          false
+        );
+
+        expect(mockDiceRollAsync).toHaveBeenNthCalledWith(2, '-5+(1d1-1)', expect.anything());
+        expect(character.status.getValue('HP', 'now')).toBe(195);
+        expect(systemText()).toContain('└ [2d6]');
+      });
+
+      it('reads the same roll again through $1, down a nested if', async () => {
+        rollsTwoD6(8);
+
+        await processor.resourceEditProcess(
+          null,
+          [{ resourceCommand: 't:HP-if([2d6]>=12,10,if($1>=7,5,0))', object: character }],
+          [],
+          speak('t:HP-if([2d6]>=12,10,if($1>=7,5,0))'),
+          false
+        );
+
+        expect(mockDiceRollAsync).toHaveBeenCalledTimes(2);
+        expect(mockDiceRollAsync).toHaveBeenNthCalledWith(2, '-5+(1d1-1)', expect.anything());
+        expect(character.status.getValue('HP', 'now')).toBe(195);
+      });
+
+      it('says it cannot work out a $n that names no roll', async () => {
+        rollsTwoD6(8);
+
+        await processor.resourceEditProcess(
+          null,
+          [{ resourceCommand: 't:HP-$1', object: character }],
+          [],
+          speak('t:HP-$1'),
+          false
+        );
+
+        expect(mockDiceRollAsync).not.toHaveBeenCalled();
+        expect(systemText()).toContain('t:HP-$1を計算できません');
+        expect(character.status.getValue('HP', 'now')).toBe(200);
+      });
+    });
+
     it('says so when the bracketed command is one the dice bot cannot answer', async () => {
       mockDiceRollAsync.mockResolvedValue({ id: 'DiceBot', result: '', isSecret: false });
 

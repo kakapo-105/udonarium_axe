@@ -56,6 +56,32 @@ describe('evalCalcFormula', () => {
     expect(evalCalcFormula('', {})).toBeNaN();
   });
 
+  it('gives 1 for a comparison that holds and 0 for one that does not', () => {
+    expect(evalCalcFormula('3 < 5', {})).toBe(1);
+    expect(evalCalcFormula('3 >= 5', {})).toBe(0);
+    expect(evalCalcFormula('2 + 3 == 5', {})).toBe(1);
+    expect(evalCalcFormula('2 != 2', {})).toBe(0);
+  });
+
+  it('picks a branch with if, reading only 0 as false', () => {
+    expect(evalCalcFormula('if(HP <= 5, 3, 0)', { HP: 4 })).toBe(3);
+    expect(evalCalcFormula('if(HP <= 5, 3, 0)', { HP: 9 })).toBe(0);
+    expect(evalCalcFormula('if(2, 1, 0)', {})).toBe(1);
+  });
+
+  it('works out an if nested in another', () => {
+    const tier = (hp: number) => evalCalcFormula('if(HP <= 0, 2, if(HP <= 5, 1, 0))', { HP: hp });
+    expect([tier(-1), tier(3), tier(8)]).toEqual([2, 1, 0]);
+  });
+
+  it('returns nothing for a comparison with a side it cannot read, rather than taking the else branch', () => {
+    expect(evalCalcFormula('if(UNKNOWN <= 5, 3, 0)', {})).toBeNaN();
+  });
+
+  it('returns nothing for an if without three parts', () => {
+    expect(evalCalcFormula('if(1, 2)', {})).toBeNaN();
+  });
+
   it('evaluates something long', () => {
     const env = { 基本値: 10, レベル: 5 };
     expect(evalCalcFormula('基本値 + floor(レベル / 2)', env)).toBe(12);

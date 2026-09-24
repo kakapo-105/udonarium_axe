@@ -10,8 +10,9 @@ export type CalcEnv = Record<string, number>;
 export type CalcLookup = (name: string) => number;
 
 /**
- * Works out a calculating field's formula: numbers, field names, `+ - * / **`, parentheses and the functions
- * floor, ceil, round, abs, min and max.
+ * Works out a calculating field's formula: numbers, field names, `+ - * / **`, parentheses, the comparisons
+ * `< <= > >= == !=` (1 when true, 0 when not) and the functions floor, ceil, round, abs, min, max and
+ * `if(condition, then, else)`, which gives `then` unless the condition is 0.
  *
  * A name with spaces or symbols is written in square brackets. Names are matched without regard to case.
  * A formula that does not parse, or names a field with no number, gives NaN rather than throwing.
@@ -100,12 +101,13 @@ function tokenize(src: string): Token[] {
       continue;
     }
 
-    if (src.slice(i, i + 2) === '**') {
-      tokens.push({ type: 'OP', value: '**' });
+    const twoChars = src.slice(i, i + 2);
+    if (['**', '<=', '>=', '==', '!='].includes(twoChars)) {
+      tokens.push({ type: 'OP', value: twoChars });
       i += 2;
       continue;
     }
-    if ('+-*/'.includes(ch)) {
+    if ('+-*/<>'.includes(ch)) {
       tokens.push({ type: 'OP', value: ch });
       i++;
       continue;
@@ -134,7 +136,16 @@ function foldCase(env: CalcEnv): CalcLookup {
   };
 }
 
-const FUNCTIONS = new Set(['floor', 'ceil', 'round', 'abs', 'min', 'max']);
+const FUNCTIONS = new Set(['floor', 'ceil', 'round', 'abs', 'min', 'max', 'if']);
+
+const COMPARISONS: Record<string, (left: number, right: number) => boolean> = {
+  '<': (left, right) => left < right,
+  '<=': (left, right) => left <= right,
+  '>': (left, right) => left > right,
+  '>=': (left, right) => left >= right,
+  '==': (left, right) => left === right,
+  '!=': (left, right) => left !== right,
+};
 
 class Parser {
   pos = 0;
@@ -150,9 +161,21 @@ class Parser {
     return this.tokens[this.pos++];
   }
 
-  /** expression = addSub */
+  /** expression = comparison */
   parseExpr(): number {
-    return this.parseAddSub();
+    return this.parseComparison();
+  }
+
+  /** comparison = addSub (('<' | '<=' | '>' | '>=' | '==' | '!=') addSub)? */
+  parseComparison(): number {
+    const left = this.parseAddSub();
+    const tok = this.peek();
+    if (tok?.type !== 'OP' || !(tok.value in COMPARISONS)) return left;
+    this.consume();
+    const right = this.parseAddSub();
+    // A side with no number is no answer either way, not a comparison that fails.
+    if (Number.isNaN(left) || Number.isNaN(right)) return NaN;
+    return COMPARISONS[tok.value](left, right) ? 1 : 0;
   }
 
   /** addSub = mulDiv (('+' | '-') mulDiv)* */
@@ -247,6 +270,9 @@ class Parser {
             return args.length ? Math.min(...args) : 0;
           case 'max':
             return args.length ? Math.max(...args) : 0;
+          case 'if':
+            if (args.length !== 3 || Number.isNaN(args[0])) return NaN;
+            return args[0] !== 0 ? args[1] : args[2];
           default:
             return NaN;
         }
