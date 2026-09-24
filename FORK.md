@@ -31,6 +31,7 @@ git push                 # → 自動でビルド＆公開
 現在の独自機能:
 
 - `{tcount}` — ターゲットを取る行でターゲットの数に置き換わる参照（[website/manual/chat-syntax.md](website/manual/chat-syntax.md#ターゲットの数を読む)）
+- チャットパレットの 2 段見出し — `◆` の下に `■` の見出しを置き、見出しメニューでサブメニューとして開く（[website/manual/chat-palette.md](website/manual/chat-palette.md#見出しを-2-段にする)）
 
 ## 上流から削除したワークフロー
 
