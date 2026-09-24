@@ -150,6 +150,22 @@
     }
   },
   "feature": {
+    "automation": {
+      "active": "AI操作：有効",
+      "inactive": "AI操作：停止中",
+      "stop": "停止",
+      "enable": "有効にする",
+      "sessionHint": "許可はこのセッション限りです。再読み込み・接続先・ロールの変更で解除されます。",
+      "scope": {
+        "read_visible": "見える情報の読み取り",
+        "move_piece": "コマの移動",
+        "send_chat": "チャットの送信",
+        "edit_resource": "発言コマのリソース増減（:HP-5 など）"
+      },
+      "ownedOnly": "AIが操作できるコマを自分の所有物に限定する",
+      "roomHint": "所有物への限定は部屋共通の設定です。変更できるのはGMだけです。",
+      "audit": "操作履歴（直近100件）"
+    },
     "role": {
       "gm": "ゲームマスター",
       "gmShort": "GM",

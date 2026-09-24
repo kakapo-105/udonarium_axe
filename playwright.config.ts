@@ -32,7 +32,7 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: [/mobile\/.*\.spec\.ts/, /visual\/.*\.spec\.ts/],
+      testIgnore: [/mobile\/.*\.spec\.ts/, /visual\/.*\.spec\.ts/, /automation\//],
     },
     {
       name: 'mobile',
@@ -57,12 +57,12 @@ export default defineConfig({
           {
             name: 'firefox',
             use: { ...devices['Desktop Firefox'] },
-            testIgnore: [/mobile\/.*\.spec\.ts/, /visual\/.*\.spec\.ts/],
+            testIgnore: [/mobile\/.*\.spec\.ts/, /visual\/.*\.spec\.ts/, /automation\//],
           },
           {
             name: 'webkit',
             use: { ...devices['Desktop Safari'] },
-            testIgnore: [/mobile\/.*\.spec\.ts/, /visual\/.*\.spec\.ts/],
+            testIgnore: [/mobile\/.*\.spec\.ts/, /visual\/.*\.spec\.ts/, /automation\//],
           },
           {
             name: 'mobile-safari',

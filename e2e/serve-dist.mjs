@@ -19,7 +19,9 @@ import { createServer } from 'node:http';
 import { dirname, extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const distDir = resolve(dirname(fileURLToPath(import.meta.url)), '../dist');
+const distDir = process.env['E2E_DIST']
+  ? resolve(process.env['E2E_DIST'])
+  : resolve(dirname(fileURLToPath(import.meta.url)), '../dist');
 const port = Number(process.env['E2E_PORT'] ?? 4300);
 const index = join(distDir, 'index.html');
 

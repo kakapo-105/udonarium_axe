@@ -1,0 +1,63 @@
+<aside
+  class="border-ui-border-panel bg-ui-panel text-ui-text fixed right-3 bottom-3 z-300 max-w-sm rounded-lg border p-3 shadow-lg"
+  data-testid="automation-control"
+>
+  <div class="flex items-center gap-3">
+    <button type="button" (click)="expanded.set(!expanded())" [attr.aria-expanded]="expanded()">
+      {{ (policy.enabled() ? 'feature.automation.active' : 'feature.automation.inactive') | transloco }}
+    </button>
+    @if (policy.enabled()) {
+      <button
+        type="button"
+        class="rounded-sm bg-red-700 px-3 py-1 text-white"
+        data-testid="automation-stop"
+        (click)="policy.stop()"
+      >
+        {{ 'feature.automation.stop' | transloco }}
+      </button>
+    } @else {
+      <button
+        type="button"
+        class="rounded-sm bg-blue-700 px-3 py-1 text-white"
+        data-testid="automation-enable"
+        (click)="policy.enable(); expanded.set(true)"
+      >
+        {{ 'feature.automation.enable' | transloco }}
+      </button>
+    }
+  </div>
+  @if (expanded()) {
+    <p class="my-2 text-sm">{{ 'feature.automation.sessionHint' | transloco }}</p>
+    @for (scope of scopes; track scope) {
+      <label class="my-2 flex items-center gap-2">
+        <input
+          type="checkbox"
+          [attr.data-testid]="'automation-scope-' + scope"
+          [checked]="policy.scopes().includes(scope)"
+          [disabled]="!policy.enabled()"
+          (change)="grant(scope, $event)"
+        />
+        {{ 'feature.automation.scope.' + scope | transloco }}
+      </label>
+    }
+    <label class="my-2 flex items-center gap-2">
+      <input
+        type="checkbox"
+        data-testid="automation-owned-only"
+        [checked]="ownedOnly()"
+        [disabled]="!isGm()"
+        (change)="setOwnedOnly($event)"
+      />
+      {{ 'feature.automation.ownedOnly' | transloco }}
+    </label>
+    <p class="my-2 text-xs">{{ 'feature.automation.roomHint' | transloco }}</p>
+    <details>
+      <summary>{{ 'feature.automation.audit' | transloco }}</summary>
+      <ol class="max-h-40 overflow-auto text-xs">
+        @for (row of audit.entries(); track $index) {
+          <li>{{ row.at }} · {{ row.command }} · {{ row.outcome }}</li>
+        }
+      </ol>
+    </details>
+  }
+</aside>

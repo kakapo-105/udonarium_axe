@@ -6,3 +6,10 @@ CHANGELOG.md
 # VitePress build artifacts (docs site)
 website/.vitepress/dist
 website/.vitepress/cache
+
+# Isolated optional MCP dependencies and generated files
+tools/mcp-server/node_modules
+tools/mcp-server/dist
+tools/mcp-server/.cache
+tools/mcp-server/.browser-profile
+tmp/automation-e2e

@@ -269,7 +269,7 @@ export class MovePlanService {
    * Nothing else may be asked of the plan while it walks: the piece is between cells, and a
    * second move begun over the top of this one would leave it there.
    */
-  async run(): Promise<boolean> {
+  async run(beforeStep?: () => void): Promise<boolean> {
     const plan = this.held();
     if (!plan || this.walking) return false;
     const way = this.wholeWay();
@@ -285,11 +285,20 @@ export class MovePlanService {
     }
 
     this.walking = true;
+    let expectedVersion = character.version;
     try {
       const corner = cornerShiftOf(character, table.gridSize);
       const steps = way.slice(1);
       let standingZ = character.posZ;
       for (const [index, cell] of steps.entries()) {
+        // A caller walking on someone's behalf checks it may still do so before each step, and a
+        // piece changed or replaced by anyone else meanwhile stops the walk where it stands.
+        if (beforeStep) {
+          beforeStep();
+          if (character.version !== expectedVersion || this.objectStore.get(character.identifier) !== character) {
+            return false;
+          }
+        }
         const centre = cellCenterOf(plan.grid, cell);
         const landing = landingHeightAt(table.terrains, table.gridSize, centre.x, centre.y, table.gridType);
         const from = { x: character.location.x, y: character.location.y, z: standingZ };
@@ -310,9 +319,12 @@ export class MovePlanService {
         // happens where the piece is standing when it does it.
         this.triggerFire.stepped(character, plan.grid, cell, index === steps.length - 1);
         standingZ = landing;
+        expectedVersion = character.version;
       }
     } finally {
       this.walking = false;
+      // A walk cut short by the caller would otherwise leave the move open and holding the table's clicks.
+      if (this.held()) this.close();
     }
     SoundEffect.play(PresetSound.piecePut);
     this.close();
