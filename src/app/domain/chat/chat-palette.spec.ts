@@ -288,6 +288,40 @@ describe('ChatPalette', () => {
       // '?' reads as a hint on the sheet, but in a command it is only a broken roll.
       expect(evaluateCharacterReferences('2d6+{攻撃力}', character).text).toBe('2d6+{攻撃力}');
     });
+
+    it('reads {tcount} as the number of targets it is given', () => {
+      const speaker = makeCharacter(false);
+      const target = makeCharacter(false, '4');
+
+      expect(evaluateCharacterReferences('t:HP-10 :MP-3*{tcount}', speaker, target, 3).text).toBe('t:HP-10 :MP-3*3');
+    });
+
+    it('leaves {tcount} alone when no number of targets is given', () => {
+      const character = makeCharacter(false);
+
+      expect(evaluateCharacterReferences(':MP-3*{tcount}', character).text).toBe(':MP-3*{tcount}');
+    });
+
+    it('lets a palette variable of the same name answer {tcount} before the number of targets', () => {
+      const character = makeCharacter(true);
+      character.chatPalette?.setPalette('//tcount=9');
+
+      expect(evaluateCharacterReferences('{tcount}', character, undefined, 2).text).toBe('9');
+    });
+
+    it('lets a sheet field of the same name answer {tcount} before the number of targets', () => {
+      const character = makeCharacter(false);
+      character.rootDataElement?.getFirstElementByName('detail')?.appendChild(DataElement.create('tcount', '5'));
+
+      expect(evaluateCharacterReferences('{tcount}', character, undefined, 2).text).toBe('5');
+    });
+
+    it('fills in {tcount} brought in by a palette variable', () => {
+      const character = makeCharacter(true);
+      character.chatPalette?.setPalette('//消費=3*{tcount}');
+
+      expect(evaluateCharacterReferences(':MP-{消費}', character, undefined, 2).text).toBe(':MP-3*2');
+    });
   });
 
   describe('a calculating field among the references', () => {

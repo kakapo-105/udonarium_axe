@@ -167,28 +167,33 @@ export class ChatPalette extends ObjectNode {
 
   /**
    * Fills in a palette line as `evaluate` does, but takes references to image fields out of the
-   * text and returns those pictures as attachments to send with it.
+   * text and returns those pictures as attachments to send with it. `targetCount` answers
+   * `{tcount}`; see {@link evaluateReferences}.
    */
   evaluateWithAttachments(
     line: PaletteLine | string,
     extendVariables?: DataElement,
-    target?: GameCharacter
+    target?: GameCharacter,
+    targetCount?: number
   ): PaletteEvaluationResult {
-    return this.evaluateInternal(line, extendVariables, target, true);
+    return this.evaluateInternal(line, extendVariables, target, true, targetCount);
   }
 
   private evaluateInternal(
     line: PaletteLine | string,
     extendVariables: DataElement | undefined,
     target: GameCharacter | undefined,
-    collectImageAttachments: boolean
+    collectImageAttachments: boolean,
+    targetCount?: number
   ): PaletteEvaluationResult {
     return evaluateReferences(
       typeof line === 'string' ? line : line.palette,
       this.paletteVariables,
       extendVariables,
       target,
-      collectImageAttachments
+      collectImageAttachments,
+      false,
+      targetCount
     );
   }
 
@@ -233,11 +238,16 @@ export class BuffPalette extends ChatPalette {}
 @SyncObject('dice-table-palette')
 export class DiceTablePalette extends ChatPalette {}
 
+/** The reference a line aimed at the table's marked pieces uses for how many of them there are. */
+export const TARGET_COUNT_REFERENCE = 'tcount';
+
 /**
  * Fills in the references in a line of text.
  *
  * `{name}` reads from the speaker, `t{name}` from the target it is aimed at, and a reference
- * standing for an image is taken out of the line and sent alongside it instead.
+ * standing for an image is taken out of the line and sent alongside it instead. `{tcount}` is
+ * the number of targets when `targetCount` is given, but only when neither a palette variable
+ * nor the sheet already answers that name, so a sheet that keeps its own `tcount` reads as before.
  */
 export function evaluateReferences(
   source: string,
@@ -250,7 +260,8 @@ export function evaluateReferences(
    * empty one is emptied out; a line typed into chat is not, and its braces are left as they were
    * rather than eating the words around them.
    */
-  keepUnfilled = false
+  keepUnfilled = false,
+  targetCount?: number
 ): PaletteEvaluationResult {
   let evaluate = source;
   const attachmentImageIdentifiers: string[] = [];
@@ -298,7 +309,8 @@ export function evaluateReferences(
       if (variable.name == name) return variable.value;
     }
     const element = extendVariables ? DataElement.findElementByReference(extendVariables, name) : null;
-    return element ? evaluateElementText(element, useMax) : null;
+    if (element) return evaluateElementText(element, useMax);
+    return targetCount != null && name === TARGET_COUNT_REFERENCE ? `${targetCount}` : null;
   };
 
   const limit = 128;
@@ -330,7 +342,8 @@ export function evaluateReferences(
 export function evaluateCharacterReferences(
   text: string,
   speaker: GameCharacter | null,
-  target?: GameCharacter
+  target?: GameCharacter,
+  targetCount?: number
 ): PaletteEvaluationResult {
   return evaluateReferences(
     text,
@@ -338,7 +351,8 @@ export function evaluateCharacterReferences(
     speaker?.rootDataElement ?? undefined,
     target,
     true,
-    true
+    true,
+    targetCount
   );
 }
 

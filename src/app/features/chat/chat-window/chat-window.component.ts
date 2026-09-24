@@ -517,9 +517,9 @@ export class ChatWindowComponent {
           if (!attachmentImageIdentifiers.includes(identifier)) attachmentImageIdentifiers.push(identifier);
         }
       };
-      const fillIn = (text: string, target?: GameCharacter): string => {
+      const fillIn = (text: string, target?: GameCharacter, targetCount?: number): string => {
         if (!speaker && !target) return text;
-        const evaluated = evaluateCharacterReferences(text, speaker, target);
+        const evaluated = evaluateCharacterReferences(text, speaker, target, targetCount);
         appendAttachmentImages(evaluated.attachmentImageIdentifiers);
         return evaluated.text;
       };
@@ -540,7 +540,7 @@ export class ChatWindowComponent {
             str2 = DiceBot.deleteMyselfResourceBuff(str);
           }
 
-          const filled = fillIn(str2, object);
+          const filled = fillIn(str2, object, objects.length);
           outtext += filled;
           outtext += ' [' + object.name + ']';
           first = false;
