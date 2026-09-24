@@ -11,6 +11,7 @@ import { answerColorsOf } from '@axe/domain/chat/chat-color';
 import { ChatMessage, ChatMessageContext, ChatMessageTargetContext } from '@axe/domain/chat/chat-message';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { findEmbeddedRolls, replaceEmbeddedRolls } from '@axe/domain/data/embedded-roll';
+import { fillInConditions, fillInRollReferences } from '@axe/domain/data/inline-condition';
 import {
   applyBuffEdit,
   applyResourceEdit,
@@ -234,6 +235,7 @@ export class ResourceEditProcessor {
 
   private async rollResourceEdit(edit: ResourceEdit, gameSystem: GameSystemClass): Promise<boolean> {
     if (!(await this.resolveEmbeddedRolls(edit, gameSystem))) return false;
+    edit.command = fillInConditions(edit.command);
 
     const rolled = await this.rollOnce(edit.command, gameSystem);
     if (rolled == null) return false;
@@ -245,9 +247,16 @@ export class ResourceEditProcessor {
     return true;
   }
 
+  /**
+   * Rolls each `[...]` in the amount and puts the answers back, then puts the n-th answer in place of
+   * each `$n`, so one roll can be read more than once. Fails when a roll or a `$n` cannot be answered.
+   */
   private async resolveEmbeddedRolls(edit: ResourceEdit, gameSystem: GameSystemClass): Promise<boolean> {
     const sites = findEmbeddedRolls(edit.command);
-    if (sites.length < 1) return true;
+    if (sites.length < 1) {
+      const filled = fillInRollReferences(edit.command, []);
+      return filled != null;
+    }
 
     const answers: number[] = [];
     for (const site of sites) {
@@ -257,7 +266,9 @@ export class ResourceEditProcessor {
       edit.embeddedRolls.push(`[${site.command}] ${rolled.result.replace(/^\S+ : /, '')}`);
     }
 
-    edit.command = replaceEmbeddedRolls(edit.command, answers);
+    const filled = fillInRollReferences(replaceEmbeddedRolls(edit.command, answers), answers);
+    if (filled == null) return false;
+    edit.command = filled;
     edit.isDiceRoll = true;
     return true;
   }

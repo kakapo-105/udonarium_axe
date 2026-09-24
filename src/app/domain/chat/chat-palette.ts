@@ -5,6 +5,7 @@ import { toHalfWidth } from '@axe/core/util/string-util';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { DataElement, DataElementFieldType } from '@axe/domain/data/data-element';
 import { createCalcPass, evaluateCalcElement } from '@axe/domain/data/data-element-calc-env';
+import { fillInConditions } from '@axe/domain/data/inline-condition';
 
 export interface PaletteLine {
   palette: string;
@@ -248,6 +249,7 @@ export const TARGET_COUNT_REFERENCE = 'tcount';
  * standing for an image is taken out of the line and sent alongside it instead. `{tcount}` is
  * the number of targets when `targetCount` is given, but only when neither a palette variable
  * nor the sheet already answers that name, so a sheet that keeps its own `tcount` reads as before.
+ * Once the references are in, each `if(condition, then, else)` is worked out; see {@link fillInConditions}.
  */
 export function evaluateReferences(
   source: string,
@@ -335,7 +337,7 @@ export function evaluateReferences(
     });
     if (limit < loop) isContinue = false;
   }
-  return { text: evaluate, attachmentImageIdentifiers };
+  return { text: fillInConditions(evaluate), attachmentImageIdentifiers };
 }
 
 /** The references a piece can fill in, whether or not it keeps a palette of its own to draw variables from. */

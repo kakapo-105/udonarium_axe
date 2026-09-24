@@ -316,6 +316,13 @@ describe('ChatPalette', () => {
       expect(evaluateCharacterReferences('{tcount}', character, undefined, 2).text).toBe('5');
     });
 
+    it('works out an if once the references in it are filled in', () => {
+      const character = makeCharacter(false);
+
+      expect(evaluateCharacterReferences('2d6+if({HP}<=5,3,0)', character).text).toBe('2d6+0');
+      expect(evaluateCharacterReferences(':MP-if({tcount}>=3,6,3)', character, undefined, 3).text).toBe(':MP-6');
+    });
+
     it('fills in {tcount} brought in by a palette variable', () => {
       const character = makeCharacter(true);
       character.chatPalette?.setPalette('//消費=3*{tcount}');
