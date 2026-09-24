@@ -56,7 +56,7 @@
         >
           <option value="">{{ 'feature.chat.palette.indexLabel' | transloco }}</option>
           @for (heading of paletteHeadings(); track heading.lineIndex) {
-            <option [value]="heading.lineIndex">{{ heading.headingName }}</option>
+            <option [value]="heading.lineIndex">{{ heading.label }}</option>
           }
         </select>
       } @else {
@@ -205,13 +205,23 @@
   >
     @for (row of paletteRows(); track row.lineIndex) {
       @if (row.kind === 'heading') {
-        <div
-          class="text-ui-accent bg-ui-elevated border-ui-border-panel box-border cursor-default border-t border-solid px-2 pt-1.25 pb-0.5 text-[0.8em] leading-[1.65] font-bold whitespace-pre select-none first:border-t-0"
-          [attr.data-line]="row.lineIndex"
-        >
-          <span class="mr-0.75 opacity-60">{{ 'feature.chat.palette.headingBullet' | transloco }}</span
-          >{{ row.headingName }}
-        </div>
+        @if (row.headingLevel === 2) {
+          <div
+            class="text-ui-accent box-border cursor-default px-2 pt-1 pb-0.5 text-[0.78em] leading-[1.65] font-semibold whitespace-pre select-none"
+            [attr.data-line]="row.lineIndex"
+          >
+            <span class="mr-0.75 opacity-60">{{ 'feature.chat.palette.subHeadingBullet' | transloco }}</span
+            >{{ row.headingName }}
+          </div>
+        } @else {
+          <div
+            class="text-ui-accent bg-ui-elevated border-ui-border-panel box-border cursor-default border-t border-solid px-2 pt-1.25 pb-0.5 text-[0.8em] leading-[1.65] font-bold whitespace-pre select-none first:border-t-0"
+            [attr.data-line]="row.lineIndex"
+          >
+            <span class="mr-0.75 opacity-60">{{ 'feature.chat.palette.headingBullet' | transloco }}</span
+            >{{ row.headingName }}
+          </div>
+        }
       } @else if (row.kind === 'variable') {
         <div
           class="text-ui-dim box-border cursor-default overflow-hidden px-2 py-0.5 text-[0.78em] leading-[1.65] text-ellipsis whitespace-pre italic select-none"

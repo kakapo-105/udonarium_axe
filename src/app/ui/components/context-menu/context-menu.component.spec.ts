@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ContextMenuAction } from '@axe/application/ui/context-menu.service';
 import { ModalService } from '@axe/application/ui/modal.service';
 import { PanelService } from '@axe/application/ui/panel.service';
+import { UiSignalService } from '@axe/application/ui/ui-signal.service';
 import { TabletopObject } from '@axe/domain/tabletop/tabletop-object';
 import { ContextMenuComponent } from '@axe/ui/components/context-menu/context-menu.component';
 
@@ -106,6 +108,21 @@ describe('ContextMenuComponent', () => {
     expect(runPanelWithRotation).toHaveBeenCalledWith(270, expect.any(Function));
     expect(runModalWithRotation).toHaveBeenCalledWith(270, action);
     expect(action).toHaveBeenCalledOnce();
+  });
+
+  it('jumps to an index entry and opens the entries nested under it when it is clicked', () => {
+    const jump = vi.spyOn(TestBed.inject(UiSignalService), 'requestJumpIndex');
+    const parent = { name: '戦闘', line: 4, id: 'palette', subActions: [{ name: '5:攻撃', action: vi.fn() }] };
+    component.contextMenuService.title = component.indexTitle;
+    component.contextMenuService.actions = [parent as ContextMenuAction];
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('li') as HTMLLIElement).click();
+    fixture.detectChanges();
+
+    expect(jump).toHaveBeenCalledWith('palette', 4);
+    expect(component.subMenu()).toEqual(parent.subActions);
+    expect(fixture.nativeElement.querySelector('context-menu').textContent).toContain('5:攻撃');
   });
 
   it('opens a submenu immediately when its parent is clicked', () => {

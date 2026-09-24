@@ -1,6 +1,6 @@
 import { toHalfWidth } from '@axe/core/util/string-util';
 import { matchesSearchText, normalizeSearchText, splitSearchTerms } from '@axe/core/util/text-search';
-import type { PaletteRow } from '@axe/domain/chat/palette-rows';
+import { paletteHeadingLabel, type PaletteRow } from '@axe/domain/chat/palette-rows';
 
 /** A run of a palette line, marked where a word searched for stands in it. */
 export interface PaletteSearchSegment {
@@ -32,7 +32,7 @@ export function searchPaletteRows(rows: readonly PaletteRow[], query: string): P
   let heading = '';
   for (const row of rows) {
     if (row.kind === 'heading') {
-      heading = (row.headingName ?? '').trim();
+      heading = paletteHeadingLabel(row);
       continue;
     }
     if (row.kind !== 'command') continue;
