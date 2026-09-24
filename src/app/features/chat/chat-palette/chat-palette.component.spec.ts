@@ -3,8 +3,9 @@ import { CharacterMacroService } from '@axe/application/chat/character-macro.ser
 import { ChatTickerSelectionService } from '@axe/application/chat/chat-ticker-selection.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
-import { ContextMenuService } from '@axe/application/ui/context-menu.service';
+import { ContextMenuAction, ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { PanelService } from '@axe/application/ui/panel.service';
+import { UiSignalService } from '@axe/application/ui/ui-signal.service';
 import { childrenChanged$ } from '@axe/core/sync/object-event-extension';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { GameCharacter } from '@axe/domain/character/game-character';
@@ -229,6 +230,41 @@ describe('ChatPaletteComponent', () => {
 
       expect(component.selectedLine()).toBe(2);
       expect(list.selectedIndex).toBe(0);
+    });
+
+    it('indents a ■ heading in the list beneath the top-level heading it sits under', () => {
+      TestBed.inject(PanelService).windowed.set(true);
+      const speaker = createChar('術者');
+      speaker.chatPalette!.setPalette('◆戦闘\n■攻撃\n2d6+3 攻撃');
+      component.character.set(speaker);
+      fixture.detectChanges();
+
+      const list = shown<HTMLSelectElement>('palette-headings-list')!;
+
+      expect([...list.options].slice(1).map((option) => option.textContent?.trim())).toEqual(['戦闘', '攻撃']);
+      expect(list.options[2].textContent).toContain('　攻撃');
+    });
+
+    it('nests the ■ headings under their top-level heading in the menu, each jumping to its line', () => {
+      const open = vi.spyOn(TestBed.inject(ContextMenuService), 'open').mockImplementation(() => undefined);
+      const jump = vi.spyOn(TestBed.inject(UiSignalService), 'requestJumpIndex');
+      const speaker = createChar('術者');
+      speaker.chatPalette!.setPalette('◆戦闘\n■攻撃\n2d6+3 攻撃\n◆技能\n1d100<=50');
+      component.character.set(speaker);
+      fixture.detectChanges();
+
+      component.indexBtn();
+      const entries = open.mock.calls[0][1] as { name: string; line: number; subActions?: ContextMenuAction[] }[];
+
+      expect(entries.map((entry) => [entry.name, entry.line])).toEqual([
+        ['戦闘', 0],
+        ['技能', 3],
+      ]);
+      expect(entries[0].subActions?.map((sub) => sub.name)).toEqual(['1:攻撃']);
+      expect(entries[1].subActions).toBeUndefined();
+
+      entries[0].subActions![0].action!();
+      expect(jump).toHaveBeenCalledWith(expect.any(String), 1);
     });
 
     it('has nothing to offer where the palette carries no heading', () => {

@@ -27,11 +27,11 @@ import { ObjectStore } from '@axe/core/sync/object-store';
 import { splitSearchTerms } from '@axe/core/util/text-search';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { ChatOutgoing } from '@axe/domain/chat/chat-outgoing';
-import { ChatPalette, PaletteIndex } from '@axe/domain/chat/chat-palette';
+import { ChatPalette } from '@axe/domain/chat/chat-palette';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { canRoleSpeakTab, canRoleViewTab } from '@axe/domain/chat/chat-tab-permission';
-import { PaletteRow, paletteRowsOf } from '@axe/domain/chat/palette-rows';
+import { PaletteHeadingNode, paletteHeadingTree, PaletteRow, paletteRowsOf } from '@axe/domain/chat/palette-rows';
 import { DataElement } from '@axe/domain/data/data-element';
 import { emptyHotbarSlotDraft } from '@axe/domain/hotbar/hotbar-draft';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
@@ -95,9 +95,18 @@ export class ChatPaletteComponent {
    *
    * The menu behind the headings button opens where the pointer is, and the pointer is only
    * followed in the window the app started in, so over there it lands somewhere the reader
-   * cannot see. A plain list needs nowhere to be put.
+   * cannot see. A plain list needs nowhere to be put. It cannot nest, so a `■` heading under a
+   * top-level one is indented instead.
    */
-  readonly paletteHeadings = computed((): PaletteRow[] => this.paletteRows().filter((row) => row.kind === 'heading'));
+  readonly paletteHeadings = computed((): { lineIndex: number; label: string }[] =>
+    paletteHeadingTree(this.paletteRows()).flatMap((node) => [
+      { lineIndex: node.lineIndex, label: node.name },
+      ...node.children.map((child) => ({ lineIndex: child.lineIndex, label: `　${child.name}` })),
+    ])
+  );
+
+  /** The headings as the headings menu nests them. */
+  readonly paletteHeadingTree = computed((): PaletteHeadingNode[] => paletteHeadingTree(this.paletteRows()));
 
   readonly searchResultsRef = viewChild<ElementRef<HTMLElement>>('searchResultsList');
 
@@ -125,7 +134,6 @@ export class ChatPaletteComponent {
   }
 
   private readonly _gameType = linkedSignal(() => this.character()?.chatPalette?.dicebot ?? '');
-  private _paletteIndex: PaletteIndex[] = [];
   private _timeId: string = '';
   private _autoCompleteEnable = false;
 
@@ -608,6 +616,10 @@ export class ChatPaletteComponent {
    * Opens the headings menu at the palette's top-left corner, where picking a heading jumps the
    * list to it.
    *
+   * The `■` headings under a top-level heading open beside it as a submenu. The top-level heading
+   * itself can still be jumped to, and picking it opens its submenu at once for a touch screen,
+   * where there is no hovering over it.
+   *
    * Does nothing without a palette. The menu entries carry this palette's own id, so the jump comes
    * back to this panel rather than another open palette.
    */
@@ -620,12 +632,20 @@ export class ChatPaletteComponent {
     position.x = panelBox.left - 8;
     position.y = panelBox.top - 8;
 
-    this._paletteIndex = this.palette.paletteIndex;
-
-    const index = [];
-    for (const list of this._paletteIndex) {
-      index.push({ name: list.name, line: list.line, id: this._timeId, action: () => {} });
-    }
+    const id = this._timeId;
+    const index = this.paletteHeadingTree().map((node) => ({
+      name: node.name,
+      line: node.lineIndex,
+      id,
+      action: () => {},
+      subActions:
+        node.children.length > 0
+          ? node.children.map((child) => ({
+              name: `${child.lineIndex}:${child.name}`,
+              action: () => this.uiSignalService.requestJumpIndex(id, child.lineIndex),
+            }))
+          : undefined,
+    }));
 
     this.contextMenuService.open(position, index, this.t('feature.chat.palette.indexTitle'));
   }

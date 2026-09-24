@@ -2807,6 +2807,7 @@
         "indexTitle": "インデックス",
         "noTarget": "対象が未選択です",
         "headingBullet": "◆",
+        "subHeadingBullet": "■",
         "inputHintTouch": "行をタップで入力、2回で送信",
         "searchPlaceholder": "パレットの行を検索",
         "searchResults": "検索結果",

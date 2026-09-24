@@ -2807,6 +2807,7 @@
         "indexTitle": "인덱스",
         "noTarget": "대상이 선택되지 않았습니다",
         "headingBullet": "◆",
+        "subHeadingBullet": "■",
         "inputHintTouch": "줄을 탭하면 입력, 두 번이면 전송",
         "searchPlaceholder": "팔레트 줄 검색",
         "searchResults": "검색 결과",

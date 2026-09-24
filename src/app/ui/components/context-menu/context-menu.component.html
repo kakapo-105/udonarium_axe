@@ -159,9 +159,16 @@
     [class.border-solid]="detachedItems()"
     [class.hover:bg-ui-menu-hover]="!detachedItems()"
     [class.mx-1]="!detachedItems()"
-    (click)="indexAction(action.line, action.id)"
+    (click)="indexAction(action.line, action.id); showSubMenu(action, true, row)"
+    (mouseenter)="showSubMenu(action, false, row)"
+    #row
   >
     <div class="inline-block">{{ action.line }}:{{ action.name }}</div>
+    @if (action.subActions) {
+      <div class="absolute top-0.5 right-px bottom-0 inline-block">
+        <i class="material-icons align-bottom text-[1em]!">arrow_forward_ios</i>
+      </div>
+    }
   </li>
 </ng-template>
 

@@ -26,6 +26,12 @@ git push                 # → 自動でビルド＆公開
 
 - feature ブランチで作って `main` にマージする。
 - コミットは小さく、全体整形はしない（上流マージのコンフリクトを局所化するため）。
+- 加えた機能は README の「このフォークで加えた機能」に載せる。
+
+現在の独自機能:
+
+- `{tcount}` — ターゲットを取る行でターゲットの数に置き換わる参照（[website/manual/chat-syntax.md](website/manual/chat-syntax.md#ターゲットの数を読む)）
+- チャットパレットの 2 段見出し — `◆` の下に `■` の見出しを置き、見出しメニューでサブメニューとして開く（[website/manual/chat-palette.md](website/manual/chat-palette.md#見出しを-2-段にする)）
 
 ## 上流から削除したワークフロー
 

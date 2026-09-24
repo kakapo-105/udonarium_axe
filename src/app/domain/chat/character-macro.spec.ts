@@ -48,6 +48,16 @@ describe('building a macro message', () => {
     expect(message.text.split('\n')[1]).not.toContain(':MP-1');
   });
 
+  it('fills in {tcount} with the number of marked pieces, spending it on the speaker only once', () => {
+    const character = speaker('術者', '');
+    const first = speaker('相手A');
+    const second = speaker('相手B');
+
+    const message = buildMacroMessage(character, 't:HP-10 :MP-3*{tcount}', [first, second], '対象なし');
+
+    expect(message.targetContexts.map((context) => context.text)).toEqual(['t:HP-10 :MP-3*2', 't:HP-10 ']);
+  });
+
   it('says so, and marks nobody, when the line wants a target and none is marked', () => {
     const character = speaker('術者', '');
 

@@ -32,6 +32,12 @@ describe('searchPaletteRows()', () => {
     expect(lines(searchPaletteRows(palette, '2d6　攻撃'))).toEqual(['2d6 攻撃']);
   });
 
+  it('names a line under a ■ heading by both headings above it', () => {
+    const palette = rows('◆戦闘\n■攻撃\n2d6 攻撃');
+
+    expect(searchPaletteRows(palette, '2d6')[0].heading).toBe('戦闘 / 攻撃');
+  });
+
   it('leaves out headings, settings and blank lines, which are not said', () => {
     const palette = rows('◆攻撃\n//攻撃力=3\n\n2d6+{攻撃力} 攻撃');
 

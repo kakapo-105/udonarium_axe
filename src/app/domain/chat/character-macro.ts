@@ -18,7 +18,8 @@ export interface MacroMessage {
  *
  * A line aimed at the pieces marked on the table is worked out once for each of them, and
  * from the second onwards the commands that would act on the speaker are taken out, or the
- * speaker would take the same damage once per target.
+ * speaker would take the same damage once per target. `{tcount}` in such a line is the number
+ * of targets.
  */
 export function buildMacroMessage(
   character: GameCharacter,
@@ -37,8 +38,8 @@ export function buildMacroMessage(
   };
   const evaluate = (text: string, target?: GameCharacter): PaletteEvaluationResult =>
     palette
-      ? palette.evaluateWithAttachments(text, character.rootDataElement ?? undefined, target)
-      : evaluateCharacterReferences(text, character, target);
+      ? palette.evaluateWithAttachments(text, character.rootDataElement ?? undefined, target, targets.length)
+      : evaluateCharacterReferences(text, character, target, targets.length);
 
   if (!textTargetsCharacter(line)) {
     const evaluated = evaluate(line);

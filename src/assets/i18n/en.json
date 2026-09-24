@@ -2807,6 +2807,7 @@
         "indexTitle": "Index",
         "noTarget": "No target selected",
         "headingBullet": "◆",
+        "subHeadingBullet": "■",
         "inputHintTouch": "Tap a line to fill in, twice to send",
         "searchPlaceholder": "Search palette lines",
         "searchResults": "Search results",
