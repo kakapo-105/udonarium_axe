@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { SaveDataService } from '@axe/application/file/save-data.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { CutInService } from '@axe/application/media/cut-in.service';
+import { TableBgmService } from '@axe/application/media/table-bgm.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ImageService } from '@axe/application/storage/image.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
@@ -12,6 +13,7 @@ import { ModalService } from '@axe/application/ui/modal.service';
 import { PanelService } from '@axe/application/ui/panel.service';
 import { ViewportService } from '@axe/application/ui/viewport.service';
 import { emitSelectGameTable, triggerUpdateGameObject } from '@axe/core/event/domain-events';
+import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { ImageFile } from '@axe/core/storage/image-file';
 import { ObjectSerializer } from '@axe/core/sync/object-serializer';
 import { ObjectStore } from '@axe/core/sync/object-store';
@@ -24,6 +26,7 @@ import {
   DEFAULT_AMBIENCE_DENSITY,
   SKY_AMBIENCE_KINDS,
 } from '@axe/domain/effect/ambience/ambience-kind';
+import { AudioTag } from '@axe/domain/media/audio-tag';
 import { CutIn } from '@axe/domain/media/cut-in';
 import { encodeCutInIdentifiers, parseCutInIdentifiers } from '@axe/domain/media/table-cut-in';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
@@ -43,6 +46,7 @@ import {
   TableBackgroundLayer,
   TableLayerPlacement,
 } from '@axe/domain/tabletop/table-background-layer';
+import { TABLE_BGM_STOP } from '@axe/domain/tabletop/table-bgm';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { RoomPanelService } from '@axe/features/panels/room-panel.service';
 import {
@@ -89,6 +93,7 @@ export class GameTableSettingComponent {
   private readonly objectChange = inject(ObjectChangeService);
   private readonly visionService = inject(VisionService);
   private readonly cutInService = inject(CutInService);
+  private readonly tableBgmService = inject(TableBgmService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly roomPanels = inject(RoomPanelService);
 
@@ -570,8 +575,11 @@ export class GameTableSettingComponent {
   }
 
   /**
-   * Chosen from the list, which is the one moment a cut-in belongs.
+   * Chosen from the list, which is the one moment a cut-in and the table's music belong.
    * Creating, restoring and loading a room go through selectGameTable() and stay quiet.
+   *
+   * The music is changed first, so a cut-in that brings music of its own still stops it, as it
+   * would any other track.
    */
   chooseGameTable(identifier: string): void {
     const wasShowing = this.tableSelecter.viewTableIdentifier;
@@ -579,7 +587,9 @@ export class GameTableSettingComponent {
     if (identifier === wasShowing) return;
 
     const table = this.objectStore.get<GameTable>(identifier);
-    if (table) this.cutInService.launchForTable(table);
+    if (!table) return;
+    this.tableBgmService.applyFor(table);
+    this.cutInService.launchForTable(table);
   }
 
   /**
@@ -622,6 +632,29 @@ export class GameTableSettingComponent {
   set tableCutIns(identifiers: string[]) {
     if (!this.isEditable || !this.selectedTable) return;
     this.selectedTable.cutInIdentifiers = encodeCutInIdentifiers(identifiers ?? []);
+  }
+
+  /** What the picked table plays when chosen; see `GameTable.bgm`. */
+  get tableBgm(): string {
+    return this.selectedTable?.bgm ?? '';
+  }
+  set tableBgm(value: string) {
+    if (!this.isEditable || !this.selectedTable) return;
+    this.selectedTable.bgm = value ?? '';
+  }
+
+  /** Leave the music alone, stop it, and then each track in the room that is not a sound effect. */
+  getBgmChoices(): { value: string; label: string }[] {
+    this.objectChange.fileVersion();
+    this.objectChange.collectionOf('audio-tag')();
+    const tracks = AudioStorage.instance.audios
+      .filter((audio) => !audio.isHidden && AudioTag.get(audio.identifier)?.tag !== 'SE')
+      .map((audio) => ({ value: audio.identifier, label: audio.name }));
+    return [
+      { value: '', label: this.t('feature.tabletop.tableSetting.bgmKeep') },
+      { value: TABLE_BGM_STOP, label: this.t('feature.tabletop.tableSetting.bgmStop') },
+      ...tracks,
+    ];
   }
 
   /** Every table in the room, for the table list. */

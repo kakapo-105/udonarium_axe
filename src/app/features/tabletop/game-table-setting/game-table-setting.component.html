@@ -89,6 +89,7 @@
           <div class="flex flex-col gap-1">
             <ng-select
               class="ud-select"
+              data-testid="table-cut-ins"
               [multiple]="true"
               [(ngModel)]="tableCutIns"
               [ngModelOptions]="{ standalone: true }"
@@ -100,6 +101,24 @@
               }
             </ng-select>
             <span class="text-ui-dim text-[11px]">{{ 'feature.tabletop.tableSetting.cutInsHint' | transloco }}</span>
+          </div>
+          <label class="text-ui-muted text-[11px] whitespace-nowrap">{{
+            'feature.tabletop.tableSetting.bgm' | transloco
+          }}</label>
+          <div class="flex flex-col gap-1">
+            <ng-select
+              class="ud-select"
+              data-testid="table-bgm"
+              [items]="getBgmChoices()"
+              bindValue="value"
+              bindLabel="label"
+              [clearable]="false"
+              [searchable]="true"
+              [(ngModel)]="tableBgm"
+              [ngModelOptions]="{ standalone: true }"
+              [readonly]="!isEditable"
+            ></ng-select>
+            <span class="text-ui-dim text-[11px]">{{ 'feature.tabletop.tableSetting.bgmHint' | transloco }}</span>
           </div>
         </div>
       </div>
