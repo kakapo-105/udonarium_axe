@@ -163,4 +163,29 @@ export class SessionCommandService {
     if (!message) fail('NOT_READY', 'Chat is not ready.');
     return { identifier: message.identifier, tabId: tab.identifier };
   }
+
+  /**
+   * Says a line as the piece, exactly as a player's palette or buff command would be said.
+   *
+   * References are filled in, a line aimed at targets is spoken once for each of `targets`, and
+   * resource, buff and effect commands in it are carried out. With no targets given, the pieces
+   * marked on the table stand in, as they do for a player.
+   */
+  async speakAs(
+    tab: ChatTab,
+    character: GameCharacter,
+    line: string,
+    targets: readonly GameCharacter[] | undefined,
+    guard: () => void
+  ) {
+    const gameSystem = await DiceBot.loadGameSystemAsync(this.macro.gameTypeFor(character));
+    // Loading dice code yields to the UI; permissions may have been withdrawn in the meantime.
+    guard();
+    if (this.store.get(tab.identifier) !== tab || this.store.get(character.identifier) !== character) {
+      fail('CONFLICT', 'The speaker or chat tab was replaced while preparing the message.');
+    }
+    const message = this.macro.send(character, line, { tab, gameSystem, targets });
+    if (!message) fail('NOT_READY', 'Chat is not ready.');
+    return { identifier: message.identifier, tabId: tab.identifier, text: message.text.slice(0, 2000) };
+  }
 }

@@ -97,13 +97,22 @@ export class CharacterMacroService {
   ): Promise<ChatMessage | null> {
     if (options.gameSystem !== undefined) return this.send(character, line, options);
 
-    const gameType =
-      options.gameType ||
+    const gameSystem = await DiceBot.loadGameSystemAsync(this.gameTypeFor(character, options.gameType));
+    return this.send(character, line, { ...options, gameSystem });
+  }
+
+  /**
+   * The dice system a piece's lines are rolled under: the one asked for, else the piece's palette's,
+   * else the room's default, else whatever chat is set to. The plain bot the piece and the room start
+   * with does not count as a choice.
+   */
+  gameTypeFor(character: GameCharacter, requested?: string): string {
+    return (
+      requested ||
       chosenSystem(character.chatPalette?.dicebot) ||
       chosenSystem(this.objectStore.get<Config>('Config')?.defaultDiceBot) ||
-      this.chatMessageService.gameType;
-    const gameSystem = await DiceBot.loadGameSystemAsync(gameType);
-    return this.send(character, line, { ...options, gameSystem });
+      this.chatMessageService.gameType
+    );
   }
 
   /**

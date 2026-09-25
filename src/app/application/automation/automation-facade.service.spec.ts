@@ -19,6 +19,7 @@ import { DataElement } from '@axe/domain/data/data-element';
 import { DiceBot } from '@axe/domain/dice/dice-bot';
 import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { PeerRole } from '@axe/domain/peer/peer-role';
 import { GameTable } from '@axe/domain/tabletop/game-table';
 import { Terrain } from '@axe/domain/tabletop/terrain';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
@@ -328,5 +329,251 @@ describe('AutomationFacadeService', () => {
     expect(store.get<GameCharacter>(pieceId)?.location).toMatchObject({ x: 150, y: 100 });
     expect(store.get<ChatTab>(tabId)?.chatMessages.some((m) => m.text === 'sync spike')).toBe(true);
     expect(store.getObjects<ChatMessage>(ChatMessage).filter((m) => m.text === 'sync spike')).toHaveLength(1);
+  });
+  describe('the palette', () => {
+    let enemy: GameCharacter;
+    beforeEach(() => {
+      DataElement.findElementByReference(piece.rootDataElement!, '移動')!.value = 5;
+      piece.chatPalette!.setPalette('◆攻撃\n2d6+{移動} 攻撃\n//威力=3\nt:HP-{威力}');
+      enemy = GameCharacter.create('Enemy', 1, '');
+      enemy.location = { name: 'table', x: 300, y: 300 };
+    });
+    function say(args: Record<string, unknown>) {
+      return call('palette_send', { characterId: piece.identifier, tabId: tab.identifier, ...args });
+    }
+    function said(): string[] {
+      return tab.chatMessages.map((m) => m.text);
+    }
+
+    it('reads every line with its index and kind, headings and variables included', async () => {
+      const result = await call('palette_get', { identifier: piece.identifier });
+
+      expect(result).toMatchObject({
+        ok: true,
+        data: {
+          lines: [
+            { lineIndex: 0, kind: 'heading', heading: '攻撃', level: 1 },
+            { lineIndex: 1, kind: 'command', text: '2d6+{移動} 攻撃' },
+            { lineIndex: 2, kind: 'variable', text: '//威力=3' },
+            { lineIndex: 3, kind: 'command', text: 't:HP-{威力}' },
+          ],
+          untrustedContent: true,
+        },
+      });
+    });
+
+    it('needs its own grant before a line is said', async () => {
+      error(await say({ lineIndex: 1 }), 'FORBIDDEN');
+      expect(said()).toEqual([]);
+    });
+
+    it('says a line as the piece with its references filled in, as clicking it would', async () => {
+      policy.setScope('use_palette', true);
+
+      const result = await say({ lineIndex: 1 });
+
+      expect(result).toMatchObject({ ok: true, data: { text: '2d6+5 攻撃' } });
+      expect(said()).toEqual(['2d6+5 攻撃']);
+      expect(tab.chatMessages[0].name).toBe('Piece');
+    });
+
+    it('aims a t: line at the targets named', async () => {
+      policy.setScope('use_palette', true);
+
+      expect((await say({ lineIndex: 3, targetIds: [enemy.identifier] })).ok).toBe(true);
+
+      expect(said()).toEqual(['t:HP-3 [Enemy]']);
+    });
+
+    it('says only command lines, and refuses a line edited since it was read', async () => {
+      policy.setScope('use_palette', true);
+
+      error(await say({ lineIndex: 0 }), 'NOT_FOUND');
+      error(await say({ lineIndex: 2 }), 'NOT_FOUND');
+      error(await say({ lineIndex: 99 }), 'NOT_FOUND');
+      error(await say({ lineIndex: 1, expectedText: '2d6 攻撃' }), 'CONFLICT');
+      expect(said()).toEqual([]);
+    });
+
+    it('checks a line without saying it on a dry run', async () => {
+      policy.setScope('use_palette', true);
+
+      expect(await say({ lineIndex: 1, dryRun: true })).toMatchObject({ ok: true, data: { dryRun: true } });
+      expect(said()).toEqual([]);
+    });
+
+    it('speaks only for a piece the operator may control', async () => {
+      policy.setScope('use_palette', true);
+      // Config outlives each test, so the room's limit is set here rather than taken as left.
+      Config.instance.automationOwnedOnly = true;
+      piece.owner = 'someone-else';
+
+      error(await say({ lineIndex: 1 }), 'FORBIDDEN');
+    });
+  });
+
+  it('reads a sheet field by field, resources with what is left', async () => {
+    const hp = DataElement.findElementByReference(piece.rootDataElement!, 'HP')!;
+    hp.value = 20;
+    hp.currentValue = 12;
+
+    const result = await call('character_sheet_get', { identifier: piece.identifier });
+
+    expect(result.ok).toBe(true);
+    const fields = (result as { data: { fields: { path: string; value: string; current?: string }[] } }).data.fields;
+    expect(fields.find((f) => f.path.endsWith('/HP'))).toMatchObject({ value: '20', current: '12' });
+  });
+
+  describe('buffs', () => {
+    function run(commands: unknown, extra: Record<string, unknown> = {}) {
+      return call('buff_send', { characterId: piece.identifier, tabId: tab.identifier, commands, ...extra });
+    }
+
+    it('reads the buffs on one piece as plain data', async () => {
+      piece.buffs.addRound('猛攻撃', '攻撃+2', 3);
+
+      const result = await call('buff_list', { identifier: piece.identifier });
+
+      expect(result).toMatchObject({
+        ok: true,
+        data: { identifier: piece.identifier, buffs: [{ name: '猛攻撃', value: 3, info: '攻撃+2' }] },
+      });
+    });
+
+    it('lists every visible piece carrying a buff when no piece is named', async () => {
+      const bare = GameCharacter.create('Bare', 1, '');
+      bare.location = { name: 'table', x: 300, y: 300 };
+      piece.buffs.addRound('毒', '', 2);
+
+      const result = await call('buff_list');
+
+      expect(result).toMatchObject({ ok: true, data: { pieces: [{ identifier: piece.identifier }] } });
+      expect((result as { data: { pieces: unknown[] } }).data.pieces).toHaveLength(1);
+    });
+
+    it('needs its own grant before a buff command is run', async () => {
+      error(await run(['&猛攻撃']), 'FORBIDDEN');
+      expect(tab.chatMessages).toHaveLength(0);
+    });
+
+    it('says the buff commands as the piece and carries them out, as typing them into chat would', async () => {
+      policy.setScope('edit_buff', true);
+
+      expect(await run(['&猛攻撃/攻撃+2/3'])).toMatchObject({ ok: true, data: { text: '&猛攻撃/攻撃+2/3' } });
+
+      expect(tab.chatMessages[0]).toMatchObject({ name: 'Piece', text: '&猛攻撃/攻撃+2/3' });
+      await vi.waitFor(() => expect(piece.buffs.snapshot()).toMatchObject([{ name: '猛攻撃', value: 3 }]));
+    });
+
+    it('aims a t& command at the targets named', async () => {
+      policy.setScope('edit_buff', true);
+      const enemy = GameCharacter.create('Enemy', 1, '');
+      enemy.location = { name: 'table', x: 300, y: 300 };
+
+      expect((await run(['t&毒/継続2/3'], { targetIds: [enemy.identifier] })).ok).toBe(true);
+
+      expect(tab.chatMessages[0].text).toBe('t&毒/継続2/3 [Enemy]');
+      await vi.waitFor(() => expect(enemy.buffs.snapshot()).toMatchObject([{ name: '毒', value: 3 }]));
+      expect(piece.buffs.snapshot()).toEqual([]);
+    });
+
+    it('refuses anything that is not a buff command, so nothing else reaches the room', async () => {
+      policy.setScope('edit_buff', true);
+
+      for (const commands of [['hello'], [':HP-5'], ['&猛攻撃 hello'], [], 'not a list']) {
+        error(await run(commands), 'INVALID_ARGUMENT');
+      }
+      expect(tab.chatMessages).toHaveLength(0);
+    });
+  });
+
+  describe('buffs across the table', () => {
+    let other: GameCharacter;
+    beforeEach(() => {
+      // Config outlives each test, so the room's limit is set here rather than taken as left.
+      Config.instance.automationOwnedOnly = true;
+      other = GameCharacter.create('Other', 1, '');
+      other.owner = 'someone-else';
+      other.location = { name: 'table', x: 300, y: 300 };
+      other.buffs.addRound('毒', '継続2', 3);
+    });
+    function buffId(piece: GameCharacter, index = 0): string {
+      return (piece.buffDataElement!.children[0].children[index] as DataElement).identifier;
+    }
+    function edit(args: Record<string, unknown>) {
+      return call('buff_edit', { identifier: buffId(other), ...args });
+    }
+    /** A change of role withdraws every grant by design, so the operator enables them again. */
+    function becomeRole(role: PeerRole) {
+      PeerCursor.myCursor.role = role;
+      facade.health();
+      policy.enable();
+      policy.setScope('edit_buff', true);
+    }
+
+    it('gives each buff the identifier an edit takes it by', async () => {
+      const result = await call('buff_list', { identifier: other.identifier });
+
+      expect(result).toMatchObject({
+        ok: true,
+        data: { buffs: [{ identifier: buffId(other), name: '毒', value: 3 }] },
+      });
+    });
+
+    it('edits a buff on a piece somebody else owns, as the buff manager lets anyone do', async () => {
+      policy.setScope('edit_buff', true);
+
+      const result = await edit({ name: ' 猛毒 ', info: '継続3', rounds: 1.6, timing: 'turnStart', trigger: 'Other' });
+
+      expect(result).toMatchObject({ ok: true, data: { name: '猛毒', info: '継続3', value: 2 } });
+      expect(other.buffs.snapshot()[0].appearance).toMatchObject({ timing: 'turnStart', trigger: 'Other' });
+    });
+
+    it('drops the trigger when the buff goes back to counting down at the end of the round', async () => {
+      policy.setScope('edit_buff', true);
+      await edit({ timing: 'turnStart', trigger: 'Other' });
+
+      await edit({ timing: 'roundEnd' });
+
+      expect(other.buffs.snapshot()[0].appearance.trigger).toBeFalsy();
+    });
+
+    it('takes a buff off', async () => {
+      policy.setScope('edit_buff', true);
+
+      expect(await edit({ remove: true })).toMatchObject({ ok: true, data: { removed: true } });
+      expect(other.buffs.snapshot()).toEqual([]);
+    });
+
+    it('needs its grant, refuses guests, and finds nothing that is not a buff', async () => {
+      error(await edit({ rounds: 1 }), 'FORBIDDEN');
+      policy.setScope('edit_buff', true);
+      error(await call('buff_edit', { identifier: other.identifier, rounds: 1 }), 'NOT_FOUND');
+      error(await edit({}), 'INVALID_ARGUMENT');
+      error(await edit({ timing: 'sometime' }), 'INVALID_ARGUMENT');
+      becomeRole(PeerRole.Guest);
+      error(await edit({ rounds: 1 }), 'FORBIDDEN');
+      expect(other.buffs.snapshot()[0].value).toBe(3);
+    });
+
+    it('sweeps the table only for the game master, counting first on a dry run', async () => {
+      policy.setScope('edit_buff', true);
+      piece.buffs.addRound('毒', '', 2);
+      error(await call('buff_sweep', { kind: 'name', name: '毒' }), 'FORBIDDEN');
+
+      becomeRole(PeerRole.GameMaster);
+      expect(await call('buff_sweep', { kind: 'name', name: '毒', dryRun: true })).toMatchObject({
+        ok: true,
+        data: { characters: 2, buffs: 2, dryRun: true },
+      });
+      expect(other.buffs.snapshot()).toHaveLength(1);
+
+      expect(await call('buff_sweep', { kind: 'name', name: '毒' })).toMatchObject({
+        ok: true,
+        data: { characters: 2, buffs: 2 },
+      });
+      expect([...piece.buffs.snapshot(), ...other.buffs.snapshot()]).toEqual([]);
+      expect(tab.chatMessages.at(-1)?.text).toContain('（2体・2件）');
+    });
   });
 });

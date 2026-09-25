@@ -6,9 +6,32 @@ export const AUTOMATION_COMMANDS = [
   'piece_move',
   'chat_send',
   'chat_read_recent',
+  'character_sheet_get',
+  'palette_get',
+  'palette_send',
+  'buff_list',
+  'buff_send',
+  'buff_edit',
+  'buff_sweep',
 ] as const;
 export type AutomationCommand = (typeof AUTOMATION_COMMANDS)[number];
-export const AUTOMATION_SCOPES = ['read_visible', 'move_piece', 'send_chat', 'edit_resource'] as const;
+export const AUTOMATION_SCOPES = [
+  'read_visible',
+  'move_piece',
+  'send_chat',
+  'edit_resource',
+  'use_palette',
+  'edit_buff',
+] as const;
+/** The commands that change the room, which are run one at a time and may be replayed by request ID. */
+export const AUTOMATION_WRITES: readonly AutomationCommand[] = [
+  'piece_move',
+  'chat_send',
+  'palette_send',
+  'buff_send',
+  'buff_edit',
+  'buff_sweep',
+];
 export type AutomationScope = (typeof AUTOMATION_SCOPES)[number];
 export type AutomationErrorCode =
   | 'NOT_READY'

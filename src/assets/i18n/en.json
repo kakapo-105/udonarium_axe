@@ -160,7 +160,9 @@
         "read_visible": "Read visible information",
         "move_piece": "Move pieces",
         "send_chat": "Send chat",
-        "edit_resource": "Adjust the speaking character’s resources (e.g. :HP-5)"
+        "edit_resource": "Adjust the speaking character’s resources (e.g. :HP-5)",
+        "use_palette": "Use chat palettes (references, targets and resource edits included)",
+        "edit_buff": "Edit buffs and debuffs"
       },
       "ownedOnly": "Limit AI control to pieces owned by this user",
       "roomHint": "The ownership limit is shared by the room. Only the GM can change it.",

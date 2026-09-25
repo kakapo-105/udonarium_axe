@@ -24,7 +24,7 @@ test('the real stdio entry point lists tools and reports missing Chromium withou
   });
   try {
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length, 6);
+    assert.equal((await client.listTools()).tools.length, 13);
     const result = await client.callTool({ name: 'session_get', arguments: {} });
     assert.equal(result.structuredContent.error.code, 'NOT_READY');
     assert.match(stderr, /Udonarium browser/);
@@ -47,19 +47,28 @@ async function connected(invoke, work) {
   }
 }
 
-test('exposes exactly the six bounded tools with schemas and read annotations', async () => {
+test('exposes exactly the thirteen bounded tools with schemas and read annotations', async () => {
   await connected(
     async () => ({ ok: true, data: {} }),
     async (client) => {
       const { tools } = await client.listTools();
       assert.deepEqual(tools.map((t) => t.name).sort(), [
+        'buff_edit',
+        'buff_list',
+        'buff_send',
+        'buff_sweep',
+        'character_sheet_get',
         'chat_read_recent',
         'chat_send',
         'object_get',
+        'palette_get',
+        'palette_send',
         'piece_move',
         'scene_list',
         'session_get',
       ]);
+      assert.equal(tools.find((t) => t.name === 'palette_send').annotations.readOnlyHint, false);
+      assert.equal(tools.find((t) => t.name === 'palette_get').annotations.readOnlyHint, true);
       const move = tools.find((t) => t.name === 'piece_move');
       assert(move.inputSchema.required.includes('sessionId'));
       assert.equal(move.annotations.readOnlyHint, false);

@@ -39,6 +39,14 @@ export class AutomationPolicyService {
   canSee(piece: GameCharacter): boolean {
     return piece.location.name === 'table' && this.disclosure.canView(piece) && this.vision.isTokenVisible(piece);
   }
+  /**
+   * Whether what a piece carries may be managed across the table, as the buff manager lets anyone at
+   * the table do: any piece that can be seen, whoever owns it. Guests only watch.
+   */
+  canManage(piece: GameCharacter): void {
+    if (!this.role.canEditTabletop) fail('FORBIDDEN', 'Guests cannot manage pieces.');
+    if (!this.canSee(piece)) fail('NOT_FOUND', 'Visible piece not found.');
+  }
   canControl(piece: GameCharacter): void {
     if (!this.role.canEditTabletop) fail('FORBIDDEN', 'Guests cannot control pieces.');
     if (!this.canSee(piece)) fail('NOT_FOUND', 'Visible piece not found.');
