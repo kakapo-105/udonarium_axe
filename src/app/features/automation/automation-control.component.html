@@ -1,6 +1,11 @@
 <aside
-  class="border-ui-border-panel bg-ui-panel text-ui-text fixed right-3 bottom-3 z-300 max-w-sm rounded-lg border p-3 shadow-lg"
+  #panel
+  class="border-ui-border-panel bg-ui-panel text-ui-text fixed top-0 left-0 z-300 max-w-sm cursor-grab rounded-lg border p-3 shadow-lg select-none active:cursor-grabbing"
   data-testid="automation-control"
+  appDraggable
+  [draggable.unhandle]="'input,button,label,summary,ol'"
+  [appWidgetPlace]="widgetName"
+  [widgetFallback]="fallback"
 >
   <div class="flex items-center gap-3">
     <button type="button" (click)="expanded.set(!expanded())" [attr.aria-expanded]="expanded()">
