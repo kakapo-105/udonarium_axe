@@ -643,8 +643,14 @@ export class GameTableSettingComponent {
     this.selectedTable.bgm = value ?? '';
   }
 
-  /** Leave the music alone, stop it, and then each track in the room that is not a sound effect. */
-  getBgmChoices(): { value: string; label: string }[] {
+  /**
+   * Leave the music alone, stop it, and then each track in the room that is not a sound effect.
+   *
+   * Computed rather than worked out on every check, so the select is handed the same list until the
+   * room's tracks change. Handed a new one each time, it rebuilds its options while a click is still
+   * held down, and the click lands on an option that is no longer there.
+   */
+  readonly bgmChoices = computed<{ value: string; label: string }[]>(() => {
     this.objectChange.fileVersion();
     this.objectChange.collectionOf('audio-tag')();
     const tracks = AudioStorage.instance.audios
@@ -655,7 +661,7 @@ export class GameTableSettingComponent {
       { value: TABLE_BGM_STOP, label: this.t('feature.tabletop.tableSetting.bgmStop') },
       ...tracks,
     ];
-  }
+  });
 
   /** Every table in the room, for the table list. */
   getGameTables(): GameTable[] {

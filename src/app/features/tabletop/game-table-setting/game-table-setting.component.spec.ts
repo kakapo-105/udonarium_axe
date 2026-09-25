@@ -183,6 +183,10 @@ describe('GameTableSettingComponent', () => {
       expect(order).toEqual(['bgm', 'cutIn']);
     });
 
+    it('hands the music select the same list until the tracks change, so a held click still lands', () => {
+      expect(component.bgmChoices()).toBe(component.bgmChoices());
+    });
+
     it('leaves the music alone when a table is only created', () => {
       const applyFor = vi.spyOn(TestBed.inject(TableBgmService), 'applyFor');
 
@@ -198,7 +202,7 @@ describe('GameTableSettingComponent', () => {
       expect(table.bgm).toBe(TABLE_BGM_STOP);
       expect(
         component
-          .getBgmChoices()
+          .bgmChoices()
           .map((choice) => choice.value)
           .slice(0, 2)
       ).toEqual(['', TABLE_BGM_STOP]);
