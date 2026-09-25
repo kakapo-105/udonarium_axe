@@ -1,10 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CutInService } from '@axe/application/media/cut-in.service';
+import { TableBgmService } from '@axe/application/media/table-bgm.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { CutIn } from '@axe/domain/media/cut-in';
 import { Config } from '@axe/domain/peer/config';
 import { FilterType, GameTable, GridSnapStyle, GridType } from '@axe/domain/tabletop/game-table';
+import { TABLE_BGM_STOP } from '@axe/domain/tabletop/table-bgm';
 import { GameTableSettingComponent } from '@axe/features/tabletop/game-table-setting/game-table-setting.component';
 import { expectPanelDragRecovery, PanelDragTestHostComponent } from '@axe/testing/panel-drag-recovery';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
@@ -165,6 +167,43 @@ describe('GameTableSettingComponent', () => {
       expect(launchForTable).not.toHaveBeenCalled();
     });
 
+    it("changes the music to the table's before its cut-in plays, so a cut-in with music still wins", () => {
+      const order: string[] = [];
+      vi.spyOn(TestBed.inject(TableBgmService), 'applyFor').mockImplementation(() => {
+        order.push('bgm');
+        return { kind: 'keep' };
+      });
+      vi.spyOn(TestBed.inject(CutInService), 'launchForTable').mockImplementation(() => {
+        order.push('cutIn');
+        return true;
+      });
+
+      component.chooseGameTable(table.identifier);
+
+      expect(order).toEqual(['bgm', 'cutIn']);
+    });
+
+    it('leaves the music alone when a table is only created', () => {
+      const applyFor = vi.spyOn(TestBed.inject(TableBgmService), 'applyFor');
+
+      component.selectGameTable(table.identifier);
+
+      expect(applyFor).not.toHaveBeenCalled();
+    });
+
+    it("keeps the table's music setting, and offers to keep, stop or play each track that is not a sound effect", () => {
+      component.selectGameTable(table.identifier);
+      component.tableBgm = TABLE_BGM_STOP;
+
+      expect(table.bgm).toBe(TABLE_BGM_STOP);
+      expect(
+        component
+          .getBgmChoices()
+          .map((choice) => choice.value)
+          .slice(0, 2)
+      ).toEqual(['', TABLE_BGM_STOP]);
+    });
+
     function cutInsNamed(...identifiers: string[]): CutIn[] {
       return identifiers.map((identifier) => {
         const cutIn = new CutIn(identifier);
@@ -193,7 +232,7 @@ describe('GameTableSettingComponent', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      const labels = [...fixture.nativeElement.querySelectorAll('.ng-value-label')].map(
+      const labels = [...fixture.nativeElement.querySelectorAll('[data-testid="table-cut-ins"] .ng-value-label')].map(
         (node: Element) => node.textContent
       );
       expect(labels).toContain('オープニング');
@@ -209,7 +248,7 @@ describe('GameTableSettingComponent', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      const labels = [...fixture.nativeElement.querySelectorAll('.ng-value-label')].map(
+      const labels = [...fixture.nativeElement.querySelectorAll('[data-testid="table-cut-ins"] .ng-value-label')].map(
         (node: Element) => node.textContent
       );
       expect(component.tableCutIns).toEqual(['cut-1']);
