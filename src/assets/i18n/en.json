@@ -150,6 +150,24 @@
     }
   },
   "feature": {
+    "automation": {
+      "active": "AI control: active",
+      "inactive": "AI control: stopped",
+      "stop": "Stop",
+      "enable": "Enable",
+      "sessionHint": "Grants last for this session only and reset on reload, connection or role changes.",
+      "scope": {
+        "read_visible": "Read visible information",
+        "move_piece": "Move pieces",
+        "send_chat": "Send chat",
+        "edit_resource": "Adjust the speaking character’s resources (e.g. :HP-5)",
+        "use_palette": "Use chat palettes (references, targets and resource edits included)",
+        "edit_buff": "Edit buffs and debuffs"
+      },
+      "ownedOnly": "Limit AI control to pieces owned by this user",
+      "roomHint": "The ownership limit is shared by the room. Only the GM can change it.",
+      "audit": "Recent operations (up to 100)"
+    },
     "role": {
       "gm": "Game Master",
       "gmShort": "GM",

@@ -28,6 +28,8 @@ import {
 
 @SyncObject('config')
 export class Config extends ObjectNode implements InnerXml {
+  /** The room's upper bound for automation; grants themselves belong to each browser session. */
+  @SyncVar() automationOwnedOnly: boolean = true;
   @SyncVar('_defaultDiceBot') private _defaultDiceBot: string = 'DiceBot';
   @SyncVar('_roomVolume') private _roomVolume: number = 1.0;
   @SyncVar('_systemAvatarIdentifier') private _systemAvatarIdentifier: string = '';

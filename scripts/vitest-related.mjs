@@ -149,4 +149,10 @@ if (specs.length === 0) {
   process.exit(0);
 }
 console.log(`[vitest-related] ${specs.length} spec(s) reach the staged sources`);
+// Windows goes through cmd.exe, whose command line stops at 8191 characters. A commit reaching
+// that many specs is most of the suite anyway, so the whole of it is run instead.
+if (process.platform === 'win32' && specs.join(' ').length > 7000) {
+  console.log('[vitest-related] too many to name on one command line; running every spec');
+  run([]);
+}
 run(specs);

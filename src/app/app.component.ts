@@ -36,6 +36,7 @@ import { ThemeService } from '@axe/application/ui/theme.service';
 import { ViewportService } from '@axe/application/ui/viewport.service';
 import { WIDGET_FAB } from '@axe/application/ui/widget-place';
 import { WidgetVisibilityService } from '@axe/application/ui/widget-visibility.service';
+import { BrowserAutomationAdapter } from '@axe/composition/automation/browser-automation-adapter';
 import { Network } from '@axe/core/network/network';
 import { FileArchiver } from '@axe/core/storage/file-archiver';
 import { ObjectStore } from '@axe/core/sync/object-store';
@@ -45,6 +46,7 @@ import { ReloadCheck } from '@axe/domain/peer/reload-check';
 import { FAB_ENTRIES, FAB_SUBMENUS, FabEntry, FabSubmenuName } from '@axe/domain/ui/fab-menu';
 import { RoomPanelName } from '@axe/domain/ui/room-panel';
 import { AlarmEventHandlerService } from '@axe/features/alarm/alarm-event-handler.service';
+import { AutomationControlComponent } from '@axe/features/automation/automation-control.component';
 import { CardStackListImageComponent } from '@axe/features/card/card-stack-list-img/card-stack-list-img.component';
 import { HandDragGhostComponent } from '@axe/features/card/hand-rail/hand-drag-ghost.component';
 import { HandRailComponent } from '@axe/features/card/hand-rail/hand-rail.component';
@@ -128,6 +130,7 @@ interface FabSubmenuOpener {
   selector: 'app-root',
   templateUrl: './app.component.html',
   imports: [
+    AutomationControlComponent,
     GameTableComponent,
     NetworkIndicatorComponent,
     MiniJukeboxComponent,
@@ -164,6 +167,7 @@ interface FabSubmenuOpener {
   host: { '(window:resize)': 'measureFabSides()' },
 })
 export class AppComponent {
+  readonly automation = inject(BrowserAutomationAdapter);
   // Built with the shell, whether or not anything shows them: each dresses the page in this
   // seat's setting as it starts, before the first screen is drawn.
   private readonly theme = inject(ThemeService);

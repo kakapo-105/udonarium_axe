@@ -1,3 +1,6 @@
+@if (automation.available) {
+  <automation-control />
+}
 @if (overlayMode.active()) {
   @defer (on immediate) {
     <streaming-overlay />

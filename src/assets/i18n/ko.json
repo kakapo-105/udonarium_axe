@@ -150,6 +150,24 @@
     }
   },
   "feature": {
+    "automation": {
+      "active": "AI 조작: 활성",
+      "inactive": "AI 조작: 중지",
+      "stop": "중지",
+      "enable": "활성화",
+      "sessionHint": "허용은 현재 세션에만 적용됩니다. 새로고침, 연결 또는 역할 변경 시 초기화됩니다.",
+      "scope": {
+        "read_visible": "보이는 정보 읽기",
+        "move_piece": "말 이동",
+        "send_chat": "채팅 보내기",
+        "edit_resource": "발언 캐릭터의 리소스 증감 (예: :HP-5)",
+        "use_palette": "채팅 팔레트 사용(참조·대상·리소스 조작 포함)",
+        "edit_buff": "버프·디버프 조작"
+      },
+      "ownedOnly": "자신이 소유한 말만 AI가 조작할 수 있도록 제한",
+      "roomHint": "소유권 제한은 방의 공통 설정입니다. GM만 변경할 수 있습니다.",
+      "audit": "최근 조작 기록 (최대 100개)"
+    },
     "role": {
       "gm": "게임 마스터",
       "gmShort": "GM",
