@@ -43,7 +43,7 @@ import { ObjectStore } from '@axe/core/sync/object-store';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
 import { ReloadCheck } from '@axe/domain/peer/reload-check';
-import { FAB_ENTRIES, FAB_SUBMENUS, FabEntry, FabSubmenuName } from '@axe/domain/ui/fab-menu';
+import { FAB_ENTRIES, FAB_SUBMENUS, FabEntry, fabLinkUrl, FabSubmenuName } from '@axe/domain/ui/fab-menu';
 import { RoomPanelName } from '@axe/domain/ui/room-panel';
 import { AlarmEventHandlerService } from '@axe/features/alarm/alarm-event-handler.service';
 import { AutomationControlComponent } from '@axe/features/automation/automation-control.component';
@@ -342,6 +342,8 @@ export class AppComponent {
     if (entry.action.kind === 'panel') this.open(entry.action.panel);
     else if (entry.action.kind === 'visualNovel') this.visualNovel.toggle();
     else if (entry.action.kind === 'handRail') this.handRail.toggle();
+    else if (entry.action.kind === 'link')
+      window.open(fabLinkUrl(entry.action.href, document.baseURI), '_blank', 'noopener');
   }
   isSaving = signal(false);
   progressPercent = signal(0);

@@ -4056,6 +4056,7 @@
   },
   "app": {
     "fab": {
+      "manual": "マニュアル",
       "menuOpen": "メニューを開く",
       "menuClose": "メニューを閉じる",
       "peerMenu": "接続",

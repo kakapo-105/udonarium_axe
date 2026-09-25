@@ -5,13 +5,26 @@ export type FabSubmenuName = 'table' | 'gameResources' | 'media';
 
 /**
  * What choosing an entry does. Most open a panel; the novel mode and the hand are switched on and
- * off instead, and an entry that gathers several opens a small menu of them.
+ * off instead, an entry that gathers several opens a small menu of them, and a link opens a page in
+ * a tab of its own, its address read from where the app is served.
  */
 export type FabAction =
   | { kind: 'panel'; panel: RoomPanelName }
   | { kind: 'visualNovel' }
   | { kind: 'handRail' }
-  | { kind: 'submenu'; submenu: FabSubmenuName };
+  | { kind: 'submenu'; submenu: FabSubmenuName }
+  | { kind: 'link'; href: string };
+
+/** Where the user guide is served, beside the app, when it is built with it. */
+export const MANUAL_HREF = 'docs/';
+
+/**
+ * The address a link entry opens: its href read from the address the app is served under, so the
+ * guide is found beside the app wherever it is published, and not at the root of the site.
+ */
+export function fabLinkUrl(href: string, appBase: string): string {
+  return new URL(href, appBase).href;
+}
 
 /**
  * Who an entry is offered to, when not to everyone: the game master alone, or everyone at the table
@@ -54,6 +67,7 @@ export const FAB_ENTRIES: readonly FabEntry[] = [
   submenu('table', 'table_restaurant'),
   submenu('gameResources', 'backpack'),
   submenu('media', 'movie'),
+  { key: 'manual', icon: 'menu_book', labelKey: 'app.fab.manual', action: { kind: 'link', href: MANUAL_HREF } },
 ];
 
 /** What each small menu opened from the drawer holds, in the order it is shown. */

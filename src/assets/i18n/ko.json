@@ -4303,6 +4303,7 @@
   },
   "app": {
     "fab": {
+      "manual": "매뉴얼",
       "menuOpen": "메뉴 열기",
       "menuClose": "메뉴 닫기",
       "peerMenu": "접속",

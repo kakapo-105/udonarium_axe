@@ -49,6 +49,22 @@ jobs:
       - name: Drop release zip
         run: rm -f dist/axe_*.zip
 
+      # website/ の利用ガイド（VitePress）を、アプリと同じ Pages の docs/ に同居させる。
+      # 参加者向けページの「遊ぶ場所」は上流の公開版を指しているので、このビルドでだけ
+      # このフォークのアプリに差し替える（リポジトリの文章は変えない）。
+      - name: Build the guide into docs/
+        working-directory: website
+        env:
+          DOCS_BASE: /udonarium_axe/docs/
+          DOCS_SITE_URL: https://kakapo-105.github.io/udonarium_axe/docs/
+        run: |
+          npm ci
+          grep -rl --include='*.md' 'https://axe.xelltis.com' . --exclude-dir=node_modules \
+            | xargs -r sed -i 's#https://axe\.xelltis\.com/\?#https://kakapo-105.github.io/udonarium_axe/#g'
+          npm run build
+          cp -r .vitepress/dist ../dist/docs
+          test -s ../dist/docs/index.html
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

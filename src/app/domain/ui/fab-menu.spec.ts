@@ -1,4 +1,4 @@
-import { FAB_ENTRIES, FAB_SUBMENUS } from '@axe/domain/ui/fab-menu';
+import { FAB_ENTRIES, FAB_SUBMENUS, fabLinkUrl, MANUAL_HREF } from '@axe/domain/ui/fab-menu';
 import { ROOM_PANELS } from '@axe/domain/ui/room-panel';
 
 describe('the menu the room is reached through', () => {
@@ -26,7 +26,25 @@ describe('the menu the room is reached through', () => {
       'table',
       'gameResources',
       'media',
+      'manual',
     ]);
+  });
+
+  it('ends with the user guide, opened from beside the app rather than from any one address', () => {
+    const manual = FAB_ENTRIES.find((entry) => entry.key === 'manual');
+
+    expect(manual?.action).toEqual({ kind: 'link', href: MANUAL_HREF });
+    expect(MANUAL_HREF).not.toMatch(/^[a-z]+:|^\//);
+  });
+
+  it('finds the guide beside the app, wherever the app is published', () => {
+    expect(fabLinkUrl(MANUAL_HREF, 'https://kakapo-105.github.io/udonarium_axe/')).toBe(
+      'https://kakapo-105.github.io/udonarium_axe/docs/'
+    );
+    expect(fabLinkUrl(MANUAL_HREF, 'https://kakapo-105.github.io/udonarium_axe/?automation=1#room')).toBe(
+      'https://kakapo-105.github.io/udonarium_axe/docs/'
+    );
+    expect(fabLinkUrl(MANUAL_HREF, 'http://localhost:4200/')).toBe('http://localhost:4200/docs/');
   });
 
   it('gathers the images, the music, the cut-ins and the effects under media, the effects for those playing', () => {
