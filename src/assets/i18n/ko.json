@@ -150,6 +150,15 @@
     }
   },
   "feature": {
+    "roster": {
+      "title": "캐릭터 목록",
+      "expand": "목록 펼치기",
+      "collapse": "목록 접기",
+      "hide": "캐릭터 목록 숨기기(메뉴의 위젯 설정에서 되돌릴 수 있습니다)",
+      "entryHint": "클릭하면 말로 이동, 더블클릭하면 시트 열기",
+      "empty": "탁자에 표시할 캐릭터가 없습니다",
+      "hideFromRoster": "캐릭터 목록에 표시하지 않음"
+    },
     "automation": {
       "active": "AI 조작: 활성",
       "inactive": "AI 조작: 중지",

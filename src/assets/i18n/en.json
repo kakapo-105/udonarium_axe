@@ -150,6 +150,15 @@
     }
   },
   "feature": {
+    "roster": {
+      "title": "Characters",
+      "expand": "Expand the list",
+      "collapse": "Collapse the list",
+      "hide": "Hide the character list (bring it back from the widgets menu)",
+      "entryHint": "Click to find the piece, double-click to open its sheet",
+      "empty": "No characters on the table to show",
+      "hideFromRoster": "Keep out of the character list"
+    },
     "automation": {
       "active": "AI control: active",
       "inactive": "AI control: stopped",

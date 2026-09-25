@@ -40,6 +40,13 @@
           'feature.inventory.settingsTab.nonTalk' | transloco
         }}
       </label>
+      <label
+        class="text-ui-muted inline-flex cursor-pointer items-center gap-1.25 text-[0.82em] select-none [&_input[type=checkbox]]:cursor-pointer [&_input[type=checkbox]]:[accent-color:var(--ui-accent)]"
+      >
+        <input type="checkbox" data-testid="hide-from-roster" [(ngModel)]="character().hideFromRoster" />{{
+          'feature.roster.hideFromRoster' | transloco
+        }}
+      </label>
     </div>
   </div>
 

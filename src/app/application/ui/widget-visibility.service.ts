@@ -14,6 +14,7 @@ export interface WidgetVisibility {
   readonly hotbar: boolean;
   readonly plToolbar: boolean;
   readonly gmToolbar: boolean;
+  readonly roster: boolean;
 }
 
 const DEFAULT_VISIBILITY: WidgetVisibility = {
@@ -25,6 +26,7 @@ const DEFAULT_VISIBILITY: WidgetVisibility = {
   hotbar: false,
   plToolbar: true,
   gmToolbar: true,
+  roster: true,
 };
 
 /**
@@ -45,6 +47,7 @@ export function parseWidgetVisibility(raw: string | null): WidgetVisibility {
       hotbar: typeof parsed.hotbar === 'boolean' ? parsed.hotbar : DEFAULT_VISIBILITY.hotbar,
       plToolbar: typeof parsed.plToolbar === 'boolean' ? parsed.plToolbar : DEFAULT_VISIBILITY.plToolbar,
       gmToolbar: typeof parsed.gmToolbar === 'boolean' ? parsed.gmToolbar : DEFAULT_VISIBILITY.gmToolbar,
+      roster: typeof parsed.roster === 'boolean' ? parsed.roster : DEFAULT_VISIBILITY.roster,
     };
   } catch {
     return DEFAULT_VISIBILITY;
@@ -63,6 +66,7 @@ export class WidgetVisibilityService {
   readonly hotbar = signal(this.restored.hotbar);
   readonly plToolbar = signal(this.restored.plToolbar);
   readonly gmToolbar = signal(this.restored.gmToolbar);
+  readonly roster = signal(this.restored.roster);
 
   constructor() {
     effect(() => {
@@ -75,6 +79,7 @@ export class WidgetVisibilityService {
         hotbar: this.hotbar(),
         plToolbar: this.plToolbar(),
         gmToolbar: this.gmToolbar(),
+        roster: this.roster(),
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     });
@@ -118,5 +123,10 @@ export class WidgetVisibilityService {
   /** Shows or hides the game master's toolbar. Remembered in this browser. */
   toggleGmToolbar(): void {
     this.gmToolbar.update((visible) => !visible);
+  }
+
+  /** Shows or hides the character roster down the side of the screen. Remembered in this browser. */
+  toggleRoster(): void {
+    this.roster.update((visible) => !visible);
   }
 }

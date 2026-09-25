@@ -79,6 +79,8 @@ export class GameCharacter extends OwnedTabletopObject {
   @SyncVar() chatBubbleLight: string[] = [...DEFAULT_CHAT_BUBBLE_CODES];
   @SyncVar() chatBubbleDark: string[] = [...DEFAULT_CHAT_BUBBLE_CODES];
   @SyncVar() overViewDataTags: string[] = [];
+  /** Kept out of the character roster down the side of the screen, as enemies and extras often are. */
+  @SyncVar() hideFromRoster: boolean = false;
   @SyncVar() syncDummyCounter: number = 0;
 
   @SyncVar() visionType: string = VisionType.NORMAL;

@@ -1,0 +1,91 @@
+@if (widgets.roster()) {
+  <aside
+    class="border-ui-border-panel bg-ui-panel/80 rounded-ui-lg shadow-ui-md text-ui-text fixed top-0 left-0 box-border flex max-h-[calc(100dvh-152px)] w-56 cursor-grab flex-col border border-solid [backdrop-filter:blur(20px)_saturate(1.4)] select-none [-webkit-backdrop-filter:blur(20px)_saturate(1.4)] active:cursor-grabbing"
+    data-testid="character-roster"
+    appDraggable
+    [appWidgetPlace]="widgetName"
+    [widgetFallback]="fallback"
+    [draggable.unhandle]="'button,.roster-entry'"
+  >
+    <header class="border-ui-border-panel flex items-center gap-1 border-b border-solid px-2 py-1">
+      <i class="material-icons text-ui-accent text-[16px]!">groups</i>
+      <span class="flex-1 truncate text-[11px] font-semibold tracking-wider">{{
+        'feature.roster.title' | transloco
+      }}</span>
+      <button
+        type="button"
+        class="text-ui-dim hover:text-ui-text hover:bg-ui-hover inline-flex cursor-pointer items-center rounded-sm border-none bg-transparent p-0 [&_.material-icons]:text-[16px]!"
+        data-testid="roster-collapse"
+        [title]="(collapsed() ? 'feature.roster.expand' : 'feature.roster.collapse') | transloco"
+        [attr.aria-expanded]="!collapsed()"
+        (click)="collapsed.set(!collapsed())"
+      >
+        <i class="material-icons">{{ collapsed() ? 'expand_more' : 'expand_less' }}</i>
+      </button>
+      <button
+        type="button"
+        class="text-ui-dim hover:text-ui-text hover:bg-ui-hover inline-flex cursor-pointer items-center rounded-sm border-none bg-transparent p-0 [&_.material-icons]:text-[16px]!"
+        [title]="'feature.roster.hide' | transloco"
+        (click)="close()"
+      >
+        <i class="material-icons">close</i>
+      </button>
+    </header>
+
+    @if (!collapsed()) {
+      <ul class="m-0 min-h-0 list-none overflow-y-auto p-1">
+        @for (entry of entries(); track entry.character.identifier) {
+          <li
+            class="roster-entry hover:bg-ui-hover rounded-ui-sm flex cursor-pointer gap-2 px-1.5 py-1"
+            data-testid="roster-entry"
+            [title]="'feature.roster.entryHint' | transloco"
+            (click)="focus(entry.character)"
+            (dblclick)="openSheet(entry.character)"
+          >
+            <div class="bg-ui-elevated rounded-ui-sm size-9 shrink-0 overflow-hidden">
+              @if (entry.imageUrl) {
+                <img class="size-full object-cover" [src]="entry.imageUrl | safe: 'resourceUrl'" alt="" />
+              } @else {
+                <i class="material-icons text-ui-dim flex size-full items-center justify-center text-[20px]!">person</i>
+              }
+            </div>
+            <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span class="truncate text-xs/tight font-semibold" data-testid="roster-name">{{ entry.name }}</span>
+              @for (field of resourceFields(entry); track field.identifier) {
+                @if (field.kind === 'resource') {
+                  <div class="flex items-center gap-1 text-[10px] leading-none">
+                    <span class="text-ui-muted w-9 shrink-0 truncate">{{ field.name }}</span>
+                    <div class="bg-ui-elevated h-1.5 min-w-0 flex-1 overflow-hidden rounded-full">
+                      <div
+                        class="h-full rounded-full"
+                        [class.bg-ui-accent]="barRatio(field) > 0.25"
+                        [class.bg-red-500]="barRatio(field) <= 0.25"
+                        [style.width.%]="barRatio(field) * 100"
+                      ></div>
+                    </div>
+                    <span class="shrink-0 [font-variant-numeric:tabular-nums]" data-testid="roster-resource"
+                      >{{ field.current }}/{{ field.max }}</span
+                    >
+                  </div>
+                }
+              }
+              @if (valueFields(entry).length > 0) {
+                <div class="flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] leading-tight">
+                  @for (field of valueFields(entry); track field.identifier) {
+                    @if (field.kind === 'value') {
+                      <span class="min-w-0 truncate" data-testid="roster-value"
+                        ><span class="text-ui-muted">{{ field.name }}</span> {{ field.value }}</span
+                      >
+                    }
+                  }
+                </div>
+              }
+            </div>
+          </li>
+        } @empty {
+          <li class="text-ui-dim px-2 py-3 text-center text-[11px]">{{ 'feature.roster.empty' | transloco }}</li>
+        }
+      </ul>
+    }
+  </aside>
+}
