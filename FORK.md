@@ -39,6 +39,7 @@ git push                 # → 自動でビルド＆公開
 - `{tcount}` — ターゲットを取る行でターゲットの数に置き換わる参照（[website/manual/chat-syntax.md](website/manual/chat-syntax.md#ターゲットの数を読む)）
 - チャットパレットの 2 段見出し — `◆` の下に `■` の見出しを置き、見出しメニューでサブメニューとして開く（[website/manual/chat-palette.md](website/manual/chat-palette.md#見出しを-2-段にする)）
 - `if(条件,真,偽)` — チャットの行・リソース操作・計算項目の式で数値を条件分岐する。リソース操作では `[2d6]` の出目と `$1` での再利用も使える（[website/manual/chat-syntax.md](website/manual/chat-syntax.md#条件で値を切り替える)）
+- キャラクター一覧 — 卓のキャラクターを画面の端にリソースのバーと値で並べるウィジェット。項目はポップアップ表示と同じ。キャラごとに一覧から外せる（[website/manual/character.md](website/manual/character.md#画面の端のキャラクター一覧)）
 - マニュアル — 利用ガイドをアプリの隣（`docs/`）に公開し、アプリのメニューに「マニュアル」を追加
 - MCP による AI 操作 — okamichi さんの `feat/mcp`（1.50.0 ベース）を 1.57.1 へ移植。独自にシート・チャットパレット・バフの操作を追加し、「AI操作」パネルをドラッグで動かせるよう変更。MCP サーバーは `tools/mcp-server` の独立パッケージ（[tools/mcp-server/README.md](tools/mcp-server/README.md)）
 
