@@ -150,6 +150,15 @@
     }
   },
   "feature": {
+    "roster": {
+      "title": "キャラクター一覧",
+      "expand": "一覧を開く",
+      "collapse": "一覧をたたむ",
+      "hide": "キャラクター一覧を隠す（メニューの表示設定から戻せます）",
+      "entryHint": "クリックでコマへ移動、ダブルクリックでシートを開く",
+      "empty": "卓に表示できるキャラクターがいません",
+      "hideFromRoster": "キャラクター一覧に表示しない"
+    },
     "automation": {
       "active": "AI操作：有効",
       "inactive": "AI操作：停止中",

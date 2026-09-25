@@ -51,6 +51,7 @@ import { CardStackListImageComponent } from '@axe/features/card/card-stack-list-
 import { HandDragGhostComponent } from '@axe/features/card/hand-rail/hand-drag-ghost.component';
 import { HandRailComponent } from '@axe/features/card/hand-rail/hand-rail.component';
 import { HandRailService } from '@axe/features/card/hand-rail/hand-rail.service';
+import { CharacterRosterComponent } from '@axe/features/character-roster/character-roster.component';
 import { ChatPortraitImageComponent } from '@axe/features/chat/chat-portrait-img/chat-portrait-img.component';
 import { ChatSettingsEventHandlerService } from '@axe/features/chat/chat-settings-event-handler.service';
 import { ChatSoundEventHandlerService } from '@axe/features/chat/chat-sound-event-handler.service';
@@ -131,6 +132,7 @@ interface FabSubmenuOpener {
   templateUrl: './app.component.html',
   imports: [
     AutomationControlComponent,
+    CharacterRosterComponent,
     GameTableComponent,
     NetworkIndicatorComponent,
     MiniJukeboxComponent,

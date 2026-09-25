@@ -13,6 +13,7 @@ describe('parseWidgetVisibility', () => {
       hotbar: false,
       plToolbar: true,
       gmToolbar: true,
+      roster: true,
     });
   });
 
@@ -28,6 +29,7 @@ describe('parseWidgetVisibility', () => {
       hotbar: false,
       plToolbar: true,
       gmToolbar: true,
+      roster: true,
     });
   });
 
@@ -41,6 +43,7 @@ describe('parseWidgetVisibility', () => {
       hotbar: false,
       plToolbar: true,
       gmToolbar: true,
+      roster: true,
     });
     expect(parseWidgetVisibility('null')).toEqual({
       clock: false,
@@ -51,6 +54,7 @@ describe('parseWidgetVisibility', () => {
       hotbar: false,
       plToolbar: true,
       gmToolbar: true,
+      roster: true,
     });
   });
 
@@ -60,7 +64,13 @@ describe('parseWidgetVisibility', () => {
     expect(parseWidgetVisibility('{"plToolbar":false,"gmToolbar":"false"}')).toMatchObject({
       plToolbar: false,
       gmToolbar: true,
+      roster: true,
     });
+  });
+
+  it('shows the character roster to a seat saved before it existed, and keeps it hidden once hidden', () => {
+    expect(parseWidgetVisibility('{"clock":true}').roster).toBe(true);
+    expect(parseWidgetVisibility('{"roster":false}').roster).toBe(false);
   });
 
   it('fills in only the missing entries', () => {
@@ -73,6 +83,7 @@ describe('parseWidgetVisibility', () => {
       hotbar: false,
       plToolbar: true,
       gmToolbar: true,
+      roster: true,
     });
   });
 });

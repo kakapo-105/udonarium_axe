@@ -180,6 +180,13 @@ export class SeatDisplayMenuComponent {
     }
     buttons.push(
       {
+        testId: 'seat-widget-roster',
+        icon: 'groups',
+        labelKey: 'feature.roster.title',
+        lit: widgets.roster(),
+        press: () => widgets.toggleRoster(),
+      },
+      {
         testId: 'seat-widget-clock',
         icon: 'schedule',
         labelKey: 'app.fab.clock',

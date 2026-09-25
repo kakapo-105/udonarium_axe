@@ -8,6 +8,7 @@ export const WIDGET_HOTBAR = 'hotbar';
 export const WIDGET_ROOM_RESTORE = 'roomRestore';
 export const WIDGET_FAB = 'fab';
 export const WIDGET_AUTOMATION = 'automation';
+export const WIDGET_ROSTER = 'roster';
 
 /**
  * Puts a widget element where it was last left, or at its fallback place, kept inside the window.
