@@ -4056,6 +4056,7 @@
   },
   "app": {
     "fab": {
+      "manual": "Manual",
       "menuOpen": "Open menu",
       "menuClose": "Close menu",
       "peerMenu": "Connection",

@@ -4,11 +4,14 @@ import { join } from 'node:path';
 import { defineConfig } from 'vitepress';
 
 const repo = 'https://github.com/Xelltis/udonarium_axe';
-const base = '/udonarium_axe/';
+// A deployment that serves the guide somewhere else, such as beside the app in
+// a fork's Pages site, passes its path and address in; left unset, they are
+// upstream's.
+const base = process.env['DOCS_BASE'] ?? '/udonarium_axe/';
 
 // Social crawlers ignore relative URLs, so the deployed origin has to be
 // spelled out here. Change it together with the Pages settings.
-const siteUrl = `https://xelltis.github.io${base}`;
+const siteUrl = process.env['DOCS_SITE_URL'] ?? `https://xelltis.github.io${base}`;
 const siteName = 'Udonarium Axe';
 const siteDescription = 'ブラウザで動く TRPG オンラインセッション支援ツール — 利用ガイド';
 const ogImage = `${siteUrl}og.jpg`;
