@@ -25,7 +25,7 @@ test('the real stdio entry point lists tools and reports missing Chromium withou
   });
   try {
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length, 17);
+    assert.equal((await client.listTools()).tools.length, 19);
     const result = await client.callTool({ name: 'session_get', arguments: {} });
     assert.equal(result.structuredContent.error.code, 'NOT_READY');
     assert.match(stderr, /Udonarium browser/);
@@ -48,7 +48,7 @@ async function connected(invoke, work, options) {
   }
 }
 
-test('exposes exactly the seventeen bounded tools with schemas and read annotations', async () => {
+test('exposes exactly the nineteen bounded tools with schemas and read annotations', async () => {
   await connected(
     async () => ({ ok: true, data: {} }),
     async (client) => {
@@ -66,9 +66,11 @@ test('exposes exactly the seventeen bounded tools with schemas and read annotati
         'object_get',
         'palette_get',
         'palette_send',
+        'piece_conceal',
         'piece_disclose',
         'piece_move',
         'piece_remove',
+        'piece_reveal',
         'scene_list',
         'session_get',
       ]);

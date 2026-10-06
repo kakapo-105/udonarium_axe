@@ -740,6 +740,82 @@ describe('AutomationFacadeService', () => {
       error(await call('character_create', { pieces: [goblin()], x: 0, y: 0 }), 'FORBIDDEN');
     });
 
+    describe('out of sight', () => {
+      function beGameMaster() {
+        PeerCursor.myCursor.role = PeerRole.GameMaster;
+        facade.health();
+        policy.enable();
+        grant();
+      }
+      async function hide(name = 'ドレイク') {
+        const [made] = created(await call('character_create', { pieces: [goblin(name)], x: 4, y: 5, concealed: true }));
+        return made;
+      }
+      const names = async (args: Record<string, unknown>) =>
+        ((await call('scene_list', args)) as { data: { objects: { name: string }[] } }).data.objects.map(
+          (object) => object.name
+        );
+
+      it('keeps a piece put out early off every table, where it stood, yet readable to the master', async () => {
+        beGameMaster();
+        const made = await hide();
+
+        const piece = store.get<GameCharacter>(made.identifier)!;
+        expect(piece.location).toMatchObject({ name: 'concealed', x: 200, y: 250 });
+        expect(await names({})).not.toContain('ドレイク');
+        expect(await names({ place: 'concealed' })).toEqual(['ドレイク']);
+        expect(await call('object_get', { identifier: made.identifier })).toMatchObject({
+          ok: true,
+          data: { place: 'concealed' },
+        });
+        expect((await call('character_sheet_get', { identifier: made.identifier, paths: ['リソース'] })).ok).toBe(true);
+        expect((await call('palette_get', { identifier: made.identifier })).ok).toBe(true);
+      });
+
+      it('brings it back where it stood, and puts it out of sight again', async () => {
+        beGameMaster();
+        const made = await hide();
+
+        expect(await call('piece_reveal', { identifiers: [made.identifier] })).toMatchObject({
+          ok: true,
+          data: { revealed: [{ identifier: made.identifier, x: 200, y: 250 }] },
+        });
+        expect(store.get<GameCharacter>(made.identifier)!.location.name).toBe('table');
+        error(await call('piece_reveal', { identifiers: [made.identifier] }), 'NOT_FOUND');
+
+        expect((await call('piece_conceal', { identifiers: [made.identifier] })).ok).toBe(true);
+        expect(store.get<GameCharacter>(made.identifier)!.location).toMatchObject({ name: 'concealed', x: 200 });
+      });
+
+      it('leaves putting out of sight to the master, and never touches a player’s piece', async () => {
+        grant();
+        error(await call('character_create', { pieces: [goblin()], x: 0, y: 0, concealed: true }), 'FORBIDDEN');
+        error(await call('piece_conceal', { identifiers: [piece.identifier] }), 'FORBIDDEN');
+
+        beGameMaster();
+        const players = GameCharacter.create('PC', 1, '');
+        players.owner = 'player';
+        players.location = { name: 'table', x: 100, y: 100 };
+        error(await call('piece_conceal', { identifiers: [players.identifier] }), 'NOT_FOUND');
+        expect(players.location.name).toBe('table');
+      });
+
+      it('lets an owner who is not the master read what is theirs out of sight, but nobody else’s', async () => {
+        beGameMaster();
+        const made = await hide();
+        const others = GameCharacter.create('Other', 1, '');
+        others.owner = 'someone';
+        others.location = { name: 'concealed', x: 0, y: 0 };
+
+        PeerCursor.myCursor.role = 'pl';
+        facade.health();
+        policy.enable();
+        expect(await names({ place: 'concealed' })).toEqual(['ドレイク']);
+        error(await call('character_sheet_get', { identifier: others.identifier }), 'NOT_FOUND');
+        expect((await call('character_sheet_get', { identifier: made.identifier })).ok).toBe(true);
+      });
+    });
+
     it('clears away its own pieces to the graveyard, and never a player’s', async () => {
       grant();
       const [made] = created(await call('character_create', { pieces: [goblin()], x: 0, y: 0 }));

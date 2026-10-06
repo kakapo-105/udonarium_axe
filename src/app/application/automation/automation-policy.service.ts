@@ -7,6 +7,7 @@ import { ObjectStore } from '@axe/core/sync/object-store';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 
 @Injectable({ providedIn: 'root' })
 export class AutomationPolicyService {
@@ -38,6 +39,18 @@ export class AutomationPolicyService {
   }
   canSee(piece: GameCharacter): boolean {
     return piece.location.name === 'table' && this.disclosure.canView(piece) && this.vision.isTokenVisible(piece);
+  }
+  /**
+   * Whether a piece put out of sight may be read: by the game master, as the out-of-sight tab lists
+   * them, or by whoever owns it.
+   */
+  canSeeConcealed(piece: GameCharacter): boolean {
+    if (piece.location.name !== CONCEALED_LOCATION) return false;
+    return this.role.canSeeHidden || (!!PeerCursor.myCursor?.userId && piece.owner === PeerCursor.myCursor.userId);
+  }
+  /** Only the game master puts things out of sight and brings them back, as in the table's own menus. */
+  requireGameMaster(): void {
+    if (!this.role.canSeeHidden) fail('FORBIDDEN', 'Only the game master can put pieces out of sight.');
   }
   /**
    * Whether what a piece carries may be managed across the table, as the buff manager lets anyone at

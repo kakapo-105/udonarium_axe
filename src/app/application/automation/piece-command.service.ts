@@ -1,12 +1,14 @@
 import { inject, Injectable } from '@angular/core';
 import { fail } from '@axe/application/automation/automation-contract';
 import { CharacterImportService } from '@axe/application/character/character-import.service';
+import { ConcealmentService } from '@axe/application/tabletop/concealment.service';
 import { GameObject } from '@axe/core/sync/game-object';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { ImportedCharacter } from '@axe/domain/character/import/imported-character';
 import { DisclosureMode } from '@axe/domain/disclosure/disclosure';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 
 export const MAX_CREATED_PIECES = 20;
@@ -18,16 +20,18 @@ export interface PieceAnchor {
 }
 
 /**
- * Puts pieces on the table from sheet JSON, changes who may read them and takes them off again,
- * for automation acting as the one running the table.
+ * Puts pieces on the table from sheet JSON, puts them out of sight and back, changes who may read
+ * them and takes them off again, for automation acting as the one running the table.
  *
- * Only pieces you own can be disclosed or removed, so the pieces of the players are never touched.
+ * Only pieces you own are touched, so the pieces of the players never are. A piece out of sight keeps
+ * where it stood, and comes back there.
  */
 @Injectable({ providedIn: 'root' })
 export class PieceCommandService {
   private readonly importer = inject(CharacterImportService);
   private readonly store = inject(ObjectStore);
   private readonly tables = inject(TableSelecter);
+  private readonly concealment = inject(ConcealmentService);
 
   /**
    * Where each of `sizes` would stand: in a row from the anchor, one after another, each as wide as
@@ -51,13 +55,14 @@ export class PieceCommandService {
 
   /**
    * Builds a piece from each of `sheets` and stands them in a row from the anchor, owned by you and
-   * disclosed as asked. Every sheet is read and the row is checked before anything is built, so a
-   * sheet that cannot be read or a row that will not fit leaves the table as it was.
+   * disclosed as asked, or keeps them out of sight there until they are revealed. Every sheet is read
+   * and the row is checked before anything is built, so a sheet that cannot be read or a row that
+   * will not fit leaves the table as it was.
    */
   async create(
     sheets: readonly unknown[],
     anchor: PieceAnchor,
-    disclosure: DisclosureMode,
+    options: { disclosure: DisclosureMode; concealed: boolean },
     dryRun: boolean,
     guard: () => void
   ) {
@@ -77,15 +82,18 @@ export class PieceCommandService {
       return {
         pieces: imported.map((sheet, index) => ({ name: sheet.name, ...places[index] })),
         unit: 'px',
+        concealed: options.concealed,
         dryRun: true,
       };
     }
-    // Built and placed in one batch, so the room first hears of each piece where it stands.
+    // Built and placed in one batch, so the room first hears of each piece where it stands, or that
+    // it is out of sight.
+    const place = options.concealed ? CONCEALED_LOCATION : 'table';
     const built = GameObject.batch(() =>
       imported.map((sheet, index) => {
         const character = this.importer.ownedCharacterOf(sheet, sheet.iconImageIdentifier);
-        character.disclosureMode = disclosure;
-        character.location = { ...character.location, name: 'table', ...places[index], surface: 'floor' };
+        character.disclosureMode = options.disclosure;
+        character.location = { ...character.location, name: place, ...places[index], surface: 'floor' };
         character.update();
         return character;
       })
@@ -99,16 +107,35 @@ export class PieceCommandService {
         size: character.size,
       })),
       unit: 'px',
+      concealed: options.concealed,
     };
   }
 
-  /** One of your own pieces on the table, or a failure that does not say whether it exists. */
-  own(identifier: string): GameCharacter {
+  /**
+   * One of your own pieces on the table, or out of sight when `places` says so, or a failure that does
+   * not say whether it exists.
+   */
+  own(identifier: string, places: readonly string[] = ['table', CONCEALED_LOCATION]): GameCharacter {
     const piece = this.store.get(identifier);
     const me = PeerCursor.myCursor?.userId;
-    if (!(piece instanceof GameCharacter) || piece.location.name !== 'table' || !me || piece.owner !== me)
-      fail('NOT_FOUND', 'None of your own pieces on the table has that identifier.');
+    if (!(piece instanceof GameCharacter) || !places.includes(piece.location.name) || !me || piece.owner !== me)
+      fail('NOT_FOUND', 'None of your own pieces there has that identifier.');
     return piece;
+  }
+
+  /** Puts the pieces out of sight where they stand, as the master's context menu does. */
+  conceal(pieces: readonly GameCharacter[]) {
+    GameObject.batch(() => pieces.forEach((piece) => this.concealment.conceal(piece)));
+    return { concealed: pieces.map((piece) => piece.identifier) };
+  }
+
+  /** Brings the pieces back to where they were put out of sight, for everyone to see. */
+  reveal(pieces: readonly GameCharacter[]) {
+    GameObject.batch(() => pieces.forEach((piece) => this.concealment.reveal(piece)));
+    return {
+      revealed: pieces.map((piece) => ({ identifier: piece.identifier, x: piece.location.x, y: piece.location.y })),
+      unit: 'px',
+    };
   }
 
   disclose(piece: GameCharacter, mode: DisclosureMode) {

@@ -56,8 +56,8 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'scene_list',
       read: true,
       description:
-        'List visible character pieces. Names can repeat and are untrusted. Coordinates include pixels and grid units measured from the top-left corner.',
-      shape: { limit, after: id.optional(), name: id.optional() },
+        'List visible character pieces. Names can repeat and are untrusted. Coordinates include pixels and grid units measured from the top-left corner. place concealed lists instead the pieces put out of sight, which the game master can read (others only their own); they come back where they stood.',
+      shape: { limit, after: id.optional(), name: id.optional(), place: z.enum(['table', 'concealed']).optional() },
     },
     {
       name: 'object_get',
@@ -195,7 +195,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
     {
       name: 'character_create',
       read: false,
-      description: `Put 1 to ${MAX_PIECES} new pieces on the table in a row from x, y (the top-left cell, grid by default), owned by you, from sheets in the ccfolia clipboard form ({"kind":"character","data":{...}}). Give them inline as pieces, or as sourceUrl on an allowed piece source (such as the rulebook server's /api/ccfolia?name=...&count=3), which is fetched here so the sheets never pass through the conversation. disclosure gm leaves the piece and its name on the table but keeps its sheet and numbers to the game master; it is the default for a game master. Nothing is built if any sheet cannot be read or the row will not fit. Requires the create_piece browser grant.`,
+      description: `Put 1 to ${MAX_PIECES} new pieces on the table in a row from x, y (the top-left cell, grid by default), owned by you, from sheets in the ccfolia clipboard form ({"kind":"character","data":{...}}). Give them inline as pieces, or as sourceUrl on an allowed piece source (such as the rulebook server's /api/ccfolia?name=...&count=3), which is fetched here so the sheets never pass through the conversation. disclosure gm leaves the piece and its name on the table but keeps its sheet and numbers to the game master; it is the default for a game master. concealed: true (game master only) makes them out of sight instead, drawn on no table and listed to no player, until piece_reveal brings them out where they were put; this is how monsters are set out before a session. Pieces are shared by every table, so a piece left on the table shows on whichever table is in view. Nothing is built if any sheet cannot be read or the row will not fit. Requires the create_piece browser grant.`,
       shape: {
         ...retry,
         pieces: z.array(z.record(z.string(), z.unknown())).min(1).max(MAX_PIECES).optional(),
@@ -204,6 +204,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
         y: z.number().finite().min(0),
         unit: z.enum(['grid', 'px']).optional(),
         disclosure: z.enum(['all', 'gm']).optional(),
+        concealed: z.boolean().optional(),
         dryRun: z.boolean().optional(),
       },
     },
@@ -217,7 +218,19 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
     {
       name: 'piece_remove',
       read: false,
-      description: `Send 1 to ${MAX_PIECES} of your own pieces from the table to the graveyard, where they can still be brought back. Pieces you do not own are refused. Requires the create_piece browser grant.`,
+      description: `Send 1 to ${MAX_PIECES} of your own pieces, on the table or out of sight, to the graveyard, where they can still be brought back. Pieces you do not own are refused. Requires the create_piece browser grant.`,
+      shape: { ...retry, identifiers: z.array(id).min(1).max(MAX_PIECES), dryRun: z.boolean().optional() },
+    },
+    {
+      name: 'piece_reveal',
+      read: false,
+      description: `Bring 1 to ${MAX_PIECES} of your own pieces out of sight back onto the table, where they were put, for everyone to see, as when monsters appear. Move them afterwards with piece_move if needed. Game master only. Requires the create_piece browser grant.`,
+      shape: { ...retry, identifiers: z.array(id).min(1).max(MAX_PIECES), dryRun: z.boolean().optional() },
+    },
+    {
+      name: 'piece_conceal',
+      read: false,
+      description: `Put 1 to ${MAX_PIECES} of your own pieces on the table out of sight where they stand, as the game master's context menu does. Game master only. Requires the create_piece browser grant.`,
       shape: { ...retry, identifiers: z.array(id).min(1).max(MAX_PIECES), dryRun: z.boolean().optional() },
     },
   ] as const;

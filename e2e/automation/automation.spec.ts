@@ -94,6 +94,23 @@ test('a GM puts monsters out, discloses and clears them, and hears the players t
 
   expect((await invoke(gm, 'piece_remove', { identifiers: [first.identifier] })).ok).toBe(true);
   await expect.poll(seen).not.toContain(first.identifier);
+
+  // Set out early, out of sight: on the player's side it is in the store, yet nowhere to be found.
+  const hidden = await invoke(gm, 'character_create', {
+    pieces: [sheet('ドレイク')],
+    x: 2,
+    y: 2,
+    disclosure: 'all',
+    concealed: true,
+  });
+  const [drake] = (hidden as { data: { pieces: { identifier: string }[] } }).data.pieces;
+  await expect
+    .poll(() => player.evaluate((id) => window.__automationTest.position(id), drake.identifier))
+    .toMatchObject({ name: 'concealed', x: 100, y: 100 });
+  expect(await seen()).not.toContain(drake.identifier);
+  expect(JSON.stringify(await invoke(player, 'scene_list', { place: 'concealed' }))).not.toContain(drake.identifier);
+  expect((await invoke(gm, 'piece_reveal', { identifiers: [drake.identifier] })).ok).toBe(true);
+  await expect.poll(seen).toContain(drake.identifier);
 });
 
 test('stop and reload remove the API and discard write grants and old session IDs', async ({ page }) => {

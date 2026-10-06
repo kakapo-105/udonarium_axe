@@ -27,6 +27,7 @@ import { canRoleSpeakTab, canRoleViewTab } from '@axe/domain/chat/chat-tab-permi
 import { PaletteRow, paletteRowsOf } from '@axe/domain/chat/palette-rows';
 import { DisclosureMode } from '@axe/domain/disclosure/disclosure';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 
 const REQUEST_TIMEOUT_MS = 15000;
@@ -298,6 +299,14 @@ export class AutomationFacadeService {
     if (request.command === 'character_create') {
       this.policy.require('create_piece');
       this.policy.canCreatePieces();
+      if (args['concealed'] === true) this.policy.requireGameMaster();
+    }
+    if (request.command === 'piece_reveal' || request.command === 'piece_conceal') {
+      this.policy.require('create_piece');
+      this.policy.requireGameMaster();
+      const from = request.command === 'piece_reveal' ? CONCEALED_LOCATION : 'table';
+      for (const identifier of textsOf(args['identifiers'], 'identifiers', MAX_CREATED_PIECES))
+        this.pieceCommands.own(identifier, [from]);
     }
     if (request.command === 'piece_disclose') {
       this.policy.require('create_piece');
@@ -349,13 +358,15 @@ export class AutomationFacadeService {
             })),
         };
       case 'scene_list': {
-        onlyKeys(a, ['limit', 'after', 'name']);
+        onlyKeys(a, ['limit', 'after', 'name', 'place']);
         const limit = pageSize(a['limit']);
         const after = a['after'] === undefined ? '' : textArgument(a['after']);
         const name = a['name'] === undefined ? '' : textArgument(a['name']);
+        const place = a['place'] ?? 'table';
+        if (place !== 'table' && place !== 'concealed') fail('INVALID_ARGUMENT', 'place must be table or concealed.');
         const pieces = this.store
           .getObjects<GameCharacter>(GameCharacter)
-          .filter((p) => this.policy.canSee(p))
+          .filter((p) => (place === 'table' ? this.policy.canSee(p) : this.policy.canSeeConcealed(p)))
           .map((p) => this.describe(p))
           .filter((p) => p.identifier > after && (!name || p.name.includes(name)))
           .sort((l, r) => (l.identifier < r.identifier ? -1 : l.identifier > r.identifier ? 1 : 0));
@@ -363,7 +374,7 @@ export class AutomationFacadeService {
       }
       case 'object_get':
         onlyKeys(a, ['identifier']);
-        return this.describe(this.piece(textArgument(a['identifier'])));
+        return this.describe(this.readable(textArgument(a['identifier'])));
       case 'piece_move': {
         onlyKeys(a, ['identifier', 'x', 'y', 'unit', 'expectedVersion', 'dryRun']);
         const piece = this.piece(textArgument(a['identifier']));
@@ -426,13 +437,13 @@ export class AutomationFacadeService {
       }
       case 'character_sheet_get': {
         onlyKeys(a, ['identifier', 'paths']);
-        const piece = this.piece(textArgument(a['identifier']));
+        const piece = this.readable(textArgument(a['identifier']));
         const paths = a['paths'] === undefined ? undefined : textsOf(a['paths'], 'paths', MAX_SHEET_PATHS);
         return { identifier: piece.identifier, name: this.describe(piece).name, ...characterSheetView(piece, paths) };
       }
       case 'palette_get': {
         onlyKeys(a, ['identifier']);
-        const piece = this.piece(textArgument(a['identifier']));
+        const piece = this.readable(textArgument(a['identifier']));
         const palette = piece.chatPalette;
         const rows = palette ? paletteRowsOf(palette.getPalette()) : [];
         return {
@@ -464,7 +475,7 @@ export class AutomationFacadeService {
       }
       case 'buff_list': {
         onlyKeys(a, ['identifier']);
-        if (a['identifier'] !== undefined) return this.buffsOf(this.piece(textArgument(a['identifier'])));
+        if (a['identifier'] !== undefined) return this.buffsOf(this.readable(textArgument(a['identifier'])));
         const pieces = this.store
           .getObjects<GameCharacter>(GameCharacter)
           .filter((piece) => this.policy.canSee(piece))
@@ -499,7 +510,7 @@ export class AutomationFacadeService {
         return this.buffCommands.sweep(sweepRuleOf(a), a['dryRun'] === true);
       }
       case 'character_create': {
-        onlyKeys(a, ['pieces', 'x', 'y', 'unit', 'disclosure', 'dryRun']);
+        onlyKeys(a, ['pieces', 'x', 'y', 'unit', 'disclosure', 'concealed', 'dryRun']);
         const pieces = a['pieces'];
         if (!Array.isArray(pieces) || pieces.length < 1 || pieces.length > MAX_CREATED_PIECES)
           fail('INVALID_ARGUMENT', `pieces must list 1 to ${MAX_CREATED_PIECES} sheets.`);
@@ -514,7 +525,7 @@ export class AutomationFacadeService {
         return this.pieceCommands.create(
           pieces,
           { x: numberArgument(a['x']), y: numberArgument(a['y']), unit },
-          disclosure,
+          { disclosure, concealed: booleanOf(a['concealed'], 'concealed') },
           booleanOf(a['dryRun'], 'dryRun'),
           guard
         );
@@ -533,6 +544,17 @@ export class AutomationFacadeService {
         );
         if (booleanOf(a['dryRun'], 'dryRun')) return { removed: pieces.map((piece) => piece.identifier), dryRun: true };
         return this.pieceCommands.remove(pieces);
+      }
+      case 'piece_reveal':
+      case 'piece_conceal': {
+        onlyKeys(a, ['identifiers', 'dryRun']);
+        const revealing = request.command === 'piece_reveal';
+        const pieces = textsOf(a['identifiers'], 'identifiers', MAX_CREATED_PIECES).map((identifier) =>
+          this.pieceCommands.own(identifier, [revealing ? CONCEALED_LOCATION : 'table'])
+        );
+        if (booleanOf(a['dryRun'], 'dryRun'))
+          return { [revealing ? 'revealed' : 'concealed']: pieces.map((piece) => piece.identifier), dryRun: true };
+        return revealing ? this.pieceCommands.reveal(pieces) : this.pieceCommands.conceal(pieces);
       }
     }
   }
@@ -555,6 +577,12 @@ export class AutomationFacadeService {
     if (!(piece instanceof GameCharacter) || !this.policy.canSee(piece)) fail('NOT_FOUND', 'Visible piece not found.');
     return piece;
   }
+  /** A piece to read: one in view on the table, or one out of sight this reader may look at. */
+  private readable(identifier: string): GameCharacter {
+    const piece = this.store.get(identifier);
+    if (piece instanceof GameCharacter && this.policy.canSeeConcealed(piece)) return piece;
+    return this.piece(identifier);
+  }
   private tab(identifier: string, speak = false): ChatTab {
     const tab = this.store.get(identifier);
     if (!(tab instanceof ChatTab) || !canRoleViewTab(tab, PeerCursor.myRole))
@@ -573,6 +601,7 @@ export class AutomationFacadeService {
       unit: 'px',
       gridX: piece.location.x / gridSize,
       gridY: piece.location.y / gridSize,
+      place: piece.location.name === CONCEALED_LOCATION ? 'concealed' : 'table',
       surface: piece.location.surface ?? 'floor',
       posZ: piece.posZ,
       size: piece.size,

@@ -17,6 +17,8 @@ export const AUTOMATION_COMMANDS = [
   'character_create',
   'piece_disclose',
   'piece_remove',
+  'piece_reveal',
+  'piece_conceal',
 ] as const;
 export type AutomationCommand = (typeof AUTOMATION_COMMANDS)[number];
 export const AUTOMATION_SCOPES = [
@@ -39,6 +41,8 @@ export const AUTOMATION_WRITES: readonly AutomationCommand[] = [
   'character_create',
   'piece_disclose',
   'piece_remove',
+  'piece_reveal',
+  'piece_conceal',
 ];
 export type AutomationScope = (typeof AUTOMATION_SCOPES)[number];
 export type AutomationErrorCode =
