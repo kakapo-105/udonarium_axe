@@ -103,6 +103,13 @@ export class ImportCharacterComponent {
         this.feedback.set({ kind: 'error', text: this.t('feature.character.import.failed') });
         return;
       }
+      if (result.systemUnknown) {
+        // Read as far as anything can be without knowing the system. Said plainly, since the piece
+        // that arrives is a lesser one and nothing else on the screen would say why.
+        this.feedback.set({ kind: 'warning', text: this.t('feature.character.import.systemUnknown') });
+        this.text = '';
+        return;
+      }
       const key = result.imageResolved ? 'feature.character.import.success' : 'feature.character.import.successNoImage';
       this.feedback.set({ kind: result.imageResolved ? 'success' : 'warning', text: this.t(key) });
       this.text = '';

@@ -12,6 +12,8 @@ import {
   DataElementViewMode,
 } from '@axe/domain/data/data-element';
 import { DiceSymbol } from '@axe/domain/dice/dice-symbol';
+import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { PeerRole } from '@axe/domain/peer/peer-role';
 import { TabletopObject } from '@axe/domain/tabletop/tabletop-object';
 import { OverviewPanelComponent } from '@axe/features/inventory/overview-panel/overview-panel.component';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
@@ -559,6 +561,82 @@ describe('OverviewPanelComponent', () => {
       }
     });
 
+    describe('a resource set to have a slider', () => {
+      let character: GameCharacter;
+      let resource: DataElement;
+      let tagsSpy: { mockRestore(): void };
+
+      beforeEach(() => {
+        character = GameCharacter.create('popup-slider-test', 1, '');
+        resource = DataElement.create('HP', 20, {
+          [DataElementAttribute.ROLE]: DataElementRole.FIELD,
+          [DataElementAttribute.POPUP]: 'true',
+          [DataElementAttribute.RESOURCE_SLIDER]: 'true',
+        });
+        resource.type = DataElementType.NUMBER_RESOURCE;
+        resource.currentValue = 12;
+        character.detailDataElement!.appendChild(resource);
+        component.tabletopObject = character;
+        const spy = vi.spyOn(component as unknown as { getInventoryTags: () => [] }, 'getInventoryTags');
+        spy.mockReturnValue([]);
+        tagsSpy = spy;
+      });
+
+      afterEach(() => {
+        tagsSpy.mockRestore();
+        character.destroy();
+      });
+
+      const slider = () =>
+        fixture.nativeElement.querySelector('[data-testid="overview-resource-slider"]') as HTMLInputElement | null;
+
+      function drag(to: number, letGo: boolean): void {
+        const input = slider()!;
+        input.value = String(to);
+        input.dispatchEvent(new Event('input'));
+        if (letGo) input.dispatchEvent(new Event('change'));
+        fixture.detectChanges();
+      }
+
+      it('draws a slider under it, from 0 up to its maximum', () => {
+        fixture.detectChanges();
+
+        expect(slider()).not.toBeNull();
+        expect(slider()!.min).toBe('0');
+        expect(slider()!.max).toBe('20');
+        expect(slider()!.value).toBe('12');
+      });
+
+      it('shows where the slider is being dragged in the box and writes nothing yet', async () => {
+        fixture.detectChanges();
+
+        drag(5, false);
+        await fixture.whenStable();
+
+        const box = fixture.nativeElement.querySelector('input[name="data-current-value"]') as HTMLInputElement;
+        expect(box.value).toBe('5');
+        expect(Number(resource.currentValue)).toBe(12);
+      });
+
+      it('writes where the slider is let go as what is left, and leaves the maximum alone', () => {
+        fixture.detectChanges();
+
+        drag(5, true);
+
+        expect(Number(resource.currentValue)).toBe(5);
+        expect(Number(resource.value)).toBe(20);
+      });
+
+      it('lets a seat that may not edit the table neither move the slider nor write with it', () => {
+        PeerCursor.myCursor = { role: PeerRole.Guest, identifier: 'guest-cursor' } as PeerCursor;
+        fixture.detectChanges();
+
+        expect(slider()!.disabled).toBe(true);
+        component.commitSliderValue(resource, { target: { valueAsNumber: 3 } } as unknown as Event);
+        expect(Number(resource.currentValue)).toBe(12);
+      });
+    });
+
     it('leaves an ordinary resource its own colour rather than a dark fixed one', () => {
       const hp = DataElement.create('HP', 200, { type: DataElementType.NUMBER_RESOURCE });
       hp.currentValue = 200;
@@ -575,7 +653,7 @@ describe('OverviewPanelComponent', () => {
       san.currentValue = 80;
 
       try {
-        expect(component.getPopupCurrentValueColor(san)).toBe('#d22');
+        expect(component.getPopupCurrentValueColor(san)).toBe('#D22');
       } finally {
         san.destroy();
       }

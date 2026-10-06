@@ -597,6 +597,21 @@
           <span class="text-ui-dim text-[11px]">{{
             'feature.tabletop.tableSetting.recommendedViewHint' | transloco
           }}</span>
+
+          <label class="text-ui-text flex cursor-pointer items-center gap-1.5 text-[13px] select-none">
+            <input
+              type="checkbox"
+              class="size-3.5 cursor-pointer [accent-color:var(--ui-accent)]"
+              [(ngModel)]="tableMagneticAnomaly"
+              name="tableMagneticAnomaly"
+              data-testid="table-magnetic-anomaly"
+              [attr.disabled]="!isEditable ? '' : null"
+            />
+            {{ 'feature.tabletop.tableSetting.magneticAnomaly' | transloco }}
+          </label>
+          <span class="text-ui-dim text-[11px]">{{
+            'feature.tabletop.tableSetting.magneticAnomalyHint' | transloco
+          }}</span>
         </div>
       </div>
 

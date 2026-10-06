@@ -4,16 +4,20 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   ElementRef,
   inject,
   signal,
+  untracked,
   viewChild,
   ViewContainerRef,
 } from '@angular/core';
 import { Title } from '@angular/platform-browser';
+import { DiceThrowService } from '@axe/application/dice/dice-throw.service';
 import { SaveDataService } from '@axe/application/file/save-data.service';
 import { LanguageService } from '@axe/application/i18n/language.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
+import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { CutInService } from '@axe/application/media/cut-in.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
@@ -22,8 +26,10 @@ import { LegacyScratchMaskMigrationService } from '@axe/application/tabletop/leg
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { TabletopActionService } from '@axe/application/tabletop/tabletop-action.service';
 import { TurnOrderService } from '@axe/application/turn/turn-order.service';
+import { ButtonGuideService } from '@axe/application/ui/button-guide.service';
 import { ConfirmService } from '@axe/application/ui/confirm.service';
 import { ContextMenuService } from '@axe/application/ui/context-menu.service';
+import { MenuLayoutService } from '@axe/application/ui/menu-layout.service';
 import { MobileLayoutService } from '@axe/application/ui/mobile-layout.service';
 import { ModalService } from '@axe/application/ui/modal.service';
 import { MotionService } from '@axe/application/ui/motion.service';
@@ -41,12 +47,12 @@ import { Network } from '@axe/core/network/network';
 import { FileArchiver } from '@axe/core/storage/file-archiver';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
-import { PeerRole } from '@axe/domain/peer/peer-role';
 import { ReloadCheck } from '@axe/domain/peer/reload-check';
-import { FAB_ENTRIES, FAB_SUBMENUS, FabEntry, fabLinkUrl, FabSubmenuName } from '@axe/domain/ui/fab-menu';
+import { MENU_SURFACES } from '@axe/domain/ui/menu-command';
 import { RoomPanelName } from '@axe/domain/ui/room-panel';
 import { AlarmEventHandlerService } from '@axe/features/alarm/alarm-event-handler.service';
 import { AutomationControlComponent } from '@axe/features/automation/automation-control.component';
+import { ButtonGuideEventHandlerService } from '@axe/features/button-guide/button-guide-event-handler.service';
 import { CardStackListImageComponent } from '@axe/features/card/card-stack-list-img/card-stack-list-img.component';
 import { HandDragGhostComponent } from '@axe/features/card/hand-rail/hand-drag-ghost.component';
 import { HandRailComponent } from '@axe/features/card/hand-rail/hand-rail.component';
@@ -58,6 +64,7 @@ import { ChatSoundEventHandlerService } from '@axe/features/chat/chat-sound-even
 import { ChatTickerComponent } from '@axe/features/chat/chat-ticker/chat-ticker.component';
 import { DiceChatEventHandlerService } from '@axe/features/dice/dice-chat-event-handler.service';
 import { DiceSymbolCreateDialogComponent } from '@axe/features/dice/dice-symbol-create-dialog/dice-symbol-create-dialog.component';
+import { DiceThrowEventHandlerService } from '@axe/features/dice/dice-throw-event-handler.service';
 import { EffectChatEventHandlerService } from '@axe/features/effect/effect-chat-event-handler.service';
 import { GmToolbarComponent } from '@axe/features/gm-tools/gm-toolbar/gm-toolbar.component';
 import { NpcDragGhostComponent } from '@axe/features/gm-tools/npc-bar/npc-drag-ghost.component';
@@ -67,6 +74,13 @@ import { NetworkEventHandlerService } from '@axe/features/lobby/network-event-ha
 import { NetworkIndicatorComponent } from '@axe/features/lobby/network-indicator/network-indicator.component';
 import { CutInEventHandlerService } from '@axe/features/media/cut-in-event-handler.service';
 import { MiniJukeboxComponent } from '@axe/features/media/mini-jukebox/mini-jukebox.component';
+import {
+  isMenuGroupView,
+  MenuCommandService,
+  MenuEntryView,
+  MenuGroupView,
+  MenuNodeView,
+} from '@axe/features/menu/menu-command.service';
 import { MobileShellComponent } from '@axe/features/mobile/mobile-shell/mobile-shell.component';
 import { RoomPanelService } from '@axe/features/panels/room-panel.service';
 import { PlToolbarComponent } from '@axe/features/pl-tools/pl-toolbar/pl-toolbar.component';
@@ -76,8 +90,8 @@ import { ReplayIndicatorComponent } from '@axe/features/replay/replay-indicator/
 import { ReplayStagingBannerComponent } from '@axe/features/replay/replay-staging-banner/replay-staging-banner.component';
 import { RoomArchiveEventHandlerService } from '@axe/features/room-archive/room-archive-event-handler.service';
 import { RoomRestoreBannerComponent } from '@axe/features/room-archive/room-restore-banner/room-restore-banner.component';
-import { SeatDisplayMenuComponent, SeatMenuKind } from '@axe/features/seat-display/seat-display-menu.component';
 import { StreamingOverlayComponent } from '@axe/features/streaming-overlay/streaming-overlay.component';
+import { SwitchNoticeComponent } from '@axe/features/tabletop/board-switch/switch-notice.component';
 import { CcfoliaRoomImportEventHandlerService } from '@axe/features/tabletop/ccfolia-room-import/ccfolia-room-import-event-handler.service';
 import { FogMemoryWriterService } from '@axe/features/tabletop/fog-of-war/fog-memory-writer.service';
 import { GameTableComponent } from '@axe/features/tabletop/game-table/game-table.component';
@@ -87,6 +101,7 @@ import { VisualNovelModeService } from '@axe/features/visual-novel/visual-novel-
 import { VisualNovelOverlayComponent } from '@axe/features/visual-novel/visual-novel-overlay/visual-novel-overlay.component';
 import { VoteEventHandlerService } from '@axe/features/vote/vote-event-handler.service';
 import { VoteWidgetComponent } from '@axe/features/vote/vote-widget/vote-widget.component';
+import { CompassComponent } from '@axe/features/widgets/compass/compass.component';
 import { ConnectionQualityComponent } from '@axe/features/widgets/connection-quality/connection-quality.component';
 import { DigitalClockComponent } from '@axe/features/widgets/digital-clock/digital-clock.component';
 import { RenderStatsComponent } from '@axe/features/widgets/render-stats/render-stats.component';
@@ -102,6 +117,8 @@ import { TooltipDirective } from '@axe/ui/directives/tooltip.directive';
 import { WidgetPlaceDirective } from '@axe/ui/directives/widget-place.directive';
 import {
   FAB_COLUMN_CLASSES,
+  FAB_GUIDE_DRAWER_CLASSES,
+  FAB_GUIDE_ROW_CLASSES,
   fabDrawerPlaceClasses,
   FabDrawerSide,
   fabDrawerSide,
@@ -115,16 +132,6 @@ import { version as APP_VERSION } from '@pkg';
 
 /** How far from the corner the button starts, before anybody has put it anywhere. */
 const FAB_MARGIN_PX = 12;
-
-/** The small menus opened beside the drawer: those of its entries, saving and loading, the widgets, and this seat's display. */
-type FabSubmenuKind = FabSubmenuName | 'saveLoad' | SeatMenuKind;
-
-interface FabSubmenuOpener {
-  readonly kind: FabSubmenuKind;
-  readonly icon: string;
-  readonly labelKey: string;
-  readonly testId: string;
-}
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -144,6 +151,7 @@ interface FabSubmenuOpener {
     ConnectionQualityComponent,
     RenderStatsComponent,
     DigitalClockComponent,
+    CompassComponent,
     VoteWidgetComponent,
     HotbarBarComponent,
     MobileShellComponent,
@@ -153,8 +161,8 @@ interface FabSubmenuOpener {
     ReplayBoardBannerComponent,
     InviteJoinComponent,
     StreamingOverlayComponent,
+    SwitchNoticeComponent,
     ChatTickerComponent,
-    SeatDisplayMenuComponent,
     UiFabSubmenuComponent,
     UiFabSubmenuButtonComponent,
     VisualNovelOverlayComponent,
@@ -221,21 +229,65 @@ export class AppComponent {
 
   protected readonly fabColumns = FAB_COLUMN_CLASSES;
 
+  /** Whether every button in the drawer and on the toolbars is saying what it is. */
+  protected readonly guide = inject(ButtonGuideService);
+  protected readonly fabGuideDrawer = FAB_GUIDE_DRAWER_CLASSES;
+  protected readonly fabGuideRow = FAB_GUIDE_ROW_CLASSES;
+
+  private readonly menuCommands = inject(MenuCommandService);
+  private readonly menuLayouts = inject(MenuLayoutService);
+  private readonly fabLayout = this.menuLayouts.layoutOf('fab');
+  private readonly contextMenuService = inject(ContextMenuService);
+  private readonly pointers = inject(PointerDeviceService);
+  private readonly confirm = inject(ConfirmService);
+
+  /**
+   * The way back into the menus, from the drawer's own button.
+   *
+   * Everything else about the drawer can be arranged away, the entry that opens the editor
+   * included, and somebody who takes that one off has nothing left to put it back with. The
+   * button is not part of any arrangement, so what it offers cannot be arranged away either.
+   */
+  protected onFabContextMenu(event: MouseEvent): void {
+    if (!this.pointers.isAllowedToOpenContextMenu) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.contextMenuService.open(
+      this.pointers.pointers[0],
+      [
+        { name: this.t('feature.menuEditor.title'), action: () => this.open('menuEditor') },
+        { name: this.t('feature.menuEditor.resetAll'), action: () => void this.resetEveryMenu() },
+        { name: this.t('app.fab.buttonGuide'), action: () => this.guide.show() },
+      ],
+      this.t('app.fab.menuOpen')
+    );
+  }
+
+  /** Puts every menu on this screen back the way it came, once whoever asked has said they mean it. */
+  private async resetEveryMenu(): Promise<void> {
+    if (!(await this.confirm.ask(this.t('feature.menuEditor.resetAllConfirm')))) return;
+    for (const surface of MENU_SURFACES) this.menuLayouts.reset(surface);
+  }
+
+  /** The drawer as this seat is offered it, in the order this screen has it arranged. */
+  protected readonly fabNodes = computed<MenuNodeView[]>(() => this.menuCommands.viewOf(this.fabLayout()));
+
+  /** The small menu open beside the drawer, once the drawer still holds one by that name. */
+  protected readonly openGroup = computed<MenuGroupView | null>(() => {
+    const open = this.fabSubmenu();
+    if (!open) return null;
+    const node = this.fabNodes().find((held) => isMenuGroupView(held) && held.id === open);
+    return node && isMenuGroupView(node) ? node : null;
+  });
+
   protected toggleFab(): void {
     this.measureFabSides();
     this.fabOpen.set(!this.fabOpen());
     if (!this.fabOpen()) this.fabSubmenu.set(null);
   }
 
-  /** The buttons at the foot of the drawer, each opening a small menu of its own beside it. */
-  protected readonly fabSubmenuOpeners: readonly FabSubmenuOpener[] = [
-    { kind: 'saveLoad', icon: 'sd_storage', labelKey: 'app.fab.saveLoad', testId: 'fab-save-load' },
-    { kind: 'widgets', icon: 'widgets', labelKey: 'app.fab.widgets', testId: 'fab-widgets' },
-    { kind: 'display', icon: 'display_settings', labelKey: 'app.fab.display', testId: 'fab-display' },
-  ];
-
   /** Which of the drawer's menus is open beside it, if any; opening one closes the one before. */
-  protected readonly fabSubmenu = signal<FabSubmenuKind | null>(null);
+  protected readonly fabSubmenu = signal<string | null>(null);
 
   /** Which side of the drawer they open on, which is the side with room. */
   protected readonly fabSubmenuSide = computed(() => fabPopoverSideClasses(this.fabSide()));
@@ -245,7 +297,7 @@ export class AppComponent {
   /** Where the open menu is pinned, level with the item it was opened from. */
   protected readonly fabSubmenuPlace = signal<FabSubmenuAnchor>({ top: null, bottom: 0 });
 
-  protected toggleFabSubmenu(kind: FabSubmenuKind, event: MouseEvent): void {
+  protected toggleFabSubmenu(kind: string, event: MouseEvent): void {
     this.measureFabSides();
     const opener = event.currentTarget;
     if (opener instanceof HTMLElement && opener.offsetParent instanceof HTMLElement) {
@@ -279,12 +331,6 @@ export class AppComponent {
     return this.rolePermission.canEditTabletop;
   });
 
-  /** Opens character import from the save and load menu, a shortcut to the one in the room settings. */
-  protected importCharacterFromMenu(): void {
-    this.closeFabSubmenu();
-    this.open('characterImport');
-  }
-
   /** Asks for the files to load from the save and load menu, which closes as the picker opens. */
   protected chooseFilesToLoad(): void {
     this.closeFabSubmenu();
@@ -304,61 +350,82 @@ export class AppComponent {
   /** The ticker is drawn for the screens that asked for it, and not fetched for the rest. */
   protected readonly tickerWanted = computed(() => this.tabletop.display().multiAngleTickerEnabled);
 
-  protected readonly fabEntries = FAB_ENTRIES;
-
-  private readonly myRole = computed(() => {
-    this.objectChange.trackMyCursor();
-    return PeerCursor.myRole;
-  });
-
-  /** What each small menu of the drawer offers this seat, by who each entry is for. */
-  protected readonly fabSubmenuEntries = computed<Readonly<Record<FabSubmenuName, readonly FabEntry[]>>>(() => {
-    const role = this.myRole();
-    const offered = (entries: readonly FabEntry[]) =>
-      entries.filter(
-        (entry) =>
-          !entry.audience || (entry.audience === 'gameMaster' ? role === PeerRole.GameMaster : role !== PeerRole.Guest)
-      );
-    return {
-      table: offered(FAB_SUBMENUS.table),
-      gameResources: offered(FAB_SUBMENUS.gameResources),
-      media: offered(FAB_SUBMENUS.media),
-    };
-  });
-
-  /** Whether an entry of a small menu is on, for those switched on and off rather than opened. */
-  protected fabEntryLit(entry: FabEntry): boolean | null {
-    if (entry.action.kind === 'visualNovel') return this.visualNovel.active();
-    if (entry.action.kind === 'handRail') return this.handRail.isOpen();
-    return null;
+  /**
+   * Opens a small menu of the drawer, or does what one of its own entries is for.
+   *
+   * With every name written out, a small menu is opened the usual way once the guide is put away,
+   * so whoever went looking for it sees where it lives.
+   */
+  protected chooseFab(node: MenuNodeView, event: MouseEvent): void {
+    if (isMenuGroupView(node)) {
+      this.guide.hide();
+      this.toggleFabSubmenu(node.id, event);
+    } else this.chooseFromFabSubmenu(node);
   }
 
-  protected chooseFab(entry: FabEntry, event: MouseEvent): void {
-    if (entry.action.kind === 'submenu') this.toggleFabSubmenu(entry.action.submenu, event);
-    else this.chooseFromFabSubmenu(entry);
+  /** What a small menu holds, written beside it while every name is written out. */
+  protected entriesOf(node: MenuNodeView): readonly MenuEntryView[] {
+    return isMenuGroupView(node) ? node.entries : [];
   }
 
-  /** Does what an entry of a small menu is for, and closes the menu behind it. */
-  protected chooseFromFabSubmenu(entry: FabEntry): void {
-    this.closeFabSubmenu();
-    if (entry.action.kind === 'panel') this.open(entry.action.panel);
-    else if (entry.action.kind === 'visualNovel') this.visualNovel.toggle();
-    else if (entry.action.kind === 'handRail') this.handRail.toggle();
-    else if (entry.action.kind === 'link')
-      window.open(fabLinkUrl(entry.action.href, document.baseURI), '_blank', 'noopener');
+  /**
+   * Does what an entry is for, and closes the menu it was in behind it, unless the entry is a
+   * switch of this seat's own that is pressed in turn to see each choice.
+   */
+  protected chooseFromFabSubmenu(entry: MenuEntryView): void {
+    if (entry.disabled) return;
+    if (!entry.command.stays) this.closeFabSubmenu();
+    this.menuCommands.run(entry.command);
+  }
+
+  protected readonly isGroup = isMenuGroupView;
+
+  /**
+   * What is written in the bubble beside an entry.
+   *
+   * A name somebody gave it wins; otherwise the command names itself, with a word in front where
+   * the name alone would not say what it is. While a save runs, the one that started it counts
+   * out instead.
+   */
+  protected fabNodeLabel(node: MenuNodeView): string {
+    if (isMenuGroupView(node)) {
+      if (node.id === 'saveLoad' && this.isSaving()) return `${this.progressPercent()}%`;
+      return node.label ?? this.t(node.labelKey);
+    }
+    if (node.label) return node.label;
+    const name = this.t(node.labelKey);
+    return node.prefixKey ? `${this.t(node.prefixKey)}: ${name}` : name;
   }
   isSaving = signal(false);
   progressPercent = signal(0);
   constructor() {
     inject(Title).setTitle(`Udonarium Axe ${APP_VERSION}`);
 
+    // Saving the room and asking for files to load are the screen's own to do, and the menus
+    // dispatch everything else by themselves; this is the one thing they cannot reach without
+    // being handed it.
+    this.menuCommands.registerHost({
+      save: () => this.saveFromMenu(),
+      chooseFilesToLoad: () => this.chooseFilesToLoad(),
+      isSaving: () => this.isSaving(),
+    });
+
     if (new URLSearchParams(window.location.search).get('stats') === '1') this.widgets.renderStats.set(true);
+
+    // What a small menu holds is written out beside it with the rest, so one left open would only
+    // say it twice, and over the names beside it.
+    effect(() => {
+      if (this.guide.shown()) untracked(() => this.fabSubmenu.set(null));
+    });
 
     // Start every feature's event handler and the application layer's orchestration services.
     // Each one subscribes from its own constructor under @Injectable({ providedIn: 'root' }),
     // so there is nothing to hold onto here — the injection is the point.
     inject(AlarmEventHandlerService);
+    inject(ButtonGuideEventHandlerService);
     inject(DiceChatEventHandlerService);
+    inject(DiceThrowEventHandlerService);
+    inject(DiceThrowService);
     inject(ChatSettingsEventHandlerService);
     inject(ChatSoundEventHandlerService);
     inject(EffectChatEventHandlerService);

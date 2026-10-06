@@ -1,12 +1,17 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { BuffViewPreferenceService } from '@axe/application/ui/buff-view-preference.service';
+import { ButtonGuideService } from '@axe/application/ui/button-guide.service';
+import { MenuLayoutService } from '@axe/application/ui/menu-layout.service';
 import { PanelService } from '@axe/application/ui/panel.service';
 import { PieceOverlayPreferenceService } from '@axe/application/ui/piece-overlay-preference.service';
 import { ToolbarFoldService } from '@axe/application/ui/toolbar-fold.service';
 import { WidgetVisibilityService } from '@axe/application/ui/widget-visibility.service';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
+import { parseMenuLayout } from '@axe/domain/ui/menu-layout';
+import { ButtonGuideEventHandlerService } from '@axe/features/button-guide/button-guide-event-handler.service';
+import { RoomPanelService } from '@axe/features/panels/room-panel.service';
 import { OwnedCharacterListPanelComponent } from '@axe/features/pl-tools/owned-character-list/owned-character-list-panel.component';
 import { PlToolbarComponent } from '@axe/features/pl-tools/pl-toolbar/pl-toolbar.component';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
@@ -83,6 +88,81 @@ describe('PlToolbarComponent', () => {
       expect.objectContaining({ width: 420, height: 560 })
     );
     await expect(panelStub.openLazy.mock.calls[0][0]()).resolves.toBe(OwnedCharacterListPanelComponent);
+  });
+
+  it('opens the inventory, which it carries from the start', () => {
+    setRole(PeerRole.Player);
+    fixture.detectChanges();
+    const open = vi.spyOn(TestBed.inject(RoomPanelService), 'open').mockImplementation(() => {});
+
+    (fixture.nativeElement.querySelector('[data-testid="fab-entry-inventory"]') as HTMLButtonElement).click();
+
+    expect(open).toHaveBeenCalledWith('inventory');
+  });
+
+  it('writes out the name of every button beside it while the guide is out, and only then', () => {
+    setRole(PeerRole.Player);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('ui-button-guide')).toBeNull();
+
+    TestBed.inject(ButtonGuideService).show();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.pl-toolbar ui-button-guide')).toBeTruthy();
+    const named = Array.from<HTMLElement>(fixture.nativeElement.querySelectorAll('.pl-toolbar [data-guide-label]'));
+    expect(named.map((each) => each.getAttribute('data-guide-label'))).toContain('インベントリ');
+    TestBed.inject(ButtonGuideService).hide();
+  });
+
+  describe('once somebody has put the guide on the bar', () => {
+    afterEach(() => {
+      TestBed.inject(ButtonGuideService).hide();
+      TestBed.inject(MenuLayoutService).reset('plToolbar');
+    });
+
+    function arrange(): void {
+      TestBed.inject(MenuLayoutService).save(
+        'plToolbar',
+        parseMenuLayout(
+          JSON.stringify([
+            { id: 'buttonGuide', command: 'buttonGuide', label: '操作ガイド' },
+            { id: 'inventory', command: 'inventory', label: '持ち物' },
+          ])
+        )!
+      );
+      setRole(PeerRole.Player);
+      fixture.detectChanges();
+    }
+
+    function guideButton(): HTMLButtonElement {
+      return fixture.nativeElement.querySelector('[data-testid="fab-entry-buttonGuide"]');
+    }
+
+    it('brings the guide out from the bar, and names what is on it by the names it was given', () => {
+      arrange();
+
+      guideButton().click();
+      fixture.detectChanges();
+
+      expect(TestBed.inject(ButtonGuideService).shown()).toBe(true);
+      const named = Array.from<HTMLElement>(fixture.nativeElement.querySelectorAll('.pl-toolbar [data-guide-label]'));
+      expect(named.map((each) => each.getAttribute('data-guide-label'))).toEqual(
+        expect.arrayContaining(['操作ガイド', '持ち物'])
+      );
+    });
+
+    it('keeps the guide out when the button is pressed again, though the press puts it away first', () => {
+      TestBed.inject(ButtonGuideEventHandlerService);
+      arrange();
+      const guide = TestBed.inject(ButtonGuideService);
+      guide.show();
+      TestBed.tick();
+
+      guideButton().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      guideButton().click();
+
+      expect(guide.shown()).toBe(true);
+    });
   });
 
   it('shows the toolbar to a player alone', async () => {

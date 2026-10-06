@@ -300,6 +300,19 @@
         (ngModelChange)="setShowVnEmoteBadge($event)"
       />
     </label>
+    <label
+      class="flex cursor-pointer items-center justify-between gap-2 py-1"
+      [title]="'feature.chat.messageSetting.messageCountTooltip' | transloco"
+    >
+      <span class="text-ui-muted flex-1 text-[12px]">{{ 'feature.chat.messageSetting.messageCount' | transloco }}</span>
+      <input
+        type="checkbox"
+        name="chat-message-count"
+        data-testid="chat-message-count"
+        [ngModel]="showMessageCount()"
+        (ngModelChange)="setShowMessageCount($event)"
+      />
+    </label>
   </section>
 </form>
 

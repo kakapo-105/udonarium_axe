@@ -117,6 +117,37 @@ export class StatusAilmentPanelComponent {
     this.replace(ailment, { ...ailment, effect });
   }
 
+  /**
+   * Sets the status the state moves while it is worn, and how.
+   *
+   * The three go together: a status with no operator beside it would move nowhere, so clearing
+   * the status clears the rest with it rather than leaving half an instruction behind.
+   */
+  setStat(ailment: StatusAilment, stat: string): void {
+    const named = stat.trim();
+    if (named.length < 1) {
+      this.replace(ailment, { ...ailment, stat: '', op: '', amount: '' });
+      return;
+    }
+    this.replace(ailment, {
+      ...ailment,
+      stat: named,
+      op: ailment.op.length > 0 ? ailment.op : '=',
+      amount: ailment.amount.length > 0 ? ailment.amount : '0',
+    });
+  }
+
+  setOp(ailment: StatusAilment, op: string): void {
+    this.replace(ailment, { ...ailment, op });
+  }
+
+  setAmount(ailment: StatusAilment, amount: string): void {
+    this.replace(ailment, { ...ailment, amount });
+  }
+
+  /** The ways a state may move a status, as the `&!` command spells them. */
+  readonly statOps = ['=', '+', '-'];
+
   private replace(ailment: StatusAilment, next: StatusAilment): void {
     if (!this.canEdit()) return;
     this.ailmentService.save(this.ailments().map((entry) => (entry.name === ailment.name ? next : entry)));

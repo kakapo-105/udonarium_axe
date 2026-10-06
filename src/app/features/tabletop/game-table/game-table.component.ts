@@ -22,8 +22,11 @@ import { PointerCoordinate } from '@axe/application/input/pointer-device.service
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { ImageService } from '@axe/application/storage/image.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
+import { BoardSwitchService } from '@axe/application/tabletop/board-switch.service';
+import { ConcealmentService } from '@axe/application/tabletop/concealment.service';
 import { HeldPieceService } from '@axe/application/tabletop/held-piece.service';
 import { MovePlanService } from '@axe/application/tabletop/move-plan.service';
+import { TableAmbienceService } from '@axe/application/tabletop/table-ambience.service';
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { TabletopActionService } from '@axe/application/tabletop/tabletop-action.service';
 import { TerrainBatchService } from '@axe/application/tabletop/terrain-batch.service';
@@ -76,6 +79,8 @@ import { TableEffectOverlayComponent } from '@axe/features/effect/table-effect-o
 import { PeerCursorComponent } from '@axe/features/lobby/peer-cursor/peer-cursor.component';
 import { RoomPanelService } from '@axe/features/panels/room-panel.service';
 import { ReplayRouteOverlayComponent } from '@axe/features/replay/replay-route-overlay/replay-route-overlay.component';
+import { buildPressedGroundMenu } from '@axe/features/tabletop/board-switch/board-switch-context-menu';
+import { buildRevealMenu, listedThingLabel } from '@axe/features/tabletop/board-switch/concealment-context-menu';
 import { TableFogAirOverlayComponent } from '@axe/features/tabletop/fog-of-war/table-fog-air-overlay.component';
 import { beamTopGridGeometry, beamWallFaceGrid } from '@axe/features/tabletop/game-table/beam-top-grid';
 import { glideTransform } from '@axe/features/tabletop/game-table/game-table-camera';
@@ -102,7 +107,9 @@ import { RangeComponent } from '@axe/features/tabletop/range/range.component';
 import { TableAltitudeGuideOverlayComponent } from '@axe/features/tabletop/table-altitude-guide-overlay/table-altitude-guide-overlay.component';
 import { TableAmbienceComponent } from '@axe/features/tabletop/table-ambience/table-ambience.component';
 import { TableBeamOverlayComponent } from '@axe/features/tabletop/table-beam-overlay/table-beam-overlay.component';
+import { TableDiceOverlayComponent } from '@axe/features/tabletop/table-dice-overlay/table-dice-overlay.component';
 import { TableMoveBlockOverlayComponent } from '@axe/features/tabletop/table-move-block-overlay/table-move-block-overlay.component';
+import { TableMoveCostOverlayComponent } from '@axe/features/tabletop/table-move-cost-overlay/table-move-cost-overlay.component';
 import { TableMoveRangeOverlayComponent } from '@axe/features/tabletop/table-move-range-overlay/table-move-range-overlay.component';
 import { TableTargetOverlayComponent } from '@axe/features/tabletop/table-target-overlay/table-target-overlay.component';
 import { TableTriggerOverlayComponent } from '@axe/features/tabletop/table-trigger-overlay/table-trigger-overlay.component';
@@ -209,6 +216,7 @@ const NO_BEAM_WALL_GRIDS: readonly BeamWallGrid[] = [];
     TableAltitudeGuideOverlayComponent,
     TableMoveRangeOverlayComponent,
     TableMoveBlockOverlayComponent,
+    TableMoveCostOverlayComponent,
     TableTriggerOverlayComponent,
     TableEffectOverlayComponent,
     EffectTargetOverlayComponent,
@@ -218,6 +226,7 @@ const NO_BEAM_WALL_GRIDS: readonly BeamWallGrid[] = [];
     LightSourceComponent,
     TableAmbienceComponent,
     TableWeatherOverlayComponent,
+    TableDiceOverlayComponent,
   ],
   host: {
     class: 'block',
@@ -237,6 +246,7 @@ export class GameTableComponent {
   private readonly imageService = inject(ImageService);
   private readonly motion = inject(MotionService);
   private readonly tabletopService = inject(TabletopService);
+  private readonly ambienceService = inject(TableAmbienceService);
   private readonly terrainBatch = inject(TerrainBatchService);
   private readonly tabletopActionService = inject(TabletopActionService);
   protected readonly visionService = inject(VisionService);
@@ -269,6 +279,8 @@ export class GameTableComponent {
   private _gridDrawnFrom: string | null = null;
   private readonly renderLite = inject(RenderLiteService);
   readonly gestureService = inject(GameTableGestureService);
+  private readonly boardSwitches = inject(BoardSwitchService);
+  private readonly concealment = inject(ConcealmentService);
 
   constructor() {
     this.destroyRef.onDestroy(() => {
@@ -769,10 +781,7 @@ export class GameTableComponent {
     this.objectChangeService.collectionOf('terrain')();
     return this.tabletopService.terrains;
   });
-  readonly ambiences = computed(() => {
-    this.objectChangeService.collectionOf('table-ambience')();
-    return this.tabletopService.ambiences;
-  });
+  readonly ambiences = computed(() => this.ambienceService.shown());
   readonly textNotes = computed(() => {
     this.objectChangeService.collectionOf('text-note')();
     return this.tabletopService.textNotes;
@@ -943,6 +952,28 @@ export class GameTableComponent {
     // The entry goes in whole, the way the ambience entry does: the rotating menu opens what
     // has sub-entries rather than being handed them, and a group holding the same entries the
     // flat menu does is what keeps the two menus answering alike.
+    const revealActions = buildRevealMenu(
+      this.boardSwitches.canEdit(),
+      this.concealment.concealed().map((object) => ({
+        label: listedThingLabel(object.name, this.t(`feature.boardSwitch.thing.${object.aliasName}`), this.t),
+        reveal: () => this.concealment.reveal(object),
+      })),
+      this.t
+    );
+    const pressedActions = buildPressedGroundMenu(
+      this.boardSwitches.canEdit(),
+      this.boardSwitches.pressedGround().map((ground) => ({
+        label: listedThingLabel(
+          ground.pressSwitch?.def.label.trim() || ground.name,
+          this.t(
+            ground.pressSwitch?.retired ? 'feature.boardSwitch.groundRetired' : 'feature.boardSwitch.groundPressed'
+          ),
+          this.t
+        ),
+        reset: () => this.boardSwitches.reset(ground),
+      })),
+      this.t
+    );
     const partyGroups =
       partyActions.length > 0
         ? [{ name: this.t('feature.gmTools.party.title'), icon: 'group', actions: partyActions }]
@@ -954,6 +985,8 @@ export class GameTableComponent {
         ...secondaryCreateActions,
         ContextMenuSeparator,
         ...(partyActions.length > 0 ? [...partyActions, ContextMenuSeparator] : []),
+        ...(revealActions.length > 0 ? [...revealActions, ContextMenuSeparator] : []),
+        ...(pressedActions.length > 0 ? [...pressedActions, ContextMenuSeparator] : []),
         ...tableSettingActions,
       ],
       rotatingGroups: [
@@ -968,6 +1001,12 @@ export class GameTableComponent {
           actions: secondaryCreateActions,
         },
         ...partyGroups,
+        ...(revealActions.length > 0
+          ? [{ name: this.t('feature.boardSwitch.menu.concealed'), icon: 'visibility', actions: revealActions }]
+          : []),
+        ...(pressedActions.length > 0
+          ? [{ name: this.t('feature.boardSwitch.menu.reset'), icon: 'restart_alt', actions: pressedActions }]
+          : []),
         {
           name: this.t('feature.tabletop.tableSetting.title'),
           icon: 'tune',

@@ -280,7 +280,13 @@ describe('ResourceEditProcessor', () => {
     describe('sweeping buffs off the table', () => {
       let archer: GameCharacter;
 
+      /** A dice bot that, like the real one, comes in a task of its own after it is asked for. */
+      function loadedLater(): Promise<{ ID: string }> {
+        return new Promise((resolve) => setTimeout(() => resolve({ ID: 'DiceBot' })));
+      }
+
       beforeEach(() => {
+        mockLoadGameSystemAsync.mockImplementation(loadedLater);
         character.setLocation('table');
         character.addExtendData();
         character.buffs.addRound('毒', '', 3, { timing: 'none' });
@@ -303,9 +309,9 @@ describe('ResourceEditProcessor', () => {
       it('takes a buff of that name off every piece on the table for the game master, and says how many', async () => {
         PeerCursor.myCursor.role = PeerRole.GameMaster;
 
-        processor.checkResourceEditCommand(speak('&&毒-'), [{ text: '&&毒-', object: character }]);
+        await processor.checkResourceEditCommand(speak('&&毒-'), [{ text: '&&毒-', object: character }]);
 
-        await vi.waitFor(() => expect(systemText()).toContain('卓全体から「毒」を解除（2体・2件）'));
+        expect(systemText()).toContain('卓全体から「毒」を解除（2体・2件）');
         expect(names(character)).toEqual(['加速']);
         expect(names(archer)).toEqual([]);
       });
@@ -313,9 +319,9 @@ describe('ResourceEditProcessor', () => {
       it('takes nothing for anyone but the game master, and says the sweep is theirs', async () => {
         PeerCursor.myCursor.role = PeerRole.Player;
 
-        processor.checkResourceEditCommand(speak('&&2R-'), [{ text: '&&2R-', object: character }]);
+        await processor.checkResourceEditCommand(speak('&&2R-'), [{ text: '&&2R-', object: character }]);
 
-        await vi.waitFor(() => expect(systemText()).toContain('バフの一括解除はGMだけが使えます（&&2R-）'));
+        expect(systemText()).toContain('バフの一括解除はGMだけが使えます（&&2R-）');
         expect(names(character)).toEqual(['毒', '加速']);
         expect(names(archer)).toEqual(['毒']);
       });
@@ -323,9 +329,9 @@ describe('ResourceEditProcessor', () => {
       it('says so when nothing on the table matches', async () => {
         PeerCursor.myCursor.role = PeerRole.GameMaster;
 
-        processor.checkResourceEditCommand(speak('&&9R-'), [{ text: '&&9R-', object: character }]);
+        await processor.checkResourceEditCommand(speak('&&9R-'), [{ text: '&&9R-', object: character }]);
 
-        await vi.waitFor(() => expect(systemText()).toContain('卓全体に残り9Rのバフはありません'));
+        expect(systemText()).toContain('卓全体に残り9Rのバフはありません');
       });
     });
 

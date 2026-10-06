@@ -195,6 +195,7 @@ export function fieldToBlocks(
       kind: 'hazard',
       rect: { x: pool.x, y: pool.y, w: pool.w, h: pool.h },
       material: { kind: 'texture', id: pool.texture },
+      hazard: pool.hazard,
     });
   }
 
@@ -275,6 +276,7 @@ export function fieldToBlocks(
       density: pool.density,
       name: pool.name,
     })),
+    traps: [],
     torchRooms: lights.map((light) => light.room),
     torchSpots: lights.map((light) => ({ x: light.x, y: light.y })),
     lights,

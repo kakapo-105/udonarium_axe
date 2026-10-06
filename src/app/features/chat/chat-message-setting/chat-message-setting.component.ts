@@ -97,6 +97,7 @@ export class ChatMessageSettingComponent {
 
   readonly autoFollowScroll = this.chatPrefs.autoFollowScroll;
   readonly showVnEmoteBadge = this.chatPrefs.showVnEmoteBadge;
+  readonly showMessageCount = this.chatPrefs.showMessageCount;
   readonly fontSize = this.chatPrefs.fontSize;
   readonly minFontSize = CHAT_FONT_SIZE_MIN;
   readonly maxFontSize = CHAT_FONT_SIZE_MAX;
@@ -113,6 +114,11 @@ export class ChatMessageSettingComponent {
    */
   setShowVnEmoteBadge(v: boolean): void {
     this.chatPrefs.setShowVnEmoteBadge(v);
+  }
+
+  /** Says whether a chat window's title carries the number of lines in the tab it is showing. */
+  setShowMessageCount(v: boolean): void {
+    this.chatPrefs.setShowMessageCount(v);
   }
 
   /**

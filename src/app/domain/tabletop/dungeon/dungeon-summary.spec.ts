@@ -14,6 +14,8 @@ const labels: DungeonSummaryLabels = {
   torch: 'torch',
   doors: 'doors',
   hidden: 'hidden',
+  traps: 'traps',
+  trapName: (kind) => kind,
 };
 
 function build(seed = 7): DungeonLayout {

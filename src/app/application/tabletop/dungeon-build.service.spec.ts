@@ -9,11 +9,15 @@ import { WALL_TEXTURE_ASSET_URLS } from '@axe/domain/media/texture-catalog';
 import { atmosphereById } from '@axe/domain/tabletop/dungeon/dungeon-atmosphere';
 import { planDungeon } from '@axe/domain/tabletop/dungeon/dungeon-generator';
 import { FURNISHING_SHAPES } from '@axe/domain/tabletop/dungeon/room-furnishing';
+import { MAX_DUNGEON_TRAPS } from '@axe/domain/tabletop/dungeon/trap-placing';
 import { planField } from '@axe/domain/tabletop/field/field-generator';
 import { GameTable, GridType } from '@axe/domain/tabletop/game-table';
 import { LightSource } from '@axe/domain/tabletop/light-source';
 import { SYNC_OBJECTS_PER_TERRAIN } from '@axe/domain/tabletop/map-blocks';
 import { terrainBlocksMovement } from '@axe/domain/tabletop/move/blocked-cells';
+import { TableAmbience } from '@axe/domain/tabletop/table-ambience';
+import { TableMoveCost } from '@axe/domain/tabletop/table-move-cost';
+import { TableTrigger } from '@axe/domain/tabletop/table-trigger';
 import { Terrain, TerrainViewState } from '@axe/domain/tabletop/terrain';
 import { TextNote } from '@axe/domain/tabletop/text-note';
 import { terrainCostOf } from '@axe/testing/terrain-cost';
@@ -122,6 +126,96 @@ describe('DungeonBuildService', () => {
     // Around 950 bytes of saved room per box, which is what a voxel table has to beat.
     expect(cost.xmlBytes / cost.terrains).toBeGreaterThan(700);
     expect(cost.xmlBytes / cost.terrains).toBeLessThan(1300);
+  });
+
+  describe('the dangerous ground of a generated place', () => {
+    async function lavaCavern(trapCount = 0) {
+      const plan = planDungeon({ atmosphere: 'lavaCavern', roomCount: 8, seed: 7, trapCount });
+      const result = await service.build(plan.layout, plan.atmosphere, plan.blocks, options());
+      return { plan, table: result.table };
+    }
+
+    function costsOn(table: GameTable): TableMoveCost[] {
+      return table.children.filter((child): child is TableMoveCost => child instanceof TableMoveCost);
+    }
+
+    function goesOffOn(table: GameTable): TableTrigger[] {
+      return table.children.filter((child): child is TableTrigger => child instanceof TableTrigger);
+    }
+
+    it('makes a pool of lava cost something to wade', async () => {
+      const { plan, table } = await lavaCavern();
+      const pools = plan.blocks.paint.filter((patch) => patch.kind === 'hazard');
+
+      expect(pools.length).toBeGreaterThan(0);
+      expect(costsOn(table).length).toBe(pools.length);
+      expect(costsOn(table)[0].charge).toBe(2);
+    });
+
+    it('burns whoever spends a turn standing in one, in the open where the room can see it', async () => {
+      const { table } = await lavaCavern();
+      const burns = goesOffOn(table);
+
+      expect(burns.length).toBeGreaterThan(0);
+      expect(burns[0].amount).toBe('2d6');
+      expect(burns[0].moment).toBe('turnStart');
+      expect(burns[0].open).toBe(true);
+    });
+
+    it('lays a look over each pool as well, so the floor there reads as more than a red floor', async () => {
+      const { plan, table } = await lavaCavern();
+      const pools = plan.blocks.paint.filter((patch) => patch.kind === 'hazard');
+
+      expect(pools.length).toBeGreaterThan(0);
+      expect(table.children.filter((child) => child instanceof TableAmbience).length).toBe(pools.length);
+    });
+
+    it('leaves a place with no dangerous ground with nothing to wade', async () => {
+      const { result } = await build();
+
+      expect(costsOn(result.table)).toEqual([]);
+    });
+  });
+
+  describe('the traps of a generated place', () => {
+    async function trapped(trapCount: number) {
+      const plan = planDungeon({ atmosphere: 'stoneDungeon', roomCount: 8, seed: 7, trapCount });
+      const result = await service.build(plan.layout, plan.atmosphere, plan.blocks, options());
+      const set = result.table.children.filter((child): child is TableTrigger => child instanceof TableTrigger);
+      return { plan, table: result.table, set };
+    }
+
+    it('sets one piece of ground that goes off for each trap', async () => {
+      const { plan, set } = await trapped(6);
+
+      expect(plan.blocks.traps.length).toBe(6);
+      expect(set.length).toBe(6);
+      expect(set.map((trap) => ({ x: trap.col, y: trap.row }))).toEqual(
+        plan.blocks.traps.map((trap) => ({ x: trap.x, y: trap.y }))
+      );
+    });
+
+    it('keeps every one of them from the room, a trap the party can see being no trap', async () => {
+      const { set } = await trapped(6);
+
+      expect(set.every((trap) => !trap.open)).toBe(true);
+    });
+
+    it('gives a trip wire nothing to take and the master alone to tell', async () => {
+      const { plan, set } = await trapped(MAX_DUNGEON_TRAPS);
+      const wires = plan.blocks.traps
+        .map((trap, index) => ({ kind: trap.kind, laid: set[index] }))
+        .filter((pair) => pair.kind === 'alarm');
+
+      expect(wires.length).toBeGreaterThan(0);
+      expect(wires.every((pair) => pair.laid.silent && pair.laid.amount === '')).toBe(true);
+    });
+
+    it('leaves an untrapped place with no ground that goes off', async () => {
+      const { set } = await trapped(0);
+
+      expect(set).toEqual([]);
+    });
   });
 
   it('builds one table and leaves no other behind', async () => {

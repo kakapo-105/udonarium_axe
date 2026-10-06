@@ -24,6 +24,8 @@ import { GameObjectInventoryService } from '@axe/application/inventory/game-obje
 import { DisclosureService } from '@axe/application/permission/disclosure.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
+import { BoardSwitchService } from '@axe/application/tabletop/board-switch.service';
+import { ConcealmentService } from '@axe/application/tabletop/concealment.service';
 import { MovePlanService } from '@axe/application/tabletop/move-plan.service';
 import { MoveRangeService } from '@axe/application/tabletop/move-range.service';
 import { RangeShapeInvokeService } from '@axe/application/tabletop/range-shape-invoke.service';
@@ -33,6 +35,7 @@ import { VisionService } from '@axe/application/tabletop/vision.service';
 import { BillboardFacing, facesAlways, NOT_TURNED } from '@axe/application/ui/billboard-frame.service';
 import { BuffViewPreferenceService } from '@axe/application/ui/buff-view-preference.service';
 import { ContextMenuService } from '@axe/application/ui/context-menu.service';
+import { MobileLayoutService } from '@axe/application/ui/mobile-layout.service';
 import { buildOverlapContextMenu } from '@axe/application/ui/overlap-context-menu';
 import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
 import { PieceContextMenuService } from '@axe/application/ui/piece-context-menu.service';
@@ -94,6 +97,7 @@ import { buildGameCharacterContextMenuModel } from '@axe/features/character/game
 import { GameCharacterBuffViewComponent } from '@axe/features/character/game-character-buff-view/game-character-buff-view.component';
 import { GameDataElementBuffComponent } from '@axe/features/character/game-data-element-buff/game-data-element-buff.component';
 import { ObjectPanelService } from '@axe/features/panels/object-panel.service';
+import { buildConcealMenu } from '@axe/features/tabletop/board-switch/concealment-context-menu';
 import { LightSettingsComponent } from '@axe/features/tabletop/light-settings/light-settings.component';
 import { BillboardDirective } from '@axe/ui/directives/billboard.directive';
 import { MovableOption } from '@axe/ui/directives/movable.directive';
@@ -193,6 +197,8 @@ interface PieceRightDrag {
 })
 export class GameCharacterComponent {
   private readonly contextMenuService = inject(ContextMenuService);
+  private readonly boardSwitches = inject(BoardSwitchService);
+  private readonly concealment = inject(ConcealmentService);
   private readonly pieceContextMenu = inject(PieceContextMenuService);
   private readonly characterDice = inject(CharacterDiceService);
   private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -203,6 +209,7 @@ export class GameCharacterComponent {
   private readonly selectionSignalService = inject(SelectionSignalService);
   private readonly inventoryService = inject(GameObjectInventoryService);
   private readonly uiSignalService = inject(UiSignalService);
+  private readonly mobileLayout = inject(MobileLayoutService);
   private readonly buffViewPreference = inject(BuffViewPreferenceService);
   private readonly overlay = inject(PieceOverlayPreferenceService);
   private readonly objectChange = inject(ObjectChangeService);
@@ -579,11 +586,40 @@ export class GameCharacterComponent {
 
   private readonly rollHandleGapPx = computed(() => Math.round(this.rollHandleSizePx() * ROLL_HANDLE_GAP_RATIO));
 
-  readonly rollHandleHeadTransform = computed(() => this.pieceCenterShift());
+  /** How wide the picture stands: as wide as the ground, unless its height was set apart from it. */
+  private readonly pictureWidthPx = computed(() => {
+    const ground = this.size() * this.gridSize;
+    if (!this.specifyKomaImageFlag() || this.imageView.fitsInCell()) return ground;
+    const natural = this.imageView.naturalSize();
+    return natural ? (this.komaImageHeightSignal() * natural.width) / natural.height : ground;
+  });
 
-  readonly rollHandleFootTransform = computed(
-    () => `${this.pieceCenterShift()} translateY(100%) translateY(${this.rollHandleGapPx()}px)`
+  /**
+   * Whether the handles that tip the piece over stand either side of the picture rather than at its
+   * head and feet.
+   *
+   * On a phone they stay out for good, there being no hover to wait for, and the one at the head
+   * sat over the face. Beside the picture, halfway up, they keep clear of it and of the name and
+   * bars above it.
+   */
+  readonly rollHandlesBeside = computed(() => this.mobileLayout.isActive());
+
+  /** Where the handle at the head stands: inside the top of the picture, or off to its right. */
+  readonly rollHandleHeadTransform = computed(() =>
+    this.rollHandlesBeside() ? this.rollHandleBeside(1) : this.pieceCenterShift()
   );
+
+  /** Where the handle at the feet stands: clear below the picture, or off to its left. */
+  readonly rollHandleFootTransform = computed(() =>
+    this.rollHandlesBeside()
+      ? this.rollHandleBeside(-1)
+      : `${this.pieceCenterShift()} translateY(100%) translateY(${this.rollHandleGapPx()}px)`
+  );
+
+  private rollHandleBeside(side: 1 | -1): string {
+    const aside = this.pictureWidthPx() / 2 + this.rollHandleSizePx() / 2 + this.rollHandleGapPx();
+    return `${this.pieceCenterShift()} translateX(${side * aside}px) translateY(-50%)`;
+  }
 
   readonly mode2dEnabled = computed(() => {
     if (this.isPoster()) return true;
@@ -1273,7 +1309,10 @@ export class GameCharacterComponent {
     );
     const table = this.tabletopService.currentTable;
     const display = this.tabletopService.display();
-    const surfaceEntries = buildSurfaceSwitchContextMenu(char, table, this.translateFn);
+    const surfaceEntries = [
+      ...buildSurfaceSwitchContextMenu(char, table, this.translateFn),
+      ...buildConcealMenu(this.boardSwitches.canEdit(), () => this.concealment.conceal(char), this.translateFn),
+    ];
     const menu = buildGameCharacterContextMenuModel(
       char,
       this.gridSize,

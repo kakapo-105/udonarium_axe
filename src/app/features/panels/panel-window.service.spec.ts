@@ -89,6 +89,20 @@ describe('PanelWindowService', () => {
       expect(over.ownerDocument).toBe(opened.document);
     });
 
+    it('makes the panel’s own nodes with the window’s document', () => {
+      let host: ViewContainerRef | null = null;
+      open((layer) => (host = layer));
+      // Asked of the document rather than read off the node: a node handed over on the way in
+      // reads as the window's either way, and being handed over is the very thing that leaves
+      // a select's list dead on a browser that builds it when the element is made.
+      const made = vi.spyOn(opened.document, 'createElement');
+
+      host!.createComponent(StandInPanelComponent);
+
+      expect(made).toHaveBeenCalledWith('stand-in-panel');
+      expect(made).toHaveBeenCalledWith('p');
+    });
+
     it('carries a sheet the app adds after the window opened over to the window, and takes it away again', async () => {
       open((layer) => layer.createComponent(StandInPanelComponent));
       const sheet = document.createElement('style');

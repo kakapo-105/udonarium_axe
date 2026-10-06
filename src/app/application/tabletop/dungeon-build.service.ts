@@ -15,6 +15,7 @@ import {
 import { DungeonPoint } from '@axe/domain/tabletop/dungeon/dungeon-layout';
 import { cellCenterOf, cellGridOf, cellIndexOf } from '@axe/domain/tabletop/fog/cell-grid';
 import { GameTable, GridType } from '@axe/domain/tabletop/game-table';
+import { DEFAULT_HAZARD_ELEMENT, hazardPresetOf } from '@axe/domain/tabletop/hazard-presets';
 import { LightSource } from '@axe/domain/tabletop/light-source';
 import {
   MapAmbience,
@@ -24,16 +25,23 @@ import {
   MapLightKind,
   MapMaterial,
   MapMood,
+  MapPaint,
   MapSize,
+  MapTrap,
 } from '@axe/domain/tabletop/map-blocks';
 import { blockOrigin, MapGrid, tableSizeFor } from '@axe/domain/tabletop/map-grid';
 import { cornerShiftOf } from '@axe/domain/tabletop/move/piece-on-grid';
 import { TableAmbience } from '@axe/domain/tabletop/table-ambience';
+import { TableMoveCost } from '@axe/domain/tabletop/table-move-cost';
+import { TableTrigger } from '@axe/domain/tabletop/table-trigger';
 import { DoorStyle, Terrain, TerrainViewState } from '@axe/domain/tabletop/terrain';
+import { trapPresetOf } from '@axe/domain/tabletop/trap-presets';
 import { EYE_HEIGHT_CELLS } from '@axe/domain/tabletop/vision-scene';
 import { applyLightPreset, LightPreset } from '@axe/domain/tabletop/vision-types';
 
 const TERRAIN_IMAGE_TAG = '地形';
+/** What dangerous ground and traps take from, which is what most sheets call it. */
+const HAZARD_RESOURCE = DEFAULT_HAZARD_ELEMENT;
 /** A generated dungeon is drawn on fifty pixel squares, painted ground and terrain alike. */
 export const DUNGEON_GRID_SIZE = 50;
 const GRID_SIZE = DUNGEON_GRID_SIZE;
@@ -215,6 +223,8 @@ export class DungeonBuildService {
     onProgress?.(blocks.blocks.length, blocks.blocks.length);
 
     this.layAmbiences(table, blocks.ambiences, grid);
+    this.layHazards(table, blocks.paint);
+    this.setTraps(table, blocks.traps);
     this.standLights(table, blocks.lights, options.wallHeight, grid);
     this.musterParty(table, options.muster ?? []);
 
@@ -384,6 +394,77 @@ export class DungeonBuildService {
       ambience.posZ = 0;
       table.appendChild(ambience);
       ambience.update();
+    }
+  }
+
+  /**
+   * What a patch of dangerous ground costs to cross and does to whoever crosses it.
+   *
+   * The look of it is laid with the rest of the ambiences and the picture of it is painted
+   * into the floor; what is left is the going and the harm, which is what tells a pool of
+   * lava from a red patch of floor.
+   */
+  private layHazards(table: GameTable, paint: readonly MapPaint[]): void {
+    for (const patch of paint) {
+      if (patch.kind !== 'hazard' || !patch.hazard) continue;
+      const preset = hazardPresetOf(patch.hazard);
+      const name = this.t(`feature.ambience.kind.${preset.ambience}`);
+      if (preset.extraCost > 0) {
+        const dear = new TableMoveCost();
+        dear.col = patch.rect.x;
+        dear.row = patch.rect.y;
+        dear.width = patch.rect.w;
+        dear.height = patch.rect.h;
+        dear.extraCost = preset.extraCost;
+        dear.color = preset.color;
+        dear.initialize();
+        table.appendChild(dear);
+      }
+      if (preset.amount.length < 1 && preset.ailment.length < 1) continue;
+      const harm = new TableTrigger();
+      harm.name = name;
+      harm.col = patch.rect.x;
+      harm.row = patch.rect.y;
+      harm.width = patch.rect.w;
+      harm.height = patch.rect.h;
+      harm.moment = preset.moment;
+      harm.element = preset.amount.length > 0 ? HAZARD_RESOURCE : '';
+      harm.amount = preset.amount;
+      harm.ailment = preset.ailment;
+      harm.color = preset.color;
+      // Nobody is meant to be surprised by a lake of lava: the room can see the ground it is
+      // painted on, which is the whole of what makes it a hazard rather than a trap.
+      harm.open = true;
+      harm.initialize();
+      table.appendChild(harm);
+    }
+  }
+
+  /**
+   * The traps, as ground that goes off, painted where only the master can see it.
+   *
+   * A trap the room could see would be no trap at all, so it goes down closed; the ones that
+   * give themselves away do that by going off rather than by being drawn.
+   */
+  private setTraps(table: GameTable, traps: readonly MapTrap[]): void {
+    for (const trap of traps) {
+      const preset = trapPresetOf(trap.kind);
+      const sprung = new TableTrigger();
+      sprung.name = this.t(`feature.tabletop.dungeonGenerator.trap.${trap.kind}`);
+      sprung.col = trap.x;
+      sprung.row = trap.y;
+      sprung.moment = preset.moment;
+      sprung.repeat = preset.repeat;
+      sprung.once = preset.repeat === 'once';
+      sprung.element = preset.amount.length > 0 ? HAZARD_RESOURCE : '';
+      sprung.amount = preset.amount;
+      sprung.ailment = preset.ailment;
+      sprung.silent = preset.silent;
+      sprung.reveals = preset.reveals;
+      sprung.color = preset.color;
+      if (preset.asksRoll) sprung.check = this.t('feature.tabletop.dungeonGenerator.trap.roll');
+      sprung.initialize();
+      table.appendChild(sprung);
     }
   }
 

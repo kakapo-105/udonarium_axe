@@ -3,9 +3,11 @@ import {
   ApplicationRef,
   ComponentRef,
   createComponent,
+  createEnvironmentInjector,
   EnvironmentInjector,
   inject,
   Injectable,
+  RendererFactory2,
   signal,
   ViewContainerRef,
 } from '@angular/core';
@@ -13,6 +15,7 @@ import { OverlayLayers } from '@axe/application/ui/overlay-layers';
 import { PanelFrame, PanelService } from '@axe/application/ui/panel.service';
 import { AttachedDocuments } from '@axe/domain/ui/attached-documents';
 import { PanelWindowLayerComponent } from '@axe/features/panels/panel-window-layer.component';
+import { windowRendererFactory } from '@axe/features/panels/window-renderer';
 
 /**
  * What a panel drawn in a window of its own has to be told, on top of the app's own sheet.
@@ -67,6 +70,8 @@ interface OpenWindow {
   /** Held rather than read back off the window, which gives up its document once it is closed. */
   document: Document;
   layer: ComponentRef<PanelWindowLayerComponent>;
+  /** What the window's own nodes are made with, let go once the window has. */
+  injector: EnvironmentInjector;
   watchdog: ReturnType<typeof setInterval>;
   /** Set once the panel has arrived, so an empty layer afterwards means the panel has gone. */
   arrived: boolean;
@@ -93,6 +98,7 @@ export class PanelWindowService {
   private readonly document = inject(DOCUMENT);
   private readonly appRef = inject(ApplicationRef);
   private readonly environmentInjector = inject(EnvironmentInjector);
+  private readonly rendererFactory = inject(RendererFactory2);
 
   private readonly windows = new Map<string, OpenWindow>();
 
@@ -141,8 +147,16 @@ export class PanelWindowService {
     this.watchSheets();
     AttachedDocuments.attach(target);
 
+    // Everything drawn in the window is made by the window's own document. Angular would
+    // otherwise make it with the document the application started in and hand it over on the
+    // way in, which is enough for anything the browser draws itself and not enough for the
+    // parts it hands to the operating system - a select's list among them.
+    const injector = createEnvironmentInjector(
+      [{ provide: RendererFactory2, useValue: windowRendererFactory(this.rendererFactory, target) }],
+      this.environmentInjector
+    );
     const layer = createComponent(PanelWindowLayerComponent, {
-      environmentInjector: this.environmentInjector,
+      environmentInjector: injector,
       hostElement: target.body,
     });
     this.appRef.attachView(layer.hostView);
@@ -153,7 +167,15 @@ export class PanelWindowService {
     const watchdog = setInterval(() => this.look(request.key), 500);
     opened.addEventListener('pagehide', () => this.bringBack(request.key));
 
-    this.windows.set(request.key, { request, window: opened, document: target, layer, watchdog, arrived: false });
+    this.windows.set(request.key, {
+      request,
+      window: opened,
+      document: target,
+      layer,
+      injector,
+      watchdog,
+      arrived: false,
+    });
     this.detached.set([...this.windows.keys()]);
     return true;
   }
@@ -240,6 +262,7 @@ export class PanelWindowService {
     OverlayLayers.detach(held.document);
     held.layer.destroy();
     this.appRef.detachView(held.layer.hostView);
+    held.injector.destroy();
     if (!held.window.closed) held.window.close();
 
     if (comingHome && !held.request.leaving) held.request.restore();

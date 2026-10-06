@@ -1,5 +1,6 @@
 import { inject, Injectable, signal } from '@angular/core';
 import { PointerCoordinate, PointerDeviceService } from '@axe/application/input/pointer-device.service';
+import { Matrix3D } from '@axe/core/transform/matrix-3d';
 import { Transform } from '@axe/core/transform/transform';
 
 @Injectable({
@@ -70,6 +71,17 @@ export class CoordinateService {
 
   private giveBack(borrowed: { transform: Transform; pooled: boolean }): void {
     if (borrowed.pooled) borrowed.transform.clear();
+  }
+
+  /**
+   * The matrix that takes a point of the table onto the page, through every transform and
+   * perspective above it, as it stands this frame; a point's place is its x and y over its w.
+   */
+  tabletopSceneMatrix(out: Matrix3D = new Matrix3D()): Matrix3D {
+    const borrowed = this.borrow(this.tabletopOriginElement, this._transformA);
+    borrowed.transform.sceneMatrix(out);
+    this.giveBack(borrowed);
+    return out;
   }
 
   /** Converts a point on the page into the element's own space, through every transform above it. */

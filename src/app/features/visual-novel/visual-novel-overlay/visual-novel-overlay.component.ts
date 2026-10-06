@@ -90,6 +90,7 @@ import {
   AttachedSound,
   VisualNovelSoundBoardComponent,
 } from '@axe/features/visual-novel/visual-novel-sound-board/visual-novel-sound-board.component';
+import { DiceRollStageComponent } from '@axe/ui/components/dice-roll-stage/dice-roll-stage.component';
 import { RubyTextComponent } from '@axe/ui/components/ruby-text/ruby-text.component';
 import { NgSelectWindowDirective } from '@axe/ui/directives/ng-select-window.directive';
 import { spotBeside } from '@axe/ui/panel-spot';
@@ -143,6 +144,7 @@ type VisualNovelPopover = 'soundBoard' | 'slotGuide' | 'palette' | 'shortcutHelp
     NgSelectWindowDirective,
     RubyTextComponent,
     VisualNovelSoundBoardComponent,
+    DiceRollStageComponent,
   ],
 })
 export class VisualNovelOverlayComponent {

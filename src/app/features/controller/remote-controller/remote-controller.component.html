@@ -503,7 +503,7 @@
               >
                 <input
                   class="text-ui-text hover:border-b-ui-border-panel focus:border-b-ui-accent focus:bg-ui-input w-full min-w-0 [appearance:textfield] border-b border-none border-b-transparent bg-transparent px-0.5 py-px text-center font-[inherit] text-[13px] font-bold outline-none focus:appearance-auto"
-                  [style]="'color:' + dataElm.nowValueColor"
+                  [style.color]="dataElm.nowValueColor || null"
                   type="number"
                   name="data-current-value"
                   [(ngModel)]="dataElm.currentValue"

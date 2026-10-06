@@ -110,6 +110,18 @@ export class ChatTabList extends ObjectNode implements InnerXml {
     return ChatTabList._instance;
   }
 
+  /**
+   * Forgets the list held here, so that the next reader is given a new and empty one.
+   *
+   * The list is held here as well as in the store, and it keeps its tabs as its own children.
+   * Emptying the store takes the tabs out of the store alone: this one still holds every tab ever
+   * added to it, and hands them back the moment it is read. Only a test between two of its own
+   * has any reason to say this.
+   */
+  static forget(): void {
+    ChatTabList._instance = undefined as unknown as ChatTabList;
+  }
+
   /** The tabs in their order, the system tab included. */
   get chatTabs(): readonly ChatTab[] {
     return this.children as readonly ChatTab[];

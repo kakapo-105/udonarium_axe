@@ -13,7 +13,12 @@
           </div>
           @if (jukebox.audio) {
             <div class="truncate text-[13px] font-semibold text-white">{{ jukebox.audio.name }}</div>
-            <div class="mt-px text-[11px] text-white/60">{{ getTagOf(jukebox.audio) }}</div>
+            <div class="mt-px text-[11px] text-white/60">
+              {{ getTagOf(jukebox.audio) }}
+              @if (playback.isPaused()) {
+                · {{ 'feature.media.jukebox.paused' | transloco }}
+              }
+            </div>
           }
         </div>
         @if (jukebox.audio) {
@@ -28,7 +33,7 @@
       </div>
     } @else {
       <div class="text-ui-accent w-8 shrink-0 text-center text-[28px] [&_.material-icons]:text-[28px]!">
-        @if (jukebox.audio && jukebox.isPlaying) {
+        @if (jukebox.audio && playback.isPlaying()) {
           <i class="material-icons text-ui-accent animate-[pulse_1.4s_ease-in-out_infinite]">music_note</i>
         } @else {
           <i class="material-icons">music_note</i>
@@ -40,7 +45,12 @@
         </div>
         @if (jukebox.audio) {
           <div class="text-ui-text truncate text-[13px] font-semibold">{{ jukebox.audio.name }}</div>
-          <div class="text-ui-muted mt-px text-[11px]">{{ getTagOf(jukebox.audio) }}</div>
+          <div class="text-ui-muted mt-px text-[11px]">
+            {{ getTagOf(jukebox.audio) }}
+            @if (playback.isPaused()) {
+              · {{ 'feature.media.jukebox.paused' | transloco }}
+            }
+          </div>
         } @else {
           <div class="text-ui-dim truncate text-[13px] font-normal italic">
             {{ 'feature.media.jukebox.stopped' | transloco }}
@@ -57,6 +67,121 @@
         </button>
       }
     }
+  </div>
+
+  <div
+    class="bg-ui-panel border-ui-border-panel flex flex-col gap-1 border-b border-solid px-2.5 pt-1.5 pb-1"
+    data-testid="jukebox-transport"
+  >
+    <div class="flex items-center gap-1.5">
+      <button
+        type="button"
+        class="text-ui-dim hover:bg-ui-hover hover:text-ui-text m-0 inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent p-0 transition-colors [&_.material-icons]:text-[13px]!"
+        [class.text-ui-accent!]="isSeekLocked()"
+        (click)="toggleSeekLock()"
+        [title]="
+          isSeekLocked()
+            ? ('feature.media.miniJukebox.seekUnlock' | transloco)
+            : ('feature.media.miniJukebox.seekLock' | transloco)
+        "
+        [attr.aria-label]="
+          isSeekLocked()
+            ? ('feature.media.miniJukebox.seekUnlock' | transloco)
+            : ('feature.media.miniJukebox.seekLock' | transloco)
+        "
+      >
+        <i class="material-icons">{{ isSeekLocked() ? 'lock' : 'lock_open' }}</i>
+      </button>
+      <input
+        type="range"
+        class="h-1 min-w-0 flex-1 cursor-pointer [accent-color:var(--ui-accent)] disabled:cursor-default disabled:opacity-40"
+        name="jukebox-seek"
+        min="0"
+        max="100"
+        step="0.1"
+        [value]="displayProgress() * 100"
+        [disabled]="!playback.isPlaying() || isSeekLocked()"
+        (input)="onSeekInput($event)"
+        (change)="onSeekCommit($event)"
+        [attr.aria-label]="'feature.media.jukebox.seek' | transloco"
+      />
+      <span
+        class="text-ui-dim w-20 shrink-0 text-right text-[10px] [font-variant-numeric:tabular-nums]"
+        data-testid="jukebox-time"
+        >{{ timeDisplay() }}</span
+      >
+    </div>
+    <div class="flex items-center justify-center gap-1">
+      <button
+        type="button"
+        class="text-ui-muted hover:bg-ui-hover hover:text-ui-text m-0 inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent p-0 transition-colors [&_.material-icons]:text-[20px]!"
+        [class.text-ui-accent!]="playback.isShuffled()"
+        (click)="playback.toggleShuffle()"
+        [title]="
+          playback.isShuffled()
+            ? ('feature.media.miniJukebox.shuffleOn' | transloco)
+            : ('feature.media.miniJukebox.shuffleOff' | transloco)
+        "
+        [attr.aria-pressed]="playback.isShuffled()"
+        data-testid="jukebox-shuffle"
+      >
+        <i class="material-icons">shuffle</i>
+      </button>
+      <button
+        type="button"
+        class="text-ui-muted hover:bg-ui-hover hover:text-ui-text m-0 inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent p-0 transition-colors disabled:cursor-not-allowed disabled:opacity-30 [&_.material-icons]:text-[22px]!"
+        (click)="playback.previous()"
+        [disabled]="!playback.queue().length"
+        [title]="'feature.media.miniJukebox.prev' | transloco"
+        data-testid="jukebox-prev"
+      >
+        <i class="material-icons">skip_previous</i>
+      </button>
+      <button
+        type="button"
+        class="bg-ui-accent-bg border-ui-accent text-ui-accent hover:bg-ui-hover m-0 inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-solid p-0 transition-colors disabled:cursor-not-allowed disabled:opacity-30 [&_.material-icons]:text-[26px]!"
+        (click)="playback.togglePlayPause()"
+        [disabled]="!playback.isPlaying() && !playback.isPaused() && !playback.queue().length"
+        [title]="
+          playback.isPlaying()
+            ? ('feature.media.miniJukebox.pause' | transloco)
+            : ('feature.media.miniJukebox.play' | transloco)
+        "
+        data-testid="jukebox-play-pause"
+      >
+        <i class="material-icons">{{ playback.isPlaying() ? 'pause' : 'play_arrow' }}</i>
+      </button>
+      <button
+        type="button"
+        class="text-ui-muted hover:bg-ui-hover hover:text-ui-text m-0 inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent p-0 transition-colors disabled:cursor-not-allowed disabled:opacity-30 [&_.material-icons]:text-[22px]!"
+        (click)="playback.next()"
+        [disabled]="!playback.queue().length"
+        [title]="'feature.media.miniJukebox.next' | transloco"
+        data-testid="jukebox-next"
+      >
+        <i class="material-icons">skip_next</i>
+      </button>
+      <button
+        type="button"
+        class="text-ui-muted hover:bg-ui-hover hover:text-ui-text m-0 inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent p-0 transition-colors [&_.material-icons]:text-[20px]!"
+        [class.text-ui-accent!]="playback.repeatMode() !== 'none'"
+        (click)="playback.cycleRepeatMode()"
+        [title]="
+          playback.repeatMode() === 'one'
+            ? ('feature.media.miniJukebox.repeatOne' | transloco)
+            : playback.repeatMode() === 'all'
+              ? ('feature.media.miniJukebox.repeatAll' | transloco)
+              : ('feature.media.miniJukebox.repeatOff' | transloco)
+        "
+        data-testid="jukebox-repeat"
+      >
+        <i class="material-icons">{{ playback.repeatMode() === 'one' ? 'repeat_one' : 'repeat' }}</i>
+      </button>
+    </div>
+    <div class="text-ui-dim flex min-w-0 items-center justify-center gap-1 text-[10px]">
+      <i class="material-icons shrink-0 text-[12px]!">queue_music</i>
+      <span class="truncate" data-testid="jukebox-active-playlist">{{ playback.activePlaylist()?.label }}</span>
+    </div>
   </div>
 
   <div class="bg-ui-panel border-ui-border-panel flex flex-col gap-0 border-b border-solid px-3 py-2">
@@ -155,6 +280,7 @@
         [class.font-semibold!]="viewMode() === 'library'"
         [class.shadow-[0_1px_4px_rgba(0,0,0,0.45)]]="viewMode() === 'library'"
         (click)="viewMode.set('library')"
+        data-testid="jukebox-tab-library"
       >
         <i class="material-icons">library_music</i>{{ 'feature.media.jukebox.tabLibrary' | transloco }}
       </button>
@@ -165,6 +291,7 @@
         [class.font-semibold!]="viewMode() === 'playlist'"
         [class.shadow-[0_1px_4px_rgba(0,0,0,0.45)]]="viewMode() === 'playlist'"
         (click)="viewMode.set('playlist')"
+        data-testid="jukebox-tab-playlist"
       >
         <i class="material-icons">queue_music</i>{{ 'feature.media.jukebox.tabPlaylist' | transloco }}
       </button>
@@ -192,6 +319,7 @@
       @for (audio of audios(); track audio.identifier) {
         <div
           class="border-ui-border-panel hover:bg-ui-hover flex items-center gap-2 border-b border-solid px-2.5 py-1.5 transition-[background]"
+          (contextmenu)="onLibraryContextMenu($event, audio)"
           [class.bg-ui-accent-bg!]="
             audio === jukebox.audio || (audio === auditionPlayer.audio && !auditionPlayer.paused)
           "
@@ -217,8 +345,8 @@
               class="bg-ui-input border-ui-border-panel text-ui-muted rounded-ui-sm focus:border-ui-accent w-fit cursor-pointer border border-solid px-1 py-px text-[10px] outline-none disabled:cursor-not-allowed disabled:opacity-40"
               [ngModel]="getTagOf(audio)"
               (ngModelChange)="setTagOf(audio, $event)"
-              [disabled]="isInPlaylist(audio)"
-              [title]="isInPlaylist(audio) ? ('feature.media.jukebox.tagDisabled' | transloco) : ''"
+              [disabled]="isOnAnyPlaylist(audio)"
+              [title]="isOnAnyPlaylist(audio) ? ('feature.media.jukebox.tagDisabled' | transloco) : ''"
             >
               @for (tag of tagList(); track tag) {
                 @if (tag !== allTag()) {
@@ -288,7 +416,7 @@
                 <button
                   class="bg-ui-elevated border-ui-border-panel text-ui-muted rounded-ui-sm hover:bg-ui-hover hover:text-ui-text hover:border-ui-accent inline-flex size-7 cursor-pointer items-center justify-center border border-solid p-0 transition-[background,color,border-color] [&_.material-icons]:text-base!"
                   (click)="addToPlaylist(audio)"
-                  [title]="'feature.media.jukebox.addToPlaylist' | transloco"
+                  [title]="'feature.media.jukebox.addToPlaylistNamed' | transloco: { name: viewedPlaylist()?.label }"
                 >
                   <i class="material-icons">playlist_add</i>
                 </button>
@@ -296,7 +424,9 @@
                 <button
                   class="bg-ui-accent-bg border-ui-accent text-ui-accent rounded-ui-sm inline-flex size-7 cursor-pointer items-center justify-center border border-solid p-0 transition-[background,color,border-color] [&_.material-icons]:text-base!"
                   (click)="removeFromPlaylist(audio)"
-                  [title]="'feature.media.jukebox.removeFromPlaylist' | transloco"
+                  [title]="
+                    'feature.media.jukebox.removeFromPlaylistNamed' | transloco: { name: viewedPlaylist()?.label }
+                  "
                 >
                   <i class="material-icons">playlist_add_check</i>
                 </button>
@@ -315,6 +445,72 @@
       }
     </div>
   } @else {
+    <div
+      class="bg-ui-panel border-ui-border-panel sticky -top-2 z-2 -mx-2 flex shrink-0 flex-col gap-1.5 border-b border-solid px-2.5 py-1.5"
+      data-testid="jukebox-playlists"
+    >
+      <div class="flex flex-wrap gap-1">
+        @for (entry of playback.playlists(); track entry.identifier) {
+          <button
+            class="border-ui-border-panel text-ui-muted hover:bg-ui-hover hover:text-ui-text inline-flex max-w-full cursor-pointer items-center gap-1 rounded-full border border-solid bg-transparent px-2.5 py-0.75 text-[11px] font-medium whitespace-nowrap transition-[background,color,border-color] select-none [&_.material-icons]:text-[13px]!"
+            [class.bg-ui-accent-bg!]="viewedPlaylist()?.identifier === entry.identifier"
+            [class.text-ui-accent!]="viewedPlaylist()?.identifier === entry.identifier"
+            [class.border-ui-accent!]="viewedPlaylist()?.identifier === entry.identifier"
+            (click)="choosePlaylist(entry.identifier)"
+            [attr.aria-pressed]="viewedPlaylist()?.identifier === entry.identifier"
+            data-testid="jukebox-playlist-chip"
+          >
+            @if (entry.isActive) {
+              <i class="material-icons" [title]="'feature.media.jukebox.activePlaylist' | transloco">volume_up</i>
+            }
+            <span class="truncate">{{ entry.label }}</span>
+            <span class="opacity-60">{{ entry.count }}</span>
+          </button>
+        }
+        <button
+          class="border-ui-border-panel text-ui-muted hover:bg-ui-hover hover:text-ui-text hover:border-ui-accent inline-flex cursor-pointer items-center gap-0.5 rounded-full border border-dashed bg-transparent px-2 py-0.75 text-[11px] font-medium whitespace-nowrap transition-[background,color,border-color] select-none [&_.material-icons]:text-[13px]!"
+          (click)="createPlaylist()"
+          [title]="'feature.media.jukebox.createPlaylist' | transloco"
+          data-testid="jukebox-playlist-create"
+        >
+          <i class="material-icons">add</i>{{ 'feature.media.jukebox.createPlaylistShort' | transloco }}
+        </button>
+      </div>
+      @if (viewedPlaylist(); as viewed) {
+        <div class="flex items-center gap-1">
+          <input
+            #playlistName
+            class="bg-ui-input border-ui-border-panel text-ui-text rounded-ui-sm focus:border-ui-accent min-w-0 flex-1 border border-solid px-1.5 py-0.75 text-[12px] outline-none"
+            type="text"
+            [value]="viewed.name"
+            [placeholder]="viewed.label"
+            (change)="renamePlaylist(playlistName.value)"
+            [attr.aria-label]="'feature.media.jukebox.playlistName' | transloco"
+            data-testid="jukebox-playlist-name"
+          />
+          <button
+            class="bg-ui-elevated border-ui-border-panel text-ui-muted rounded-ui-sm hover:bg-ui-hover hover:text-ui-text hover:border-ui-accent inline-flex size-7 shrink-0 cursor-pointer items-center justify-center border border-solid p-0 transition-[background,color,border-color] disabled:cursor-not-allowed disabled:opacity-35 [&_.material-icons]:text-base!"
+            (click)="playViewedPlaylist()"
+            [disabled]="!viewed.count"
+            [title]="'feature.media.jukebox.playPlaylist' | transloco"
+            data-testid="jukebox-playlist-play"
+          >
+            <i class="material-icons">play_circle</i>
+          </button>
+          @if (!viewed.isDefault) {
+            <button
+              class="bg-ui-elevated border-ui-border-panel text-ui-muted rounded-ui-sm inline-flex size-7 shrink-0 cursor-pointer items-center justify-center border border-solid p-0 transition-[background,color,border-color] hover:border-(--ui-danger) hover:bg-(--ui-danger-bg) hover:text-(--ui-danger) [&_.material-icons]:text-base!"
+              (click)="deletePlaylist()"
+              [title]="'feature.media.jukebox.deletePlaylist' | transloco"
+              data-testid="jukebox-playlist-delete"
+            >
+              <i class="material-icons">delete</i>
+            </button>
+          }
+        </div>
+      }
+    </div>
+
     <div class="flex flex-1 flex-col overflow-y-auto">
       @for (audio of playlistAudios(); track audio.identifier; let i = $index) {
         <div
@@ -353,7 +549,7 @@
             @if (audio !== jukebox.audio) {
               <button
                 class="bg-ui-elevated border-ui-border-panel text-ui-muted rounded-ui-sm hover:bg-ui-hover hover:text-ui-text hover:border-ui-accent inline-flex size-7 cursor-pointer items-center justify-center border border-solid p-0 transition-[background,color,border-color] disabled:cursor-not-allowed disabled:opacity-35 [&_.material-icons]:text-base!"
-                (click)="playBGM(audio)"
+                (click)="playFromPlaylist(audio)"
                 [disabled]="!audio.isReady"
                 [title]="'feature.media.jukebox.playBGM' | transloco"
               >

@@ -20,6 +20,7 @@ import { sheetElementsOf } from '@axe/domain/data/data-element-templates';
 import { decodeRangeShapeField, RangeShapeFieldValue } from '@axe/domain/data/range-shape-field';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { asMoveMode, MOVE_MODES } from '@axe/domain/tabletop/move/move-mode';
 import { buildDisclosureContextMenu } from '@axe/features/disclosure/disclosure-context-menu';
 
 export interface RegisteredRangeShape {
@@ -142,11 +143,21 @@ export function buildGameCharacterContextMenuModel(
 
   // Working a move out comes before anything else a piece is asked, since it is what a piece
   // is picked up for; the rest of the move entries are about which pile it belongs in.
+  // How a piece is getting about goes with working its move out and is offered with it: a
+  // piece with no reach to show has nothing to get about by either.
   const planActions: ContextMenuAction[] = callbacks.onPlanMove
     ? [
         {
           name: t('feature.character.contextMenu.planMove'),
           action: () => callbacks.onPlanMove?.(),
+        } as ContextMenuAction,
+        {
+          name: t('feature.character.contextMenu.moveMode'),
+          action: undefined,
+          subActions: MOVE_MODES.map((mode) => ({
+            name: (asMoveMode(char.moveMode) === mode ? '✔ ' : '') + t(`feature.character.moveMode_${mode}`),
+            action: () => (char.moveMode = mode),
+          })),
         } as ContextMenuAction,
       ]
     : [];

@@ -107,7 +107,7 @@
                     <input
                       class="border-ui-border-panel text-ui-text hover:border-b-ui-accent focus:border-b-ui-accent box-border min-w-[2em] flex-1 [appearance:textfield] rounded-none border-0 border-b border-solid bg-transparent px-0.5 text-right font-[inherit] text-[12px] font-bold transition-[border-color] outline-none"
                       type="number"
-                      [style.color]="element.nowValueColor"
+                      [style.color]="element.nowValueColor || null"
                       name="pl-resource-current"
                       [(ngModel)]="element.currentValue"
                       (ngModelChange)="onResourceChanged(character)"

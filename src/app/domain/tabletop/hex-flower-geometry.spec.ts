@@ -4,6 +4,7 @@ import {
   buildHexRingClipPath,
   buildVertexClusterOutline,
   calcHexFlowerParams,
+  forgetHexFlowerOutlines,
   insetPolygon,
 } from '@axe/domain/tabletop/hex-flower-geometry';
 
@@ -257,6 +258,8 @@ describe('hex-flower-geometry', () => {
   });
 
   describe('the outlines already cut', () => {
+    beforeEach(() => forgetHexFlowerOutlines());
+
     afterEach(() => {
       perfCounters.enabled = false;
       perfCounters.clear();

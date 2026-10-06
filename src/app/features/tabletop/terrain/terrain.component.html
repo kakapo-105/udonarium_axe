@@ -12,9 +12,11 @@
   <div
     class="pointer-events-auto size-full transform-3d"
     [class.cursor-grab]="!isLocked()"
-    [class.cursor-pointer]="isDoor() && isLocked()"
-    (click)="onDoorClick()"
+    [class.cursor-pointer]="(isDoor() || pressable()) && isLocked()"
+    (pointerdown)="notePress($event)"
+    (click)="onBlockClick($event)"
     [attr.data-table-passthrough]="isLocked() ? '' : null"
+    [attr.data-switch-host]="pressable() ? '' : null"
     appRotable
     [rotable.option]="rotableOption()"
     (rotable.ondragstart)="onMove()"
@@ -50,6 +52,40 @@
           [style.height.px]="depth() * gridSize"
           [style.transform]="'translateZ(' + (hasWall() ? height() * gridSize : 0) + 'px)'"
         ></div>
+        <!-- The master is shown where the ground is as well as how high it stands. -->
+        @if (hasWall()) {
+          <div
+            class="pointer-events-none absolute top-0 left-0 box-border border-2 border-dotted border-sky-300/40 backface-hidden"
+            data-testid="terrain-blank-base"
+            [style.width.px]="width() * gridSize"
+            [style.height.px]="depth() * gridSize"
+          ></div>
+        }
+        @for (face of glassFaces(); track $index) {
+          <div
+            class="pointer-events-auto absolute origin-top-left transition-colors group-hover:bg-sky-300/10"
+            data-testid="terrain-glass-face"
+            [ngStyle]="face"
+          ></div>
+        }
+      }
+      @if (switchLabel(); as label) {
+        <div
+          class="pointer-events-none absolute transform-3d"
+          data-testid="terrain-switch-label"
+          [style.left.px]="(width() * gridSize) / 2"
+          [style.top.px]="(depth() * gridSize) / 2"
+          [style.transform]="switchLabelTransform()"
+        >
+          <span
+            class="bg-ui-elevated text-ui-text rounded-ui shadow-ui-sm absolute bottom-0 left-0 -translate-x-1/2 border border-solid px-2 py-0.5 text-[11px]/4 whitespace-nowrap transition-opacity"
+            [class.border-ui-accent]="!switchNotice()"
+            [class.border-ui-danger]="!!switchNotice()"
+            [class.opacity-0]="!guide.shown() && !switchNotice()"
+            [class.group-hover:opacity-100]="!guide.shown() && !switchNotice()"
+            >{{ switchNotice() || label }}</span
+          >
+        </div>
       }
       @if (hasFloor() && isVisibleFloor() && 0 < topFaceImage().url.length) {
         @if (slopeFaces().length > 0) {

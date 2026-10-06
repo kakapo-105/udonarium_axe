@@ -158,6 +158,24 @@ export interface VisionScene {
   sightSegments: TallSegment[];
   lightSegments: LightSegment[];
   shadowCasters: ShadowCaster[];
+  /** The patches of the board lit or put out on their own account. Left out, there are none. */
+  brightAreas?: SceneBrightness[];
+}
+
+/**
+ * A patch of the board held at a brightness of its own, whatever the rest of the table is lit by.
+ *
+ * A floor under the light where it brightens and a ceiling over it where it darkens, so a pool
+ * of magical darkness stays dark under a lamp while a shaft of daylight lights a cellar.
+ */
+export interface SceneBrightness {
+  x: number;
+  y: number;
+  widthPx: number;
+  heightPx: number;
+  level: number;
+  /** Whether it puts light out rather than adding to it. */
+  snuffs: boolean;
 }
 
 export interface OverlayShape {
@@ -551,7 +569,43 @@ export function lightLevelAt(scene: VisionScene, x: number, y: number, ignoreSha
     const contribution = Math.hypot(x - light.x, y - light.y, pz - light.z) <= light.brightPx ? 1 : 0.5;
     if (contribution > level) level = contribution;
   }
-  return level;
+  return shadedLevel(scene, x, y, level);
+}
+
+/** Whether a patch covers a point, counted from its top left corner as everything on a table is. */
+function coversPoint(patch: SceneBrightness, x: number, y: number): boolean {
+  return x >= patch.x && y >= patch.y && x < patch.x + patch.widthPx && y < patch.y + patch.heightPx;
+}
+
+/**
+ * The light on a point once the patches laid over it have had their say.
+ *
+ * What brightens sets a floor and what darkens sets a ceiling, and the ceiling is put on last:
+ * a pool of magical darkness under a lamp, or over a shaft of daylight, is dark.
+ */
+function shadedLevel(scene: VisionScene, x: number, y: number, lit: number): number {
+  const patches = scene.brightAreas;
+  if (!patches || patches.length < 1) return lit;
+  let level = lit;
+  let ceiling = 1;
+  for (const patch of patches) {
+    if (!coversPoint(patch, x, y)) continue;
+    if (patch.snuffs) ceiling = Math.min(ceiling, patch.level);
+    else if (patch.level > level) level = patch.level;
+  }
+  return Math.min(level, ceiling);
+}
+
+/**
+ * Whether the light on a point has been put out by something laid over it.
+ *
+ * Asked apart from the rest of the light because it holds on a table with no dark on it at
+ * all: a pool of magical darkness in a lit room is the one piece of night on the board.
+ */
+export function isSnuffed(scene: VisionScene, x: number, y: number): boolean {
+  const patches = scene.brightAreas;
+  if (!patches || patches.length < 1) return false;
+  return patches.some((patch) => patch.snuffs && patch.level <= 0 && coversPoint(patch, x, y));
 }
 
 /** Whether any light, or the global illumination, lights a point at all. */
@@ -840,7 +894,7 @@ export function isPointVisibleFrom(
   sources: readonly SceneVisionSource[],
   z = 0
 ): boolean {
-  const lit = !scene.darknessEnabled || isLit(scene, x, y, true, z);
+  const lit = (!scene.darknessEnabled || isLit(scene, x, y, true, z)) && !isSnuffed(scene, x, y);
   if (sources.length === 0) return lit;
 
   for (const source of sources) {

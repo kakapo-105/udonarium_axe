@@ -363,6 +363,46 @@ describe('Terrain', () => {
     });
   });
 
+  describe('taking every picture off a block', () => {
+    it('turns a dressed block to glass', () => {
+      const terrain = Terrain.create('t', 1, 1, 2, 'wall-picture', 'floor-picture');
+      expect(terrain.hasFaceImage).toBe(true);
+
+      terrain.clearFaceImages();
+
+      expect(terrain.hasFaceImage).toBe(false);
+    });
+
+    it('takes off the face a block wears over the shared one', () => {
+      const terrain = Terrain.create('t', 1, 1, 2, 'wall-picture', 'floor-picture');
+      terrain.setFaceImage('north', 'north-picture');
+      terrain.setFaceImage('bottom', 'bottom-picture');
+
+      terrain.clearFaceImages();
+
+      expect(terrain.faceImageIdentifier('north')).toBe('');
+      expect(terrain.faceImageIdentifier('bottom')).toBe('');
+    });
+
+    it('empties the slots rather than taking them away, so a face can wear something again', () => {
+      const terrain = Terrain.create('t', 1, 1, 2, 'wall-picture', 'floor-picture');
+
+      terrain.clearFaceImages();
+      terrain.setFaceImage('wall', 'another-picture');
+
+      expect(terrain.faceImageIdentifier('wall')).toBe('another-picture');
+      expect(terrain.hasFaceImage).toBe(true);
+    });
+
+    it('leaves a block that was glass already as it found it', () => {
+      const terrain = Terrain.create('t', 1, 1, 2, '', '');
+
+      terrain.clearFaceImages();
+
+      expect(terrain.hasFaceImage).toBe(false);
+    });
+  });
+
   describe('the sides it slopes to', () => {
     function block(): Terrain {
       return Terrain.create('t', 2, 2, 1, '', '');

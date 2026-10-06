@@ -220,6 +220,14 @@ export class GameTableSettingComponent {
     if (this.isEditable && this.selectedTable) this.selectedTable.lightSnapToGrid = value;
   }
 
+  /** Whether a compass wanders on the picked table rather than finding north. */
+  get tableMagneticAnomaly(): boolean {
+    return this.selectedTable?.magneticAnomaly ?? false;
+  }
+  set tableMagneticAnomaly(value: boolean) {
+    if (this.isEditable && this.selectedTable) this.selectedTable.magneticAnomaly = value;
+  }
+
   /** How dark the picked table is, as a percentage. */
   get tableDarknessLevelPercent(): number {
     return Math.round((this.selectedTable?.darknessLevel ?? 0) * 100);

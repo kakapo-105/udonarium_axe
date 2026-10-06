@@ -189,6 +189,14 @@ export function calcHexFlowerParams(size: number, gridSize: number, isFlatTop: b
 const FLOWER_CACHE_LIMIT = 32;
 const flowerParams = new Map<string, HexFlowerParams>();
 
+/**
+ * Lets every outline cut so far go, so the next of each is cut afresh: for a test that counts the
+ * cutting, which the outlines cut by whatever ran before it would otherwise throw out.
+ */
+export function forgetHexFlowerOutlines(): void {
+  flowerParams.clear();
+}
+
 function buildHexFlowerParams(size: number, gridSize: number, isFlatTop: boolean): HexFlowerParams {
   perfCounters.bump(PERF_HEX_PEDESTAL_OUTLINE);
   const L = size * gridSize;

@@ -1,11 +1,14 @@
 import { inject, Injectable } from '@angular/core';
+import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { CoordinateService } from '@axe/application/input/coordinate.service';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
+import { SwitchPressService } from '@axe/application/tabletop/switch-press.service';
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { BillboardFrameService } from '@axe/application/ui/billboard-frame.service';
 import { ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { marqueeApply, selectByRect } from '@axe/application/ui/rect-hit-test';
 import { SelectionSignalService } from '@axe/application/ui/selection-signal.service';
+import { SwitchNoticeService } from '@axe/application/ui/switch-notice.service';
 import { UiSignalService } from '@axe/application/ui/ui-signal.service';
 import { TABLE_PERSPECTIVE_PX } from '@axe/domain/tabletop/physical-scale';
 import { TabletopObject } from '@axe/domain/tabletop/tabletop-object';
@@ -27,6 +30,16 @@ export class GameTableGestureService {
   private readonly selectionSignalService = inject(SelectionSignalService);
   private readonly tabletopService = inject(TabletopService);
   private readonly coordinateService = inject(CoordinateService);
+  private readonly switchPresses = inject(SwitchPressService);
+  private readonly switchNotices = inject(SwitchNoticeService);
+  private readonly t = inject(TRANSLATE_FN);
+
+  /**
+   * Where a left press on the bare table began, for pressing the painted ground under it once the
+   * hand lets go without having turned the view or drawn a box. A press on a block with a switch
+   * of its own is the block's.
+   */
+  private groundPress: { target: HTMLElement } | null = null;
 
   isTableTransformMode = false;
   isTableTransformed = false;
@@ -251,6 +264,8 @@ export class GameTableGestureService {
       me.button === 1 ||
       me.button === 2 ||
       target.closest('[data-table-passthrough]') != null;
+    this.groundPress =
+      isEmptyTablePress && me.button === 0 && target.closest('[data-switch-host]') == null ? { target } : null;
     if (isEmptyTablePress) {
       this.isTableTransformMode = true;
       this.marqueeGesture?.arm(e as PointerEvent);
@@ -272,9 +287,23 @@ export class GameTableGestureService {
     this.cancelInput();
     this.uiSignalService.notifyTerrainGridEnd();
 
+    const groundPress = this.groundPress;
+    this.groundPress = null;
     if (!released && !wasMarqueeActive && !this.isTableTransformed) {
       this.selectionSignalService.clearSelection();
+      if (groundPress) void this.pressGround(groundPress.target, e as MouseEvent);
     }
+  }
+
+  /**
+   * Presses the painted ground under where a click let go, reading the point on whatever was
+   * clicked so that the top of a locked block reaches the ground it stands on.
+   */
+  private async pressGround(target: HTMLElement, e: MouseEvent): Promise<void> {
+    const at = this.coordinateService.calcTabletopLocalCoordinate({ x: e.clientX, y: e.clientY, z: 0 }, target);
+    const outcome = await this.switchPresses.pressGroundAt(at.x, at.y);
+    if (!outcome || outcome === 'pressed' || outcome === 'busy') return;
+    this.switchNotices.show(this.t(`feature.boardSwitch.refused.${outcome}`), e.clientX, e.clientY);
   }
 
   private onTableMouseTransform(

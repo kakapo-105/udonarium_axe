@@ -20,9 +20,10 @@ updates:
       - dependency-name: typescript
         update-types:
           - version-update:semver-major
-      # 22.1.5 以降の @angular/build は unit-test ビルダーが setupFiles を適用しなくなり、
+      # 22.1.5〜22.1.x の @angular/build は unit-test ビルダーが setupFiles を適用しなくなり、
       # happy-dom に無い WebRTC を補うスタブが走らないまま @skyway-sdk/core を読み込んで
-      # 全 spec が落ちる。22.1.4 に固定しているので、上がってくる提案も止める。
+      # 全 spec が落ちた。22.2.0 では直っているのを確かめたうえで固定を移している。
+      # 提案は止めたままにして、ng test が通ることを見てから手で上げる。
       - dependency-name: '@angular/build'
       - dependency-name: '@angular/cli'
       # vitest 5 は @angular/build が受け付けない（peer は vitest ^4.0.8。22.1.7 でも同じ）。

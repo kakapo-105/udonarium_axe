@@ -4,6 +4,7 @@ import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
+import { ConfirmService } from '@axe/application/ui/confirm.service';
 import { ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { ModalService } from '@axe/application/ui/modal.service';
 import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
@@ -15,10 +16,15 @@ import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { FileArchiver } from '@axe/core/storage/file-archiver';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { AudioTag } from '@axe/domain/media/audio-tag';
-import { CutInLauncher } from '@axe/domain/media/cut-in-launcher';
 import { Jukebox } from '@axe/domain/media/jukebox';
 import { Playlist } from '@axe/domain/media/playlist';
 import { Config } from '@axe/domain/peer/config';
+import {
+  buildLibraryTrackMenu,
+  buildPlaylistTrackMenu,
+  PlaylistTarget,
+} from '@axe/features/media/jukebox/playlist-context-menu';
+import { formatTrackTime, JukeboxPlaybackService, PlaylistView } from '@axe/features/media/jukebox-playback.service';
 import { RoomPanelService } from '@axe/features/panels/room-panel.service';
 import { TranslocoModule } from '@jsverse/transloco';
 
@@ -42,7 +48,9 @@ export class JukeboxComponent {
   private readonly fileArchiver = inject(FileArchiver);
   private readonly rolePermission = inject(RolePermissionService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly confirm = inject(ConfirmService);
   private readonly t = inject(TRANSLATE_FN);
+  protected readonly playback = inject(JukeboxPlaybackService);
 
   roomVolumeChange = false;
 
@@ -110,12 +118,70 @@ export class JukeboxComponent {
 
   readonly viewMode = signal<'library' | 'playlist'>('library');
 
+  private readonly chosenPlaylist = signal<string | null>(null);
+
+  /**
+   * The playlist the playlist tab shows and the library adds to: the one picked in the tab, or the
+   * one the room plays through until one is picked or the picked one is deleted.
+   */
+  readonly viewedPlaylist = computed<PlaylistView | null>(() => {
+    const playlists = this.playback.playlists();
+    const chosen = this.chosenPlaylist();
+    return (
+      playlists.find((playlist) => playlist.identifier === chosen) ??
+      playlists.find((playlist) => playlist.isActive) ??
+      playlists[0] ??
+      null
+    );
+  });
+
   readonly playlistAudios = computed(() => {
     this.objectChange.fileVersion();
-    this.objectChange.versionOf('Playlist')();
     this.objectChange.versionOf('Jukebox')();
+    const viewed = this.viewedPlaylist();
+    if (viewed) this.objectChange.versionOf(viewed.identifier)();
     const entries = this.playlist?.entries ?? [];
     return entries.map((id) => this.audioStorage.get(id)).filter((a): a is AudioFile => a !== null && !a.isHidden);
+  });
+
+  /** Every track that is on some playlist, which keeps its tag. */
+  private readonly tracksOnPlaylists = computed(() => {
+    const held = new Set<string>();
+    for (const view of this.playback.playlists()) {
+      for (const identifier of this.playback.playlistOf(view.identifier)?.entries ?? []) held.add(identifier);
+    }
+    return held;
+  });
+
+  /** Whether the seek bar is being dragged, and where to, from 0 to 1, so playback moving on does not pull it back. */
+  readonly isSeeking = signal(false);
+  readonly seekPreview = signal(0);
+
+  /** The position and length of the room's track, read out as `1:23 / 4:56`; a dash while nothing is held. */
+  readonly timeDisplay = computed(() => {
+    this._tick();
+    this.objectChange.versionOf('Jukebox')();
+    if (!this.playback.isPlaying() && !this.playback.isPaused()) return '—';
+    const duration = this.playback.duration();
+    const at = this.isSeeking() ? this.seekPreview() * duration : this.playback.position();
+    return `${formatTrackTime(at)} / ${duration > 0 ? formatTrackTime(duration) : '—'}`;
+  });
+
+  /** How far through the room's track it is, from 0 to 1. */
+  readonly progress = computed(() => {
+    this._tick();
+    this.objectChange.versionOf('Jukebox')();
+    const duration = this.playback.duration();
+    return duration > 0 ? Math.min(1, this.playback.position() / duration) : 0;
+  });
+
+  /** Where the seek bar stands: where it is being dragged to, or how far through the track it is. */
+  readonly displayProgress = computed(() => (this.isSeeking() ? this.seekPreview() : this.progress()));
+
+  /** Whether the seek bar is locked for the whole room. */
+  readonly isSeekLocked = computed(() => {
+    this.objectChange.versionOf('Jukebox')();
+    return this.jukebox?.isSeekLocked ?? true;
   });
 
   private dragFromIndex: number | null = null;
@@ -147,26 +213,106 @@ export class JukeboxComponent {
    * The tag is a synced object, so the room sees the change. A track in the playlist keeps its tag.
    */
   setTagOf(audio: AudioFile, tag: string) {
-    if (this.isInPlaylist(audio)) return;
+    if (this.isOnAnyPlaylist(audio)) return;
     let audioTag = AudioTag.get(audio.identifier);
     if (!audioTag) audioTag = AudioTag.create(audio.identifier);
     audioTag.tag = tag;
     this.objectChange.notifyCollectionChanged('audio-tag');
   }
 
-  /** Whether a track is in the room's playlist; false while there is no playlist. */
+  /** Whether a track is on the playlist shown; false while there is none. */
   isInPlaylist(audio: AudioFile): boolean {
     return this.playlist?.hasEntry(audio.identifier) ?? false;
   }
 
-  /** Adds a BGM track to the room's shared playlist. */
+  /** Whether a track is on any of the room's playlists, which keeps its tag from being changed. */
+  isOnAnyPlaylist(audio: AudioFile): boolean {
+    return this.tracksOnPlaylists().has(audio.identifier);
+  }
+
+  /** Adds a BGM track to the playlist shown. */
   addToPlaylist(audio: AudioFile): void {
     this.playlist?.addEntry(audio.identifier);
   }
 
-  /** Takes a track out of the room's shared playlist. */
+  /** Takes a track off the playlist shown. */
   removeFromPlaylist(audio: AudioFile): void {
     this.playlist?.removeEntry(audio.identifier);
+  }
+
+  /** Shows a playlist in the playlist tab, which is also where the library adds tracks. */
+  choosePlaylist(identifier: string): void {
+    this.chosenPlaylist.set(identifier);
+  }
+
+  /** Makes a new, empty playlist for the room and shows it. */
+  createPlaylist(): void {
+    const count = this.playback.playlists().length;
+    const playlist = Playlist.create(this.t('feature.media.jukebox.playlistNewName', { number: count + 1 }));
+    this.chosenPlaylist.set(playlist.identifier);
+    this.viewMode.set('playlist');
+  }
+
+  /** Renames the playlist shown. An empty name puts back the stand-in it goes by. */
+  renamePlaylist(name: string): void {
+    const playlist = this.playlist;
+    const next = name.trim();
+    if (playlist && playlist.name !== next) playlist.name = next;
+  }
+
+  /**
+   * Deletes the playlist shown, once whoever asked has said they mean it. The room's first playlist
+   * cannot be deleted.
+   *
+   * The track playing goes on. When it was the playlist the room plays through, the room goes on
+   * through its first playlist after that track.
+   */
+  async deletePlaylist(): Promise<void> {
+    const playlist = this.playlist;
+    if (!playlist || playlist.isDefault) return;
+    const label = this.playback.labelOf(playlist);
+    if (!(await this.confirm.ask(this.t('feature.media.jukebox.deletePlaylistConfirm', { name: label })))) return;
+    if (this.jukebox?.playlistIdentifier === playlist.identifier) this.jukebox.playlistIdentifier = '';
+    this.chosenPlaylist.set(null);
+    playlist.destroy();
+  }
+
+  /** Starts the playlist shown from its first track for the whole room. */
+  playViewedPlaylist(): void {
+    const viewed = this.viewedPlaylist();
+    if (viewed) this.playback.playPlaylist(viewed.identifier);
+  }
+
+  /** Plays a track of the playlist shown for the whole room, and goes on through that playlist. */
+  playFromPlaylist(audio: AudioFile): void {
+    const playlist = this.playlist;
+    if (playlist) this.playback.playFromPlaylist(playlist, audio);
+  }
+
+  /** Every playlist as somewhere a track could go, marked where it is already. */
+  private targetsFor(audio: AudioFile): PlaylistTarget[] {
+    return this.playback.playlists().map((view) => ({
+      identifier: view.identifier,
+      label: view.label,
+      holdsTrack: this.playback.playlistOf(view.identifier)?.hasEntry(audio.identifier) ?? false,
+    }));
+  }
+
+  /** Puts a library track on a playlist or takes it off, from its menu. Only music goes on a playlist. */
+  onLibraryContextMenu(event: MouseEvent, audio: AudioFile): void {
+    if (this.getTagOf(audio) !== 'BGM' || !this.pointerDeviceService.isAllowedToOpenContextMenu) return;
+    const actions = buildLibraryTrackMenu(
+      this.targetsFor(audio),
+      {
+        addTo: (identifier) => this.playback.playlistOf(identifier)?.addEntry(audio.identifier),
+        removeFrom: (identifier) => this.playback.playlistOf(identifier)?.removeEntry(audio.identifier),
+      },
+      this.t
+    );
+    if (actions.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.contextMenuService.open(this.pointerDeviceService.pointers[0], actions, audio.name);
   }
 
   /** Remembers which playlist row a drag started from. */
@@ -206,13 +352,25 @@ export class JukeboxComponent {
     if (index < 0) return;
     const moveOnto = (neighbor: AudioFile) =>
       playlist.moveEntry(playlist.entries.indexOf(audio.identifier), playlist.entries.indexOf(neighbor.identifier));
-    const actions = buildReorderContextMenu(
+    const reorder = buildReorderContextMenu(
       { index, count: shown.length },
       {
         moveToTop: () => moveOnto(shown[0]),
         moveUp: () => moveOnto(shown[index - 1]),
         moveDown: () => moveOnto(shown[index + 1]),
         moveToBottom: () => moveOnto(shown[shown.length - 1]),
+      },
+      this.t
+    );
+    const actions = buildPlaylistTrackMenu(
+      reorder,
+      this.targetsFor(audio).filter((target) => target.identifier !== playlist.identifier),
+      {
+        moveTo: (identifier) => {
+          this.playback.playlistOf(identifier)?.addEntry(audio.identifier);
+          playlist.removeEntry(audio.identifier);
+        },
+        copyTo: (identifier) => this.playback.playlistOf(identifier)?.addEntry(audio.identifier),
       },
       this.t
     );
@@ -226,14 +384,10 @@ export class JukeboxComponent {
     return this.objectStore.get<Jukebox>('Jukebox')!;
   }
 
-  /** The room's synced playlist, or null before it exists. */
+  /** The playlist the playlist tab shows, or null before the room has one. */
   get playlist(): Playlist | null {
-    return this.objectStore.get<Playlist>('Playlist') ?? null;
-  }
-
-  /** The room's synced cut-in launcher, used here to stop cut-ins that playing BGM replaces. */
-  get cutInLauncher(): CutInLauncher {
-    return this.objectStore.get<CutInLauncher>('CutInLauncher')!;
+    const viewed = this.viewedPlaylist();
+    return viewed ? this.playback.playlistOf(viewed.identifier) : null;
   }
 
   readonly auditionPlayer: AudioPlayer = new AudioPlayer();
@@ -271,10 +425,7 @@ export class JukeboxComponent {
    * becomes the room's BGM.
    */
   playBGM(audio: AudioFile) {
-    this.cutInLauncher.stopBlankTagCutIn();
-
-    const isSE = this.getTagOf(audio) === 'SE';
-    this.jukebox.play(audio.identifier, !isSE);
+    this.playback.play(audio);
   }
 
   /** Stops the room's BGM, but only if this track is the one playing. */
@@ -307,6 +458,24 @@ export class JukeboxComponent {
     const files = input.files;
     if (files && files.length) this.fileArchiver.load(files);
     input.value = '';
+  }
+
+  /** Locks or unlocks the seek bar for the whole room. */
+  toggleSeekLock(): void {
+    if (this.jukebox) this.jukebox.isSeekLocked = !this.jukebox.isSeekLocked;
+  }
+
+  /** Shows where the seek bar is being dragged to without moving playback yet. */
+  onSeekInput(event: Event): void {
+    this.isSeeking.set(true);
+    this.seekPreview.set((event.target as HTMLInputElement).valueAsNumber / 100);
+  }
+
+  /** Moves the room's track to where the seek bar was let go, while its length is known, and ends the drag. */
+  onSeekCommit(event: Event): void {
+    const duration = this.playback.duration();
+    if (duration > 0) this.playback.seek(((event.target as HTMLInputElement).valueAsNumber / 100) * duration);
+    this.isSeeking.set(false);
   }
 
   /** Opens the cut-in list panel beside the pointer. */

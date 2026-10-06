@@ -5,7 +5,9 @@ import { expect, Locator, Page } from '@playwright/test';
  * chat-input の textarea が表示されれば bootstrap 完了とみなしてよい。
  */
 export async function waitAppReady(page: Page) {
-  await page.goto('/');
+  // A load off the build takes well under a second, but with three browsers running the suite at
+  // once a load was seen to take past the default fifteen seconds in Firefox.
+  await page.goto('/', { timeout: 45_000 });
   await expect(page.locator('textarea.chat-input')).toBeVisible({ timeout: 20000 });
 }
 

@@ -4,6 +4,7 @@ import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { GameObjectInventoryService } from '@axe/application/inventory/game-object-inventory.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
+import { TriggerFireService } from '@axe/application/tabletop/trigger-fire.service';
 import { VisionService } from '@axe/application/tabletop/vision.service';
 import { ConfirmService } from '@axe/application/ui/confirm.service';
 import { SelectionSignalService } from '@axe/application/ui/selection-signal.service';
@@ -14,6 +15,7 @@ import { BuffTiming, BuffTurnActor } from '@axe/domain/character/buff-timing';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { Party } from '@axe/domain/party/party';
 import { Config } from '@axe/domain/peer/config';
+import { TriggerMoment } from '@axe/domain/tabletop/trigger-event';
 import { changedBuffs, parseTurnHistory, stringifyTurnHistory, TurnStep } from '@axe/domain/tabletop/turn-history';
 import { FactionPhaseMode, TurnOrderMode } from '@axe/domain/tabletop/turn-order-mode';
 import {
@@ -32,6 +34,7 @@ const UNACTED_NAMES_SHOWN = 8;
 
 @Injectable({ providedIn: 'root' })
 export class TurnOrderService {
+  private readonly triggerFire = inject(TriggerFireService);
   private readonly objectStore = inject(ObjectStore);
   private readonly objectChange = inject(ObjectChangeService);
   private readonly inventory = inject(GameObjectInventoryService);
@@ -247,6 +250,7 @@ export class TurnOrderService {
         return;
       }
       // Whoever was up has now had their turn, wherever in the order they were given it.
+      this.springGround(turnState.currentIdentifier, 'turnEnd');
       this.markActed(turnState.currentIdentifier);
       this.expireBuffs('turnEnd', this.actorOf(turnState.currentIdentifier));
       this.handOver(this.firstUnacted(order));
@@ -290,6 +294,7 @@ export class TurnOrderService {
   private closeCurrentPiece(): void {
     const held = this.turnState.currentIdentifier;
     if (held.length < 1) return;
+    this.springGround(held, 'turnEnd');
     this.markActed(held);
     this.expireBuffs('turnEnd', this.actorOf(held));
   }
@@ -481,6 +486,27 @@ export class TurnOrderService {
   private takeTurn(identifier: string): void {
     this.enterActing(identifier);
     this.expireBuffs('turnStart', this.actorOf(identifier));
+    this.springGround(identifier, 'turnStart');
+  }
+
+  /**
+   * Sets off whatever the piece taking or leaving a turn is standing on.
+   *
+   * The round is the only thing that knows a piece stood somewhere rather than crossed it, so
+   * the round is what tells the ground. The moment is handed over rather than asked for, so
+   * that the ground never has to know how a table counts its turns.
+   *
+   * Only the peer that pressed runs this, as with the buff countdown beside it: a room of five
+   * would otherwise burn a piece five times over.
+   */
+  private springGround(identifier: string, moment: TriggerMoment): void {
+    const character = this.objectStore.get<GameCharacter>(identifier);
+    if (!(character instanceof GameCharacter)) return;
+    try {
+      this.triggerFire.standingOn(character, moment);
+    } catch {
+      // Ground that will not go off is no reason for the round to stop turning.
+    }
   }
 
   private enterActing(identifier: string): void {

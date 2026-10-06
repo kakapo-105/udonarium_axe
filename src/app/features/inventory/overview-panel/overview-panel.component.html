@@ -479,12 +479,29 @@
               [style.color]="getPopupCurrentValueColor(dataElm)"
               size="1"
               name="data-current-value"
-              [(ngModel)]="dataElm.currentValue"
+              [ngModel]="shownCurrentValue(dataElm)"
+              (ngModelChange)="dataElm.currentValue = $event"
             />
           </div>
           <span class="text-ui-text font-bold">/</span>
           <span class="text-ui-text font-bold">{{ dataElm.value }}</span>
         </div>
+        @if (hasResourceSlider(dataElm) && resourceSliderSpan(dataElm); as span) {
+          <input
+            class="col-span-2 mb-1 h-4 w-full min-w-0 cursor-pointer appearance-auto border-none bg-transparent p-0 [accent-color:var(--ui-accent)] shadow-none disabled:cursor-default disabled:opacity-40"
+            type="range"
+            name="data-current-slider"
+            step="1"
+            [min]="span.min"
+            [max]="span.max"
+            [value]="dataElm.currentValue"
+            [disabled]="!canEdit"
+            [attr.aria-label]="dataElm.name"
+            (input)="previewSliderValue(dataElm, $event)"
+            (change)="commitSliderValue(dataElm, $event)"
+            data-testid="overview-resource-slider"
+          />
+        }
       }
       @case ('image') {
         @if (isImagePopupOriginal(dataElm)) {

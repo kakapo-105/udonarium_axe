@@ -56,9 +56,25 @@ export async function settle(page: Page, ms = 40) {
   await page.clock.runFor(ms);
 }
 
-export async function settleLazy(page: Page) {
+/**
+ * Waits for a part of the page loaded on demand, such as a panel, to come in and be drawn, which
+ * shows as `arrived` being on the page. The clock is held and the page draws only as it is run, so
+ * a part that comes in late on a busy machine is drawn by running what has fallen due, again and
+ * again, without moving the clock on: the scene is shot at the same moment however long it took.
+ */
+export async function settleLazy(page: Page, arrived: Locator) {
   await page.waitForTimeout(400);
   await page.clock.runFor(40);
+  await expect
+    .poll(
+      async () => {
+        if ((await arrived.count()) > 0) return true;
+        await page.clock.runFor(0);
+        return false;
+      },
+      { timeout: 20_000, intervals: [100] }
+    )
+    .toBe(true);
 }
 
 export async function rightClickTable(page: Page, position: { x: number; y: number }): Promise<Locator> {
@@ -88,7 +104,7 @@ export async function closeModal(page: Page) {
 export async function openTableSetting(page: Page) {
   const menu = await rightClickTable(page, { x: 900, y: 250 });
   await chooseMenu(page, menu, 'テーブル設定');
-  await settleLazy(page);
+  await settleLazy(page, page.locator('modal select[name="tableGridType"]'));
   await expect(page.locator('modal select[name="tableGridType"]')).toBeVisible();
 }
 

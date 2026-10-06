@@ -40,9 +40,10 @@ async function buildDungeon(page: Page, gridLabel: string) {
   await page.locator('[data-testid="fab-entry-table"]').click();
   await settle(page);
   await page.locator('[data-testid="fab-submenu-table"] [data-testid="fab-entry-dungeonGenerator"]').click();
-  await settleLazy(page);
   const panel = page.locator('ui-panel').filter({ hasText: 'マップ生成' });
-  await panel.getByRole('button', { name: gridLabel, exact: true }).click();
+  const grid = panel.getByRole('button', { name: gridLabel, exact: true });
+  await settleLazy(page, grid);
+  await grid.click();
   await settle(page);
   await typeInto(page, panel.locator('input[name="room-count-number"]'), ROOMS);
   await typeInto(page, panel.locator('#seed'), SEED);

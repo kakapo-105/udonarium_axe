@@ -46,6 +46,36 @@ describe('DiceBot', () => {
     });
   });
 
+  it('throws the dice in the look the roll asked for, and in none where it asked for none', () => {
+    PeerCursor.createMyCursor();
+    const tab = ChatTabList.instance.addChatTab('メイン');
+    const fancy = tab.addMessage({
+      from: 'me',
+      name: 'わたし',
+      text: '2d6',
+      timestamp: 1000,
+      diceLook: '{"material":"marble"}',
+      diceImageIdentifier: 'ab'.repeat(32),
+    });
+    const plain = tab.addMessage({ from: 'me', name: 'わたし', text: '2d6', timestamp: 2000 });
+    const bot = new DiceBot();
+    bot.initialize();
+
+    bot['sendResultMessage']({ id: null, result: '(2D6) → 7', isSecret: false }, fancy);
+    bot['sendResultMessage']({ id: null, result: '(2D6) → 9', isSecret: false }, plain);
+    const answerTo = (total: number) => tab.chatMessages.find((line) => line.text.includes(`→ ${total}`))!;
+    const fancyAnswer = answerTo(7);
+    const plainAnswer = answerTo(9);
+
+    expect(fancyAnswer.diceLook).toBe('{"material":"marble"}');
+    expect(fancyAnswer.diceImageIdentifier).toBe('ab'.repeat(32));
+    expect(plainAnswer.diceImageIdentifier ?? '').toBe('');
+    expect(plainAnswer.diceLook ?? '').toBe('');
+
+    bot.destroy();
+    tab.destroy();
+  });
+
   describe('an instance', () => {
     it('can be created', () => {
       const bot = new DiceBot();

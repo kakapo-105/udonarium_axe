@@ -1482,6 +1482,7 @@ input[type='range']::-moz-range-thumb {
 
 :root.motion-reduced
   :is(
+    .animate-bounce-in,
     .animate-sheet-up,
     .animate-fade-in,
     .animate-buff-swap,
@@ -1515,6 +1516,66 @@ input[type='range']::-moz-range-thumb {
     .vn-bg-wipe
   ) {
   animation: none;
+}
+
+/*
+ * The rest of the animations end at once with motion stopped rather than being taken away. Some
+ * are waited out: the coin shows the face it landed on, and the die, the card stack and the badge
+ * come to rest, once theirs has ended. Some leave what they end on, as a defeated piece stays
+ * defeated. Inline durations and delays set on a piece are overridden too.
+ *
+ * Left running are the ones that tell of something going on rather than decorate it: a spinner
+ * while something loads, the pulse of a recording, the dots of someone writing.
+ */
+:root.motion-reduced
+  :is(
+    .animate-bounce,
+    .animate-blinking,
+    .animate-bg-fade-in,
+    .animate-chat-slide-in,
+    .animate-chat-fade-in,
+    .animate-coin-flip,
+    .animate-coin-flip-turn,
+    .animate-cursor-ping,
+    .animate-defeat-bisect,
+    .animate-defeat-dissolve,
+    .animate-defeat-flinch,
+    .animate-dice-pop,
+    .animate-dice-tumble-a,
+    .animate-dice-tumble-b,
+    .animate-dice-tumble-c,
+    .animate-disc-spin,
+    .animate-effect-flash,
+    .animate-effect-shake-hard,
+    .animate-effect-shake-soft,
+    .animate-float-change,
+    .animate-focused,
+    .animate-heal-glow,
+    .animate-heal-rise,
+    .animate-hit-flash,
+    .animate-hit-shake,
+    .animate-multi-angle-name-orbit,
+    .animate-multi-angle-piece-spin,
+    .animate-radial-orbit,
+    .animate-target-bob,
+    .animate-target-ring,
+    .animate-title-scroll,
+    .bg-fade-in,
+    .blinking-animation,
+    .bounce-in,
+    .bouncing,
+    .chat-fade-in,
+    .chat-slide-in,
+    .dice-rolling,
+    .fade-in,
+    .fly-in,
+    .rotate-state,
+    .shuffling,
+    .vibration-amine
+  ) {
+  animation-duration: 1ms !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
 }
 
 @keyframes sheetUp {

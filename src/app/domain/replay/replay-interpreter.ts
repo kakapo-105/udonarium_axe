@@ -31,6 +31,7 @@ export interface ObjectChangeInput {
 
 export const REPLAY_IGNORED_EVENT_NAMES: ReadonlySet<string> = new Set([
   'CURSOR_MOVE',
+  'DICE_THROW',
   'HEART_BEAT',
   'WRITING_A_MESSAGE',
   'WRITING_A_MESSAGE_DETAIL',

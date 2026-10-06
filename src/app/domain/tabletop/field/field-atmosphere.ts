@@ -1,4 +1,5 @@
 import { TextureId, WallTextureId } from '@axe/domain/media/texture-catalog';
+import { HazardKind } from '@axe/domain/tabletop/hazard-presets';
 import { MapLightKind, MapMood } from '@axe/domain/tabletop/map-blocks';
 
 export const FIELD_ATMOSPHERE_IDS = [
@@ -252,6 +253,8 @@ export interface FieldPropPlan {
 export interface FieldPoolPlan {
   kind: string;
   texture: TextureId;
+  /** What wading it comes to. Left out, it is a picture on the ground and nothing more. */
+  hazard?: HazardKind;
   density: number;
   /** How wide across it spreads, in cells. */
   size: number;
@@ -458,7 +461,9 @@ export const FIELD_ATMOSPHERES: Record<FieldAtmosphereId, FieldAtmosphere> = {
       { prop: 'tree', chance: 0.13, bands: [1, 2] },
       { prop: 'bush', chance: 0.07, bands: [1] },
     ],
-    pools: [{ kind: 'miasma', texture: 'poison_pool', density: 0.55, size: 3, chance: 5, bands: [0, 1] }],
+    pools: [
+      { kind: 'miasma', texture: 'poison_pool', density: 0.55, size: 3, chance: 5, bands: [0, 1], hazard: 'bog' },
+    ],
     darkness: 0.35,
     ambientColor: '#101511',
     weatherKind: 'fog',

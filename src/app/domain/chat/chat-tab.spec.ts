@@ -47,6 +47,38 @@ describe('ChatTab', () => {
     });
   });
 
+  describe('countDisplayableMessages()', () => {
+    it('counts nothing in an empty tab', () => {
+      const tab = new ChatTab();
+      tab.initialize();
+
+      expect(tab.countDisplayableMessages()).toBe(0);
+    });
+
+    it('counts the lines the reader may see', () => {
+      const tab = new ChatTab();
+      tab.initialize();
+      tab.addMessage({ from: 'p1', text: '一言' });
+      tab.addMessage({ from: 'p1', text: '二言' });
+
+      expect(tab.countDisplayableMessages()).toBe(2);
+    });
+
+    it('counts what the tab holds now, so a line taken out stops being counted', () => {
+      const tab = new ChatTab();
+      tab.initialize();
+      const first = tab.addMessage({ from: 'p1', text: '一言' });
+      tab.addMessage({ from: 'p1', text: '二言' });
+
+      first.destroy();
+
+      expect(tab.countDisplayableMessages()).toBe(1);
+      // The running tally the scrollbar is sized from is not walked back, which is the
+      // difference between the two.
+      expect(tab.displayableMessagesLength()).toBe(2);
+    });
+  });
+
   describe('findRollSource()', () => {
     function tabWithChatter(count: number): ChatTab {
       const tab = new ChatTab();

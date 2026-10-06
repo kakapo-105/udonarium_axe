@@ -1,4 +1,6 @@
 import { DungeonPropId } from '@axe/domain/media/texture-catalog';
+import { HazardKind } from '@axe/domain/tabletop/hazard-presets';
+import { TrapKind } from '@axe/domain/tabletop/trap-presets';
 
 /** What a thing is made of: one of the bundled pictures, or one out of the image storage. */
 export type MapMaterial = { kind: 'texture'; id: string } | { kind: 'library'; identifier: string };
@@ -92,6 +94,18 @@ export interface MapPaint {
   rect: MapRect;
   /** The ground of a field changes from patch to patch, so a patch may name its own. */
   material?: MapMaterial;
+  /**
+   * What the patch is, where it is dangerous ground rather than only a picture of it.
+   *
+   * A pool of lava that merely looks like lava costs nothing to wade and burns nobody. Named
+   * here, the table is given the going and the burning as well as the look.
+   */
+  hazard?: HazardKind;
+}
+
+/** A trap set on one cell of the board, which the table is given as ground that goes off. */
+export interface MapTrap extends MapPoint {
+  kind: TrapKind;
 }
 
 export type MapLightKind =
@@ -133,6 +147,7 @@ export interface MapBlocks {
   blocks: MapBlock[];
   paint: MapPaint[];
   ambiences: MapAmbience[];
+  traps: MapTrap[];
   torchRooms: number[];
   torchSpots: MapPoint[];
   lights: MapLight[];

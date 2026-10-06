@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { EffectPlaybackService } from '@axe/application/effect/effect-playback.service';
@@ -10,6 +11,7 @@ import { TabletopDisplayService } from '@axe/application/tabletop/tabletop-displ
 import { BillboardFacing, BillboardFrameService } from '@axe/application/ui/billboard-frame.service';
 import { BuffViewPreferenceService } from '@axe/application/ui/buff-view-preference.service';
 import { ContextMenuService } from '@axe/application/ui/context-menu.service';
+import { MobileLayoutService } from '@axe/application/ui/mobile-layout.service';
 import { PieceOverlayPreferenceService } from '@axe/application/ui/piece-overlay-preference.service';
 import { TabletopOverlapService } from '@axe/application/ui/tabletop-overlap.service';
 import { UiSignalService } from '@axe/application/ui/ui-signal.service';
@@ -1823,6 +1825,68 @@ describe('GameCharacterComponent', () => {
         expect(component.rollHandleFootTransform()).toBe(
           'translateX(-50%) translateX(25px) translateY(100%) translateY(7px)'
         );
+      } finally {
+        character.destroy();
+      }
+    });
+
+    describe('on a phone', () => {
+      beforeEach(() => {
+        Object.defineProperty(TestBed.inject(MobileLayoutService), 'isActive', {
+          value: signal(true),
+          configurable: true,
+        });
+      });
+
+      it('stands the head handle off to the right of the picture and the foot one off to its left, halfway up', () => {
+        const character = GameCharacter.create('roll-grab-phone', 1, '');
+        fixture.componentRef.setInput('gameCharacter', character);
+
+        try {
+          fixture.detectChanges();
+          // Half the picture (25) and half the handle (14), then the gap (7).
+          expect(component.rollHandleHeadTransform()).toBe(
+            'translateX(-50%) translateX(25px) translateX(46px) translateY(-50%)'
+          );
+          expect(component.rollHandleFootTransform()).toBe(
+            'translateX(-50%) translateX(25px) translateX(-46px) translateY(-50%)'
+          );
+          expect(headOf()?.style.top).toBe('50%');
+          expect(footOf()?.style.top).toBe('50%');
+          expect(footOf()?.style.bottom).toBe('auto');
+        } finally {
+          character.destroy();
+        }
+      });
+
+      it('stands them clear of a picture whose height was set apart from the ground, however wide that is', async () => {
+        const character = GameCharacter.create('roll-grab-phone-tall', 1, '');
+        character.specifyKomaImageFlag = true;
+        character.komaImageHeight = 100;
+        fixture.componentRef.setInput('gameCharacter', character);
+
+        try {
+          component.imageView.onImageLoad({ target: { naturalWidth: 200, naturalHeight: 100 } } as unknown as Event);
+          await fixture.whenStable();
+
+          // The picture stands 100 high and so 200 wide: half of it (100), half the handle (14), the gap (7).
+          expect(component.rollHandleHeadTransform()).toContain('translateX(121px)');
+          expect(component.rollHandleFootTransform()).toContain('translateX(-121px)');
+        } finally {
+          character.destroy();
+        }
+      });
+    });
+
+    it('stands the handles at the head and feet off a phone', () => {
+      const character = GameCharacter.create('roll-grab-desk', 1, '');
+      fixture.componentRef.setInput('gameCharacter', character);
+
+      try {
+        fixture.detectChanges();
+        expect(component.rollHandlesBeside()).toBe(false);
+        expect(headOf()?.style.top).toBe('');
+        expect(footOf()?.style.bottom).toBe('');
       } finally {
         character.destroy();
       }

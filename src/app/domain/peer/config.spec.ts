@@ -102,11 +102,20 @@ describe('Config', () => {
         moveDiagonally: null,
         diagonalMove: null,
         piecesShareCells: null,
+        samePartyPassage: null,
+        otherPartyPassage: null,
+        noPartyPassage: null,
+        piecePassageCost: null,
+        sizeSlipsPast: null,
+        squeezes: null,
+        jumpCells: null,
+        handTracesWay: null,
         moveRangeAlways: null,
         zocAlways: null,
         cellDistance: null,
         cellDistanceUnit: null,
         zocMode: null,
+        hostilityBy: null,
         zocRange: null,
         zocExtraCost: null,
         zocEngages: null,
@@ -228,6 +237,77 @@ describe('Config', () => {
       Config.instance.setAttribute('_controllerResources', `${Config.instance.getAttribute('_controllerResources')}`);
 
       expect(Config.instance.controllerResources).toEqual(['HP', '敏捷度']);
+    });
+  });
+
+  describe('diceStage', () => {
+    const attributesOf = (syncData: unknown) => (syncData as { attributes: Record<string, unknown> }).attributes;
+
+    it('throws no dice anywhere until the room chooses where', () => {
+      expect(Config.instance.diceStage).toBe('off');
+    });
+
+    it('keeps where the room chose', () => {
+      Config.instance.diceStage = 'frame';
+      expect(Config.instance.diceStage).toBe('frame');
+
+      Config.instance.diceStage = 'table';
+      expect(Config.instance.diceStage).toBe('table');
+
+      Config.instance.diceStage = 'both';
+      expect(Config.instance.diceStage).toBe('both');
+    });
+
+    it('writes nowhere as empty, the same as a room that never chose', () => {
+      Config.instance.diceStage = 'table';
+
+      Config.instance.diceStage = 'off';
+
+      expect(Config.instance.getAttribute('_diceStage')).toBe('');
+      expect(Config.instance.toXml()).toContain('_diceStage=""');
+    });
+
+    it('throws nothing in a room from an older build, which carries no attribute for it', () => {
+      Config.instance.diceStage = 'frame';
+
+      Config.instance.removeAttribute('_diceStage');
+
+      expect(Config.instance.diceStage).toBe('off');
+    });
+
+    it('reads the choice back out of the text a loaded room carries', () => {
+      Config.instance.setAttribute('_diceStage', 'table');
+
+      expect(Config.instance.diceStage).toBe('table');
+    });
+
+    it('throws nothing for a value it does not know, such as one a later build might write', () => {
+      Config.instance.setAttribute('_diceStage', 'sky');
+
+      expect(Config.instance.diceStage).toBe('off');
+    });
+
+    it('throws nothing when an older peer sends the config without the setting', () => {
+      Config.instance.diceStage = 'frame';
+      const context = Config.instance.toContext();
+      delete attributesOf(context.syncData)['_diceStage'];
+      context.majorVersion += 1;
+
+      Config.instance.apply(context);
+
+      expect(Config.instance.diceStage).toBe('off');
+    });
+
+    it('keeps the choice when an older peer writes the config back with the attribute it was sent', () => {
+      Config.instance.diceStage = 'table';
+      const echoed = Config.instance.toContext();
+      attributesOf(echoed.syncData)['_defaultDiceBot'] = 'Cthulhu7th';
+      echoed.majorVersion += 1;
+
+      Config.instance.apply(echoed);
+
+      expect(Config.instance.diceStage).toBe('table');
+      expect(Config.instance.defaultDiceBot).toBe('Cthulhu7th');
     });
   });
 

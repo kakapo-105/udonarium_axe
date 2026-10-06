@@ -1,4 +1,5 @@
 import { GameCharacter } from '@axe/domain/character/game-character';
+import { ambienceLightLevelOf, ambienceSnuffsLight } from '@axe/domain/effect/ambience/ambience-brightness';
 import { GameTable } from '@axe/domain/tabletop/game-table';
 import { perimeterSegments, rectangleSegments, TallSegment } from '@axe/domain/tabletop/los/segments';
 import { type SurfaceDims, surfaceInwardDirection, surfacePointTo3D } from '@axe/domain/tabletop/surface-space';
@@ -8,6 +9,7 @@ import { terrainBasePx, terrainTopPx } from '@axe/domain/tabletop/terrain-height
 import {
   eyeHeightPx,
   type LightSegment,
+  type SceneBrightness,
   type SceneLight,
   type SceneVisionSource,
   type ShadowCaster,
@@ -17,6 +19,13 @@ import { visionLobesOf } from '@axe/domain/tabletop/vision-shape';
 import { LightSpec, VisionType } from '@axe/domain/tabletop/vision-types';
 
 const WALL_LIGHT_INSET_CELLS = 0.4;
+/**
+ * How high a bank of something in the air stands, in cells.
+ *
+ * Well over the head of anything standing on the floor and under the feet of anything looking
+ * down from a wall, which is what a fog bank rolling across a room comes to.
+ */
+const AMBIENCE_SIGHT_HEIGHT_CELLS = 2;
 
 export interface StandingSegments {
   sight: TallSegment[];
@@ -62,6 +71,17 @@ export function collectSegments(
     if (terrain.blocksSightNow) for (const edge of edges) sight.push({ ...edge, heightPx: top, basePx: base });
     if (terrain.blocksLightNow && !terrain.lightEnabled) {
       for (const edge of edges) light.push({ ...edge, heightPx: top, basePx: base });
+    }
+  }
+
+  // A bank of fog stops sight and not light: it is thick air rather than stone, and a lamp
+  // inside one still glows through it.
+  for (const bank of table.ambiences) {
+    if (!bank.blocksSight || surfaceOf(bank) !== 'floor') continue;
+    const edges = rectangleSegments(bank.location.x, bank.location.y, bank.width * gridSize, bank.height * gridSize, 0);
+    const base = bank.altitude * gridSize;
+    for (const edge of edges) {
+      sight.push({ ...edge, heightPx: base + AMBIENCE_SIGHT_HEIGHT_CELLS * gridSize, basePx: base });
     }
   }
   return { sight, light };
@@ -253,6 +273,30 @@ export function characterSceneKey(character: GameCharacter): string {
 }
 
 /**
+ * The patches of a table held at a brightness of their own, as the solver reads them.
+ *
+ * Only the ones that say something are collected: an ambience that leaves the light alone is
+ * a look and nothing else, and the solver is given none of them to walk over.
+ */
+export function collectBrightAreas(table: GameTable, gridSize: number): SceneBrightness[] {
+  const areas: SceneBrightness[] = [];
+  for (const patch of table.ambiences) {
+    if (surfaceOf(patch) !== 'floor') continue;
+    const level = ambienceLightLevelOf(patch.shade);
+    if (level === null) continue;
+    areas.push({
+      x: patch.location.x,
+      y: patch.location.y,
+      widthPx: patch.width * gridSize,
+      heightPx: patch.height * gridSize,
+      level,
+      snuffs: ambienceSnuffsLight(patch.shade),
+    });
+  }
+  return areas;
+}
+
+/**
  * Puts together everything the vision solver needs for a table: its darkness and fog, the lights,
  * the eyes, and the edges that stop them.
  */
@@ -279,5 +323,6 @@ export function assembleScene(
     sightSegments: standing.sight,
     lightSegments: standing.light,
     shadowCasters: collectShadowCasters(characters, gridSize),
+    brightAreas: collectBrightAreas(table, gridSize),
   };
 }

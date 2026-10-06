@@ -66,6 +66,29 @@ describe('remote-controller-helpers', () => {
     it('reads nothing from an empty line', () => {
       expect(parseBuffInput('')).toBeNull();
     });
+
+    it('asks for no second helping without a plus', () => {
+      expect(parseBuffInput('猛攻撃 攻撃+2 3')!.piles).toBe('none');
+    });
+
+    it('reads a plus in front of the name as a second helping, and keeps it out of the name', () => {
+      const parsed = parseBuffInput('+猛攻撃 攻撃+2 3');
+
+      expect(parsed).toMatchObject({ buffname: '猛攻撃', sub: '攻撃+2', piles: 'stack' });
+      expect(parsed!.bufftext.startsWith('猛攻撃')).toBe(true);
+    });
+
+    it('reads two pluses as one that lengthens the buff as well', () => {
+      expect(parseBuffInput('++猛攻撃 攻撃+2 3')).toMatchObject({ buffname: '猛攻撃', piles: 'extend' });
+    });
+
+    it('reads the plus written full width', () => {
+      expect(parseBuffInput('＋猛攻撃 攻撃+2 3')).toMatchObject({ buffname: '猛攻撃', piles: 'stack' });
+    });
+
+    it('reads a lone plus as a name, since there is nothing else it could be', () => {
+      expect(parseBuffInput('+')).toMatchObject({ buffname: '+', piles: 'none' });
+    });
   });
 
   describe('getTabTitle', () => {

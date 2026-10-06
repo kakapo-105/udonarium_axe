@@ -13,17 +13,23 @@ import {
   signal,
   viewChildren,
 } from '@angular/core';
+import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ImageService } from '@axe/application/storage/image.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
+import { BoardSwitchService } from '@axe/application/tabletop/board-switch.service';
+import { SwitchPressService } from '@axe/application/tabletop/switch-press.service';
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { TerrainFogCover, VisionService } from '@axe/application/tabletop/vision.service';
+import { ButtonGuideService } from '@axe/application/ui/button-guide.service';
+import { SWITCH_NOTICE_MS } from '@axe/application/ui/switch-notice.service';
 import { UiSignalService } from '@axe/application/ui/ui-signal.service';
 import { imageFileEqual } from '@axe/core/storage/image-file';
 import { ImageFile } from '@axe/core/storage/image-file';
 import { PERF_TERRAIN_GRID_RASTER, perfCounters } from '@axe/core/util/perf-counters';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
+import { BoardSwitch } from '@axe/domain/tabletop/board-switch/board-switch';
 import { GameTable, GridType } from '@axe/domain/tabletop/game-table';
 import { buildHexRingClipPath, calcHexFlowerParams, HexFlowerParams } from '@axe/domain/tabletop/hex-flower-geometry';
 import { isFlatTopGrid, isHexGrid } from '@axe/domain/tabletop/hex-geometry';
@@ -87,6 +93,12 @@ interface TerrainGridViewport extends TerrainGridBounds {
   offsetTop: number;
 }
 
+/** How far a pointer may wander between pressing a switch and letting go, and still press it. */
+const PRESS_SLOP_PX = 6;
+
+/** How far a block of glass's faces stand off the ground, so the table, lying at the same depth, never takes a press from them. */
+const GLASS_FACE_LIFT_PX = 0.5;
+
 /** The same list, or two empty ones: an empty @for renders nothing either way. */
 function sameOrBothEmpty<T>(a: readonly T[], b: readonly T[]): boolean {
   return a === b || (a.length === 0 && b.length === 0);
@@ -115,8 +127,16 @@ export class TerrainComponent {
   private readonly rolePermission = inject(RolePermissionService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly terrainMenu = inject(TerrainMenuService);
+  private readonly switchPresses = inject(SwitchPressService);
+  private readonly switches = inject(BoardSwitchService);
+  private readonly t = inject(TRANSLATE_FN);
+  /** Whether every button on the screen is saying what it is, switches on the table among them. */
+  protected readonly guide = inject(ButtonGuideService);
 
   constructor() {
+    this.destroyRef.onDestroy(() => {
+      if (this.noticeTimer !== null) clearTimeout(this.noticeTimer);
+    });
     effect(() => {
       this.uiSignalService.terrainGridShowVersion();
       let opacity: number = 0.0;
@@ -298,6 +318,59 @@ export class TerrainComponent {
     return this.isBlank() && this.rolePermission.canSeeHidden;
   });
 
+  /**
+   * Faces nobody sees, standing where a block of glass would have its top and walls, for the master
+   * to take hold of it by.
+   *
+   * Its outlines answer no pointer, and its footprint lies level with the table, which takes the
+   * press. The top sits at the dashed outline and the walls stand round it, so the block is picked
+   * up anywhere it seems to be. A block with no wall has only its top, at the outline on the ground.
+   */
+  readonly glassFaces = computed<Record<string, string>[]>(() => {
+    if (!this.showsBlankOutline()) return [];
+    const grid = this.gridSize;
+    const width = this.width() * grid;
+    const depth = this.depth() * grid;
+    const height = this.height() * grid;
+    const walled = this.hasWall() && height > 0;
+    const top: Record<string, string> = {
+      width: `${width}px`,
+      height: `${depth}px`,
+      left: '0px',
+      top: '0px',
+      ...this.hexFloorDimStyle(),
+      transform: `translateZ(${(walled ? height : 0) + GLASS_FACE_LIFT_PX}px)`,
+    };
+    const hexClip = this.hexFloorClipPath();
+    if (hexClip) top['clip-path'] = hexClip;
+    if (!walled) return [top];
+    const standing = (length: number, transform: string): Record<string, string> => ({
+      width: `${length}px`,
+      height: `${height}px`,
+      left: '0px',
+      top: '0px',
+      transform,
+    });
+    if (this.isHex()) {
+      return [
+        top,
+        ...this.hexWalls().map((wall) =>
+          standing(
+            wall.edgeLength,
+            `translate(${wall.px}px, ${wall.py}px) rotateZ(${wall.angle}rad) rotateX(-90deg) translateY(-100%)`
+          )
+        ),
+      ];
+    }
+    return [
+      top,
+      standing(width, 'rotateX(90deg)'),
+      standing(width, `translateY(${depth}px) rotateX(90deg)`),
+      standing(depth, 'rotateZ(90deg) rotateX(90deg)'),
+      standing(depth, `translateX(${width}px) rotateZ(90deg) rotateX(90deg)`),
+    ];
+  });
+
   private faceImageOf(face: TerrainFace) {
     this.objectChange.fileVersion();
     this.terrainVersion();
@@ -379,6 +452,86 @@ export class TerrainComponent {
     if (this.hingeOnLongY()) return this.doorMirrored() ? 'center bottom' : 'center top';
     return this.doorMirrored() ? 'right center' : 'left center';
   });
+
+  /**
+   * The switch hung under the block, where the master made it one and has not retired it.
+   *
+   * Handed on afresh whenever the switch changes, although it is the same switch: what is written
+   * over the block reads what the switch says, and would otherwise go on reading what it said first.
+   */
+  private readonly activeSwitch = computed(
+    () => {
+      this.terrainVersion();
+      this.objectChange.collectionOf(BoardSwitch.aliasName)();
+      const held = this.terrain().boardSwitch;
+      if (!held) return null;
+      this.objectChange.versionOf(held.identifier)();
+      return held.retired ? null : held;
+    },
+    { equal: () => false }
+  );
+
+  /** Whether a click on the block presses its switch, which only a block locked in place does. */
+  protected readonly pressable = computed(() => this.activeSwitch() !== null && this.isLocked());
+
+  /**
+   * What is written over the block for its switch, or nothing.
+   *
+   * Shown to the master whether the block is locked or not, since the master is the one setting
+   * it up, and to everyone else only once it can be pressed.
+   */
+  protected readonly switchLabel = computed(() => {
+    const held = this.activeSwitch();
+    if (!held || (!this.pressable() && !this.switches.canEdit())) return '';
+    return held.def.label.trim() || this.t('feature.boardSwitch.unlabeled');
+  });
+
+  /** Why the last press on the block came to nothing, shown over it for a moment. */
+  protected readonly switchNotice = signal('');
+
+  /** Stands the label up over the middle of the block, turned to the camera, or lays it flat from above. */
+  protected readonly switchLabelTransform = computed(() => {
+    const top = (this.hasWall() ? this.height() : 0) * this.gridSize + 2;
+    if (this.tabletopService.mode2d()) return `translateZ(${top}px) rotateZ(${-this.viewRotateZ()}deg)`;
+    return `translateZ(${top}px) rotateX(-90deg) rotateY(${this.viewRotateZ()}deg)`;
+  });
+
+  private pressedFrom: { x: number; y: number } | null = null;
+  private noticeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  protected notePress(event: PointerEvent): void {
+    this.pressedFrom = { x: event.clientX, y: event.clientY };
+  }
+
+  /**
+   * A click on the block: its switch where it has one it can be pressed by, else its door.
+   *
+   * A click that ends somewhere other than where the press began is the end of turning the table
+   * rather than a press, since a locked block hands a drag on to the table.
+   */
+  protected onBlockClick(event: MouseEvent): void {
+    if (!this.pressable()) {
+      this.onDoorClick();
+      return;
+    }
+    const from = this.pressedFrom;
+    this.pressedFrom = null;
+    if (from && Math.hypot(event.clientX - from.x, event.clientY - from.y) > PRESS_SLOP_PX) return;
+    void this.pressSwitch();
+  }
+
+  private async pressSwitch(): Promise<void> {
+    const held = this.activeSwitch();
+    if (!held) return;
+    const outcome = await this.switchPresses.press(held);
+    if (outcome === 'pressed' || outcome === 'busy') return;
+    this.switchNotice.set(this.t(`feature.boardSwitch.refused.${outcome}`));
+    if (this.noticeTimer !== null) clearTimeout(this.noticeTimer);
+    this.noticeTimer = setTimeout(() => {
+      this.noticeTimer = null;
+      this.switchNotice.set('');
+    }, SWITCH_NOTICE_MS);
+  }
 
   protected onDoorClick(): void {
     if (!this.isDoor() || this.pointerDeviceService.isDragging) return;

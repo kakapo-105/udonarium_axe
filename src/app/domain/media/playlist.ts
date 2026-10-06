@@ -4,12 +4,51 @@ import { ObjectStore } from '@axe/core/sync/object-store';
 
 @SyncObject('playlist')
 export class Playlist extends GameObject {
+  /** The identifier of the playlist every room starts with, which cannot be deleted. */
+  static readonly DEFAULT_IDENTIFIER = 'Playlist';
+
   /** The playlist: the music tracks in order. */
   @SyncVar() entries: string[] = [];
 
-  /** The room's playlist, or null before it has been made. */
+  /**
+   * The name somebody gave the playlist.
+   *
+   * Empty for the room's first playlist until it is renamed, and for one an older version sent,
+   * which knows nothing of names.
+   */
+  @SyncVar() name: string = '';
+
+  /** When the playlist was made, in milliseconds, which puts the playlists in order. 0 for the room's first. */
+  @SyncVar() createdAt: number = 0;
+
+  /** The room's first playlist, or null before it has been made. */
   static get instance(): Playlist | null {
-    return ObjectStore.instance.get<Playlist>('Playlist') ?? null;
+    return ObjectStore.instance.get<Playlist>(Playlist.DEFAULT_IDENTIFIER) ?? null;
+  }
+
+  /** Every playlist in the room, the first one first and the rest in the order they were made. */
+  static all(): Playlist[] {
+    return ObjectStore.instance.getObjects(Playlist).sort((a, b) => {
+      if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
+      return (
+        (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0) ||
+        (a.identifier < b.identifier ? -1 : a.identifier > b.identifier ? 1 : 0)
+      );
+    });
+  }
+
+  /** Makes a new, empty playlist under a name and shares it with the room. */
+  static create(name: string): Playlist {
+    const playlist = new Playlist();
+    playlist.name = name;
+    playlist.createdAt = Date.now();
+    playlist.initialize();
+    return playlist;
+  }
+
+  /** Whether this is the playlist every room starts with. */
+  get isDefault(): boolean {
+    return this.identifier === Playlist.DEFAULT_IDENTIFIER;
   }
 
   /** Adds a track to the end of the playlist and shares the change. A track already on it is not added twice. */

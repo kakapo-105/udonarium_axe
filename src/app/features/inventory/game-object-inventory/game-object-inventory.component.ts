@@ -10,6 +10,7 @@ import {
   inject,
   Injector,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -188,6 +189,16 @@ export class GameObjectInventoryComponent {
   });
 
   constructor() {
+    // Folded as the list first arrives rather than as the panel is made: what there is to fold
+    // is not known until the room has been read, and a panel folded before then folds nothing.
+    effect(() => {
+      if (this.foldedOnOpen) return;
+      if (!this.viewPreference.foldsOnOpen()) return;
+      const tree = this.folderTree();
+      if (tree.roots.length < 1) return;
+      this.foldedOnOpen = true;
+      untracked(() => this.foldEveryFolder());
+    });
     effect(() => {
       const selection = this.selectionSignalService.selectedObject();
       if (selection && this.objectStore.get(selection.identifier) instanceof TabletopObject) {
@@ -801,6 +812,19 @@ export class GameObjectInventoryComponent {
       if (!next.delete(path)) next.add(path);
       return next;
     });
+  }
+
+  /** Whether this panel has already folded itself up for a reader who asked it to. */
+  private foldedOnOpen = false;
+
+  /**
+   * Folds up every folder, leaving the unfiled group open.
+   *
+   * What a panel does for itself as it opens. The pieces in no folder are the ones a reader
+   * folding the folders away was trying to get a look at, so they stay where they were.
+   */
+  private foldEveryFolder(): void {
+    this.collapsedFolders.set(new Set(collectFolderPaths(this.folderTree())));
   }
 
   /** Folds up every folder, and the unfiled group with them; ignored while a search is running. */

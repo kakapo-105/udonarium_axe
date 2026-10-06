@@ -13,6 +13,8 @@ import { CutIn } from '@axe/domain/media/cut-in';
 import { Party, PARTY_COLORS } from '@axe/domain/party/party';
 import { ReloadCheck } from '@axe/domain/peer/reload-check';
 import { Room } from '@axe/domain/peer/room';
+import { GameTable } from '@axe/domain/tabletop/game-table';
+import { LightSource } from '@axe/domain/tabletop/light-source';
 
 describe('Room', () => {
   let store: ObjectStore;
@@ -72,6 +74,35 @@ describe('Room', () => {
     });
   });
 
+  describe('saving what stands on a table', () => {
+    it('writes a light once, where the table it stands on has already written it', () => {
+      const table = new GameTable();
+      table.initialize();
+      const light = LightSource.create('燭台');
+      table.appendChild(light);
+
+      const xml = new Room().innerXml();
+
+      // The table writes everything standing on it, so a light written again beside the table
+      // is a second light on the way back in.
+      expect(xml.split('<light-source').length - 1).toBe(1);
+    });
+
+    it('writes a light nobody put on a table, which would otherwise be lost', () => {
+      LightSource.create('浮いた光');
+
+      const xml = new Room().innerXml();
+
+      expect(xml.split('<light-source').length - 1).toBe(1);
+    });
+
+    it('reads a saved table back with the one light it was saved with', () => {
+      loadRoom('<game-table><light-source name="燭台"></light-source></game-table>');
+
+      expect(store.getObjects(LightSource)).toHaveLength(1);
+    });
+  });
+
   describe('saving who travels together', () => {
     function makeParty(identifier?: string): Party {
       const party = new Party(identifier);
@@ -88,7 +119,7 @@ describe('Room', () => {
 
       const xml = new Room().innerXml();
 
-      expect(xml).toContain(`<party name="本隊" color="#fcd34d" identifier="${party.identifier}">`);
+      expect(xml).toContain(`<party name="本隊" color="#fcd34d" allies="" identifier="${party.identifier}">`);
       expect(xml).toContain(`partyIdentifier="${party.identifier}"`);
     });
 
@@ -106,6 +137,17 @@ describe('Room', () => {
       expect(parties[0].name).toBe('本隊');
       expect(parties[0].color).toBe('#fcd34d');
       expect(store.getObjects(GameCharacter)[0].partyIdentifier).toBe('party-1');
+    });
+
+    it('reads back who each party stands with', () => {
+      loadRoom(
+        '<party name="本隊" color="#fcd34d" allies="party-2" identifier="party-1"></party>' +
+          '<party name="義勇軍" color="#bef264" identifier="party-2"></party>'
+      );
+
+      const parties = store.getObjects(Party);
+      expect(parties.find((party) => party.identifier === 'party-1')!.alliedWith).toEqual(['party-2']);
+      expect(parties.find((party) => party.identifier === 'party-2')!.alliedWith).toEqual([]);
     });
 
     it('brings a party back over the one it replaces in the room it was saved from', () => {

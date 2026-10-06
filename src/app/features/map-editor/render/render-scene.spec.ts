@@ -155,7 +155,7 @@ describe('renderScene', () => {
         visible: true,
         locked: false,
         opacity: 1,
-        role: 'moveBlock',
+        role: 'moveCost',
         cells: { '0,0': true, '1,1': true },
         spec: { ...DEFAULT_FUNCTION_SPEC },
       };

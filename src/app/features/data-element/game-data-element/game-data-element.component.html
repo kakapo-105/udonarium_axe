@@ -133,6 +133,22 @@
                   @if (unitText) {
                     <span class="text-ui-muted col-span-3 text-right text-[0.85em]">{{ unitText }}</span>
                   }
+                  @if (hasResourceSlider() && resourceSliderSpan(); as span) {
+                    <input
+                      class="col-span-3 h-4 w-full min-w-0 cursor-pointer appearance-auto border-none bg-transparent p-0 [accent-color:var(--ui-accent)] shadow-none disabled:cursor-default disabled:opacity-40"
+                      type="range"
+                      name="data-current-slider"
+                      step="1"
+                      [min]="span.min"
+                      [max]="span.max"
+                      [value]="currentValue"
+                      [disabled]="isValueLocked()"
+                      [attr.aria-label]="gameDataElement().name"
+                      (input)="previewSliderValue($event)"
+                      (change)="commitSliderValue($event)"
+                      data-testid="resource-slider"
+                    />
+                  }
                 </div>
               }
             </div>
@@ -512,6 +528,17 @@
             <label class="col-span-full grid-cols-[auto_auto] justify-start">
               <span>{{ 'feature.dataElement.field.pieceGauge' | transloco }}</span>
               <input type="checkbox" name="data-piece-gauge" [checked]="isPieceGauge()" (change)="togglePieceGauge()" />
+            </label>
+          }
+          @if (canShowPieceGauge()) {
+            <label class="col-span-full grid-cols-[auto_auto] justify-start">
+              <span>{{ 'feature.dataElement.field.resourceSlider' | transloco }}</span>
+              <input
+                type="checkbox"
+                name="data-resource-slider"
+                [checked]="hasResourceSlider()"
+                (change)="toggleResourceSlider()"
+              />
             </label>
           }
           @if (canShowChangeFeedback()) {

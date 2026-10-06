@@ -6,10 +6,19 @@ import {
   RoomSnapshotStore,
   sortSnapshotsByNewest,
 } from '@axe/core/storage/room-snapshot-store';
+import { blobFromStored, storedBytesOf } from '@axe/core/storage/stored-bytes';
 
 const DB_NAME = 'axe-room-snapshots';
 const DB_VERSION = 1;
 const STORE_NAME = 'snapshots';
+
+/**
+ * A snapshot as it is written: its file kept as bytes, which a private window in WebKit stores where
+ * it refuses the file itself, or as a Blob where it was written before.
+ */
+interface StoredSnapshot extends RoomSnapshotMeta {
+  blob: unknown;
+}
 
 export class IndexedDbRoomSnapshotStore extends RoomSnapshotStore {
   private static _instance: IndexedDbRoomSnapshotStore;
@@ -37,7 +46,7 @@ export class IndexedDbRoomSnapshotStore extends RoomSnapshotStore {
       roomName: input.roomName,
       savedAt: input.savedAt,
       byteSize: input.blob.size,
-      blob: input.blob,
+      blob: await storedBytesOf(input.blob),
     };
     const key = await this.request<IDBValidKey>('readwrite', (store) => store.add(record));
     return typeof key === 'number' ? key : null;
@@ -45,7 +54,7 @@ export class IndexedDbRoomSnapshotStore extends RoomSnapshotStore {
 
   /** Every snapshot's metadata without its bytes, newest first; empty when the database cannot be read. */
   async list(): Promise<RoomSnapshotMeta[]> {
-    const records = await this.request<RoomSnapshotRecord[]>('readonly', (store) => store.getAll());
+    const records = await this.request<StoredSnapshot[]>('readonly', (store) => store.getAll());
     if (!records) return [];
     const metas = records.map(({ id, roomName, savedAt, byteSize }) => ({ id, roomName, savedAt, byteSize }));
     return sortSnapshotsByNewest(metas);
@@ -53,8 +62,9 @@ export class IndexedDbRoomSnapshotStore extends RoomSnapshotStore {
 
   /** One snapshot with its bytes, or null when there is none with that id or the database cannot be read. */
   async get(id: number): Promise<RoomSnapshotRecord | null> {
-    const record = await this.request<RoomSnapshotRecord | undefined>('readonly', (store) => store.get(id));
-    return record ?? null;
+    const record = await this.request<StoredSnapshot | undefined>('readonly', (store) => store.get(id));
+    const blob = record ? blobFromStored(record.blob) : null;
+    return record && blob ? { ...record, blob } : null;
   }
 
   /** Deletes the snapshot with this id, if there is one. */

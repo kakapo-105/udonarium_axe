@@ -38,6 +38,8 @@ interface MutableTerrain {
   destroy: ReturnType<typeof vi.fn>;
   slopeSideNames: string;
   slopeSides: SlopeSide[];
+  hasFaceImage: boolean;
+  clearFaceImages: ReturnType<typeof vi.fn>;
 }
 
 function makeTerrain(overrides: Partial<MutableTerrain> = {}): MutableTerrain {
@@ -62,6 +64,8 @@ function makeTerrain(overrides: Partial<MutableTerrain> = {}): MutableTerrain {
     destroy: vi.fn(),
     slopeSideNames: '',
     slopeSides: [],
+    hasFaceImage: true,
+    clearFaceImages: vi.fn(),
     ...overrides,
   };
   // The real block turns its slope on and off with the sides, which the menu writes.
@@ -422,5 +426,59 @@ describe('buildTerrainContextMenu()', () => {
     );
     menu.find((m) => m.name === '削除する')!.action!();
     expect(terrain.destroy).toHaveBeenCalled();
+  });
+});
+
+describe('turning a block to glass from the menu', () => {
+  function menuFor(terrain: MutableTerrain, onEdit = vi.fn()) {
+    return {
+      actions: buildTerrainContextMenu(
+        terrain as unknown as Terrain,
+        50,
+        { x: 0, y: 0, z: 0 },
+        makeService(),
+        makeActionService(),
+        onEdit,
+        t
+      ),
+      onEdit,
+    };
+  }
+
+  it('offers to take the pictures off a block that wears any', () => {
+    const terrain = makeTerrain({ hasFaceImage: true });
+
+    const entry = menuFor(terrain).actions.find((action) => action.name === 'テクスチャを外して透明にする');
+
+    expect(entry).toBeDefined();
+    entry!.action!();
+    expect(terrain.clearFaceImages).toHaveBeenCalled();
+  });
+
+  it('offers a block that is already glass the sheet it would be dressed from', () => {
+    const terrain = makeTerrain({ hasFaceImage: false });
+    const { actions, onEdit } = menuFor(terrain);
+
+    expect(names(actions)).not.toContain('テクスチャを外して透明にする');
+    const entry = actions.find((action) => action.name === 'テクスチャを選ぶ（透明をやめる）');
+
+    expect(entry).toBeDefined();
+    entry!.action!();
+    expect(onEdit).toHaveBeenCalledWith(terrain);
+  });
+
+  it('puts it with the rest of how a block looks in the rotating menu', () => {
+    const model = buildTerrainContextMenuModel(
+      makeTerrain() as unknown as Terrain,
+      50,
+      { x: 0, y: 0, z: 0 },
+      makeService(),
+      makeActionService(),
+      vi.fn(),
+      t
+    );
+    const look = model.radialGroups.find((group) => group.name === '見た目・照明')!;
+
+    expect(names(look.actions)).toContain('テクスチャを外して透明にする');
   });
 });
