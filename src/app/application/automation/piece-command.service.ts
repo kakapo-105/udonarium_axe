@@ -10,8 +10,12 @@ import { DisclosureMode } from '@axe/domain/disclosure/disclosure';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
+import { TextNote } from '@axe/domain/tabletop/text-note';
 
 export const MAX_CREATED_PIECES = 20;
+
+/** What automation puts out and clears away: pieces, and the shared notes handed to the players. */
+export type OwnedThing = GameCharacter | TextNote;
 
 export interface PieceAnchor {
   x: number;
@@ -112,25 +116,26 @@ export class PieceCommandService {
   }
 
   /**
-   * One of your own pieces on the table, or out of sight when `places` says so, or a failure that does
-   * not say whether it exists.
+   * One of your own pieces or shared notes on the table, or out of sight when `places` says so, or a
+   * failure that does not say whether it exists.
    */
-  own(identifier: string, places: readonly string[] = ['table', CONCEALED_LOCATION]): GameCharacter {
+  own(identifier: string, places: readonly string[] = ['table', CONCEALED_LOCATION]): OwnedThing {
     const piece = this.store.get(identifier);
     const me = PeerCursor.myCursor?.userId;
-    if (!(piece instanceof GameCharacter) || !places.includes(piece.location.name) || !me || piece.owner !== me)
+    const owned = piece instanceof GameCharacter || piece instanceof TextNote;
+    if (!owned || !places.includes(piece.location.name) || !me || piece.owner !== me)
       fail('NOT_FOUND', 'None of your own pieces there has that identifier.');
     return piece;
   }
 
   /** Puts the pieces out of sight where they stand, as the master's context menu does. */
-  conceal(pieces: readonly GameCharacter[]) {
+  conceal(pieces: readonly OwnedThing[]) {
     GameObject.batch(() => pieces.forEach((piece) => this.concealment.conceal(piece)));
     return { concealed: pieces.map((piece) => piece.identifier) };
   }
 
   /** Brings the pieces back to where they were put out of sight, for everyone to see. */
-  reveal(pieces: readonly GameCharacter[]) {
+  reveal(pieces: readonly OwnedThing[]) {
     GameObject.batch(() => pieces.forEach((piece) => this.concealment.reveal(piece)));
     return {
       revealed: pieces.map((piece) => ({ identifier: piece.identifier, x: piece.location.x, y: piece.location.y })),
@@ -138,14 +143,14 @@ export class PieceCommandService {
     };
   }
 
-  disclose(piece: GameCharacter, mode: DisclosureMode) {
+  disclose(piece: OwnedThing, mode: DisclosureMode) {
     piece.disclosureMode = mode;
     piece.update();
     return { identifier: piece.identifier, disclosure: mode };
   }
 
   /** Sends the pieces to the graveyard, as the context menu does, so they can still be brought back. */
-  remove(pieces: readonly GameCharacter[]) {
+  remove(pieces: readonly OwnedThing[]) {
     GameObject.batch(() => pieces.forEach((piece) => piece.setLocation('graveyard')));
     return { removed: pieces.map((piece) => piece.identifier) };
   }

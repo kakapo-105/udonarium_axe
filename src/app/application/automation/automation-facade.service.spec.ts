@@ -21,7 +21,9 @@ import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
 import { GameTable } from '@axe/domain/tabletop/game-table';
+import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { Terrain } from '@axe/domain/tabletop/terrain';
+import { TextNote } from '@axe/domain/tabletop/text-note';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 
 describe('AutomationFacadeService', () => {
@@ -833,6 +835,89 @@ describe('AutomationFacadeService', () => {
       });
       expect(store.get<GameCharacter>(made.identifier)!.location.name).toBe('graveyard');
       expect(players.location.name).toBe('table');
+    });
+  });
+
+  describe('preparing the room', () => {
+    function beGameMaster() {
+      PeerCursor.myCursor.role = PeerRole.GameMaster;
+      facade.health();
+      policy.enable();
+      policy.setScope('prepare_room', true);
+      policy.setScope('create_piece', true);
+    }
+
+    it('lists every table with the one in view', async () => {
+      const other = new GameTable();
+      other.name = 'Town';
+      other.initialize();
+
+      const result = await call('table_list');
+
+      expect(result).toMatchObject({ ok: true });
+      const tables = (result as { data: { tables: { identifier: string; viewing: boolean }[] } }).data.tables;
+      expect(tables.find((t) => t.identifier === table.identifier)?.viewing).toBe(true);
+      expect(tables.find((t) => t.identifier === other.identifier)?.viewing).toBe(false);
+    });
+
+    it('leaves setting the room up to the game master with its own grant', async () => {
+      policy.setScope('prepare_room', true);
+      error(await call('chat_tab_create', { name: 'メイン' }), 'FORBIDDEN');
+
+      PeerCursor.myCursor.role = PeerRole.GameMaster;
+      facade.health();
+      policy.enable();
+      error(await call('chat_tab_create', { name: 'メイン' }), 'FORBIDDEN');
+    });
+
+    it('puts another table in view for the room', async () => {
+      beGameMaster();
+      const town = new GameTable();
+      town.name = 'Town';
+      town.initialize();
+
+      expect(await call('table_select', { identifier: town.identifier })).toMatchObject({
+        ok: true,
+        data: { identifier: town.identifier },
+      });
+      expect(TestBed.inject(TableSelecter).viewTableIdentifier).toBe(town.identifier);
+      error(await call('table_select', { identifier: piece.identifier }), 'NOT_FOUND');
+    });
+
+    it('opens a chat tab the players cannot read, for the master’s own notes', async () => {
+      beGameMaster();
+
+      const result = await call('chat_tab_create', { name: 'GM', playersRead: false, guestsRead: false });
+
+      expect(result).toMatchObject({ ok: true, data: { plCanView: false, plCanSpeak: false, guestCanView: false } });
+      const made = store.get<ChatTab>((result as { data: { identifier: string } }).data.identifier)!;
+      expect(made.name).toBe('GM');
+      expect(ChatTabList.instance.chatTabs).toContain(made);
+    });
+
+    it('puts a note on the table, or keeps it out of sight until it is revealed', async () => {
+      beGameMaster();
+
+      const shown = await call('note_create', { title: '依頼書', text: 'ゴブリン退治', x: 1, y: 2 });
+      expect(shown).toMatchObject({ ok: true, data: { x: 50, y: 100, concealed: false } });
+      const note = store.get<TextNote>((shown as { data: { identifier: string } }).data.identifier)!;
+      expect(note.text).toBe('ゴブリン退治');
+      expect(note.owner).toBe('operator');
+
+      const hidden = await call('note_create', { title: '地図', text: '', x: 0, y: 0, concealed: true });
+      const id = (hidden as { data: { identifier: string } }).data.identifier;
+      expect(store.get<TextNote>(id)!.location.name).toBe('concealed');
+      expect((await call('piece_reveal', { identifiers: [id] })).ok).toBe(true);
+      expect(store.get<TextNote>(id)!.location.name).toBe('table');
+
+      error(await call('note_create', { title: '大きすぎる', text: '', x: 18, y: 0, width: 5 }), 'INVALID_ARGUMENT');
+    });
+
+    it('says plainly when this build cannot generate maps', async () => {
+      beGameMaster();
+      error(await call('table_create', { kind: 'dungeon', atmosphere: 'crypt' }), 'NOT_READY');
+      error(await call('table_create', { kind: 'cave', atmosphere: 'crypt' }), 'INVALID_ARGUMENT');
+      error(await call('table_create', { kind: 'dungeon', atmosphere: 'crypt', roomCount: 99 }), 'INVALID_ARGUMENT');
     });
   });
 });

@@ -26,8 +26,37 @@ export interface ServerOptions {
 /** How long the browser is given for a request; a wait for chat gets its own wait and a margin. */
 const DEFAULT_TIMEOUT_MS = 20000;
 const WAIT_MARGIN_MS = 10000;
+/** A large generated map stands thousands of blocks; the browser gives it two minutes. */
+const TABLE_CREATE_TIMEOUT_MS = 130000;
+// The atmospheres the map generator offers (DUNGEON_ATMOSPHERE_IDS and FIELD_ATMOSPHERE_IDS in the app);
+// the browser refuses any it does not know, so a stale list here only narrows what can be asked for.
+const DUNGEON_ATMOSPHERES = [
+  'stoneDungeon',
+  'crypt',
+  'ruins',
+  'cavern',
+  'lavaCavern',
+  'iceCave',
+  'sandTomb',
+  'illegalBar',
+  'abandonedBuilding',
+  'containerWarehouse',
+];
+const FIELD_ATMOSPHERES = [
+  'woodland',
+  'meadow',
+  'coast',
+  'marsh',
+  'snowfield',
+  'wasteland',
+  'city',
+  'sfCity',
+  'slum',
+  'dump',
+];
 
 function timeoutFor(command: string, args: Record<string, unknown>): number {
+  if (command === 'table_create') return TABLE_CREATE_TIMEOUT_MS;
   if (command !== 'chat_wait') return DEFAULT_TIMEOUT_MS;
   const seconds = typeof args['waitSeconds'] === 'number' ? args['waitSeconds'] : 60;
   return seconds * 1000 + WAIT_MARGIN_MS;
@@ -232,6 +261,76 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       read: false,
       description: `Put 1 to ${MAX_PIECES} of your own pieces on the table out of sight where they stand, as the game master's context menu does. Game master only. Requires the create_piece browser grant.`,
       shape: { ...retry, identifiers: z.array(id).min(1).max(MAX_PIECES), dryRun: z.boolean().optional() },
+    },
+    {
+      name: 'table_list',
+      read: true,
+      description:
+        'List every table (map) in the room with its size in cells and which one is in view. Pieces and notes are shared by every table; only the terrain belongs to one.',
+      shape: {},
+    },
+    {
+      name: 'table_create',
+      read: false,
+      description: `Build a new table from a generated map, as the map generator panel does at its defaults, and return the master's notes on it: the way in, each room's number, part and rectangle in cells (x, y, w, h from the top-left), and the traps. kind dungeon takes atmosphere ${DUNGEON_ATMOSPHERES.join(' / ')}, roomCount (3-20, default 8) and trapCount (0-30). kind field takes atmosphere ${FIELD_ATMOSPHERES.join(' / ')}, size (cells across, default 40; three deep for every four across) and density (0-100). The same seed rolls the same map; left out, a random one is used and returned. fog starts the table under the fog of war. The table is not put in view; use table_select. Takes up to two minutes. Game master only; requires the prepare_room browser grant.`,
+      shape: {
+        ...retry,
+        kind: z.enum(['dungeon', 'field']),
+        atmosphere: z.enum([...DUNGEON_ATMOSPHERES, ...FIELD_ATMOSPHERES] as [string, ...string[]]),
+        seed: z
+          .number()
+          .int()
+          .min(0)
+          .max(2 ** 31 - 1)
+          .optional(),
+        name: z.string().min(1).max(256).optional(),
+        roomCount: z.number().int().min(3).max(20).optional(),
+        trapCount: z.number().int().min(0).max(30).optional(),
+        size: z.number().int().min(1).max(200).optional(),
+        density: z.number().int().min(0).max(100).optional(),
+        fog: z.boolean().optional(),
+      },
+    },
+    {
+      name: 'table_select',
+      read: false,
+      description:
+        "Put a table in view for the whole room, playing its music and cut-ins as choosing it in the table settings does. Players' pieces stay at the same coordinates, so move them to where the scene starts. Game master only; requires the prepare_room browser grant.",
+      shape: { ...retry, identifier: id, dryRun: z.boolean().optional() },
+    },
+    {
+      name: 'chat_tab_create',
+      read: false,
+      description:
+        'Open a chat tab. playersRead / playersSpeak (default true) and guestsRead (default true) / guestsSpeak (default false) say who may read and speak; the game master always may. A tab the players cannot read suits the master’s own notes and secret rolls. Game master only; requires the prepare_room browser grant.',
+      shape: {
+        ...retry,
+        name: z.string().min(1).max(64),
+        playersRead: z.boolean().optional(),
+        playersSpeak: z.boolean().optional(),
+        guestsRead: z.boolean().optional(),
+        guestsSpeak: z.boolean().optional(),
+        dryRun: z.boolean().optional(),
+      },
+    },
+    {
+      name: 'note_create',
+      read: false,
+      description:
+        'Put a shared note (a handout: a request letter, a map key, an NPC introduction) on the table in view with its top-left at x, y (grid by default), width and height in cells (default 5 x 4), owned by you. disclosure gm keeps its text to the game master. concealed: true keeps it out of sight there until piece_reveal brings it out; notes are shared by every table, as pieces are. piece_remove, piece_conceal and piece_disclose take notes too. Game master only; requires the prepare_room browser grant.',
+      shape: {
+        ...retry,
+        title: z.string().min(1).max(256),
+        text: z.string().max(10000),
+        x: z.number().finite().min(0),
+        y: z.number().finite().min(0),
+        unit: z.enum(['grid', 'px']).optional(),
+        width: z.number().int().min(1).max(40).optional(),
+        height: z.number().int().min(1).max(40).optional(),
+        disclosure: z.enum(['all', 'gm']).optional(),
+        concealed: z.boolean().optional(),
+        dryRun: z.boolean().optional(),
+      },
     },
   ] as const;
   for (const tool of definitions) {

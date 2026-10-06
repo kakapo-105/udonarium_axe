@@ -25,7 +25,7 @@ test('the real stdio entry point lists tools and reports missing Chromium withou
   });
   try {
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length, 19);
+    assert.equal((await client.listTools()).tools.length, 24);
     const result = await client.callTool({ name: 'session_get', arguments: {} });
     assert.equal(result.structuredContent.error.code, 'NOT_READY');
     assert.match(stderr, /Udonarium browser/);
@@ -48,7 +48,7 @@ async function connected(invoke, work, options) {
   }
 }
 
-test('exposes exactly the nineteen bounded tools with schemas and read annotations', async () => {
+test('exposes exactly the twenty-four bounded tools with schemas and read annotations', async () => {
   await connected(
     async () => ({ ok: true, data: {} }),
     async (client) => {
@@ -62,7 +62,9 @@ test('exposes exactly the nineteen bounded tools with schemas and read annotatio
         'character_sheet_get',
         'chat_read_recent',
         'chat_send',
+        'chat_tab_create',
         'chat_wait',
+        'note_create',
         'object_get',
         'palette_get',
         'palette_send',
@@ -73,6 +75,9 @@ test('exposes exactly the nineteen bounded tools with schemas and read annotatio
         'piece_reveal',
         'scene_list',
         'session_get',
+        'table_create',
+        'table_list',
+        'table_select',
       ]);
       assert.equal(tools.find((t) => t.name === 'palette_send').annotations.readOnlyHint, false);
       assert.equal(tools.find((t) => t.name === 'palette_get').annotations.readOnlyHint, true);
@@ -157,10 +162,14 @@ test('gives a wait for chat as long as it asks for, and other requests the usual
     async (client) => {
       await client.callTool({ name: 'chat_wait', arguments: { waitSeconds: 120 } });
       await client.callTool({ name: 'session_get', arguments: {} });
+      await client.callTool({
+        name: 'table_create',
+        arguments: { sessionId: 'session', kind: 'dungeon', atmosphere: 'crypt' },
+      });
       assert.equal((await client.callTool({ name: 'chat_wait', arguments: { waitSeconds: 301 } })).isError, true);
     }
   );
-  assert.deepEqual(timeouts, { chat_wait: 130000, session_get: 20000 });
+  assert.deepEqual(timeouts, { chat_wait: 130000, session_get: 20000, table_create: 130000 });
 });
 test('fetches pieces from an allowed source so they reach the browser, not the conversation', async () => {
   const sheet = { kind: 'character', data: { name: 'ゴブリン' } };

@@ -3,6 +3,7 @@ import { AutomationAuditService } from '@axe/application/automation/automation-a
 import {
   AUTOMATION_COMMANDS,
   AUTOMATION_WRITES,
+  AutomationCommand,
   AutomationError,
   AutomationRequest,
   AutomationResult,
@@ -17,7 +18,9 @@ import { AutomationPolicyService } from '@axe/application/automation/automation-
 import { BuffChanges, BuffCommandService } from '@axe/application/automation/buff-command.service';
 import { characterSheetView } from '@axe/application/automation/character-sheet-view';
 import { ChatWaitService, isPublicMessage } from '@axe/application/automation/chat-wait.service';
+import { MapRequest } from '@axe/application/automation/map-generator';
 import { MAX_CREATED_PIECES, PieceCommandService } from '@axe/application/automation/piece-command.service';
+import { RoomPrepCommandService } from '@axe/application/automation/room-prep-command.service';
 import { SessionCommandService } from '@axe/application/automation/session-command.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { BuffRemovalRule } from '@axe/domain/character/buff-bulk-removal';
@@ -37,6 +40,16 @@ const MAX_WAIT_SECONDS = 300;
 const WAIT_MARGIN_MS = 5000;
 const MAX_WAIT_TABS = 20;
 const MAX_SHEET_PATHS = 50;
+/** Building a large generated map stands thousands of blocks, which takes a while. */
+const TABLE_CREATE_TIMEOUT_MS = 120000;
+const MAX_NOTE_TEXT = 10000;
+/** The commands that set the room up, which only the game master runs. */
+const ROOM_PREP_WRITES: readonly AutomationCommand[] = [
+  'table_create',
+  'table_select',
+  'chat_tab_create',
+  'note_create',
+];
 const REPLAY_WINDOW_MS = 5 * 60 * 1000;
 /**
  * One resource change on the speaking piece. Besides a plain number the amount may roll dice, hold a
@@ -112,8 +125,46 @@ function waitSecondsOf(value: unknown): number {
 
 /** How long a request may run before it is given up: a wait for chat gets its own wait and a margin. */
 function timeoutFor(request: AutomationRequest): number {
+  if (request.command === 'table_create') return TABLE_CREATE_TIMEOUT_MS;
   if (request.command !== 'chat_wait') return REQUEST_TIMEOUT_MS;
   return waitSecondsOf(request.arguments['waitSeconds']) * 1000 + WAIT_MARGIN_MS;
+}
+
+/** A whole number argument from `min` to `max`, or the fallback when left out. */
+function wholeOf(value: unknown, key: string, min: number, max: number, fallback: number): number {
+  if (value === undefined) return fallback;
+  const number = numberArgument(value);
+  if (!Number.isInteger(number) || number < min || number > max)
+    fail('INVALID_ARGUMENT', `${key} must be a whole number from ${min} to ${max}.`);
+  return number;
+}
+
+/** The generated map a table_create asks for, each value checked; the generator clamps the rest. */
+function mapRequestOf(a: Record<string, unknown>): MapRequest {
+  const kind = a['kind'];
+  if (kind !== 'dungeon' && kind !== 'field') fail('INVALID_ARGUMENT', 'kind must be dungeon or field.');
+  return {
+    kind,
+    atmosphere: textArgument(a['atmosphere'], 64),
+    seed: wholeOf(a['seed'], 'seed', 0, 2 ** 31 - 1, Math.floor(Math.random() * 2 ** 31)),
+    name: a['name'] === undefined ? '' : textArgument(a['name']).trim(),
+    roomCount: a['roomCount'] === undefined ? undefined : wholeOf(a['roomCount'], 'roomCount', 3, 20, 8),
+    trapCount: a['trapCount'] === undefined ? undefined : wholeOf(a['trapCount'], 'trapCount', 0, 30, 0),
+    size: a['size'] === undefined ? undefined : wholeOf(a['size'], 'size', 1, 200, 40),
+    density: a['density'] === undefined ? undefined : wholeOf(a['density'], 'density', 0, 100, 50),
+    fog: booleanOf(a['fog'], 'fog'),
+  };
+}
+
+/** Who may read and speak in a new tab: by default the players both read and speak, guests only read. */
+function tabPermissionOf(a: Record<string, unknown>) {
+  const flag = (key: string, fallback: boolean) => (a[key] === undefined ? fallback : booleanOf(a[key], key));
+  return {
+    plCanView: flag('playersRead', true),
+    plCanSpeak: flag('playersSpeak', true),
+    guestCanView: flag('guestsRead', true),
+    guestCanSpeak: flag('guestsSpeak', false),
+  };
 }
 
 /** The disclosure asked for: everyone, or the game master only. */
@@ -153,6 +204,7 @@ export class AutomationFacadeService {
   private readonly buffCommands = inject(BuffCommandService);
   private readonly pieceCommands = inject(PieceCommandService);
   private readonly chatWait = inject(ChatWaitService);
+  private readonly roomPrep = inject(RoomPrepCommandService);
   private readonly audit = inject(AutomationAuditService);
   private readonly store = inject(ObjectStore);
   private readonly tables = inject(TableSelecter);
@@ -300,6 +352,10 @@ export class AutomationFacadeService {
       this.policy.require('create_piece');
       this.policy.canCreatePieces();
       if (args['concealed'] === true) this.policy.requireGameMaster();
+    }
+    if (ROOM_PREP_WRITES.includes(request.command)) {
+      this.policy.require('prepare_room');
+      this.policy.requireGameMaster();
     }
     if (request.command === 'piece_reveal' || request.command === 'piece_conceal') {
       this.policy.require('create_piece');
@@ -555,6 +611,45 @@ export class AutomationFacadeService {
         if (booleanOf(a['dryRun'], 'dryRun'))
           return { [revealing ? 'revealed' : 'concealed']: pieces.map((piece) => piece.identifier), dryRun: true };
         return revealing ? this.pieceCommands.reveal(pieces) : this.pieceCommands.conceal(pieces);
+      }
+      case 'table_list':
+        onlyKeys(a, []);
+        return this.roomPrep.list();
+      case 'table_create':
+        onlyKeys(a, ['kind', 'atmosphere', 'seed', 'name', 'roomCount', 'trapCount', 'size', 'density', 'fog']);
+        return this.roomPrep.create(mapRequestOf(a), guard);
+      case 'table_select': {
+        onlyKeys(a, ['identifier', 'dryRun']);
+        const table = this.roomPrep.table(textArgument(a['identifier']));
+        if (booleanOf(a['dryRun'], 'dryRun')) return { identifier: table.identifier, dryRun: true };
+        return this.roomPrep.select(table);
+      }
+      case 'chat_tab_create': {
+        onlyKeys(a, ['name', 'playersRead', 'playersSpeak', 'guestsRead', 'guestsSpeak', 'dryRun']);
+        const name = textArgument(a['name'], 64).trim();
+        const permission = tabPermissionOf(a);
+        if (booleanOf(a['dryRun'], 'dryRun')) return { name, ...permission, dryRun: true };
+        return this.roomPrep.createTab(name, permission);
+      }
+      case 'note_create': {
+        onlyKeys(a, ['title', 'text', 'x', 'y', 'unit', 'width', 'height', 'disclosure', 'concealed', 'dryRun']);
+        const unit = a['unit'] ?? 'grid';
+        if (unit !== 'grid' && unit !== 'px') fail('INVALID_ARGUMENT', 'Unit must be grid or px.');
+        if (typeof a['text'] !== 'string' || a['text'].length > MAX_NOTE_TEXT)
+          fail('INVALID_ARGUMENT', `text must be a string of at most ${MAX_NOTE_TEXT} characters.`);
+        const request = {
+          title: textArgument(a['title']),
+          text: a['text'],
+          x: numberArgument(a['x']),
+          y: numberArgument(a['y']),
+          unit,
+          width: wholeOf(a['width'], 'width', 1, 40, 5),
+          height: wholeOf(a['height'], 'height', 1, 40, 4),
+          disclosure: a['disclosure'] === undefined ? DisclosureMode.All : disclosureOf(a['disclosure']),
+          concealed: booleanOf(a['concealed'], 'concealed'),
+        } as const;
+        if (booleanOf(a['dryRun'], 'dryRun')) return { title: request.title, dryRun: true };
+        return this.roomPrep.createNote(request);
       }
     }
   }

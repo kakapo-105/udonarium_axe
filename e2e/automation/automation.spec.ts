@@ -113,6 +113,52 @@ test('a GM puts monsters out, discloses and clears them, and hears the players t
   await expect.poll(seen).toContain(drake.identifier);
 });
 
+test('a GM sets the room up: a generated dungeon in view, a tab of its own and a handout kept back', async ({
+  context,
+}) => {
+  const gm = await context.newPage();
+  const player = await context.newPage();
+  await ready(gm, 'a');
+  await ready(player, 'b');
+  await gm.evaluate(() => window.__automationTest.seed());
+  await gm.evaluate(() => window.__automationTest.snapshot());
+  await gm.getByTestId('automation-scope-prepare_room').check();
+  // Bringing a handout out is done as for any piece, so it needs that grant too.
+  await gm.getByTestId('automation-scope-create_piece').check();
+  const viewing = (page: Page) =>
+    invoke(page, 'session_get').then((result) => (result as { data: { table: { identifier: string } } }).data.table);
+
+  const created = await invoke(gm, 'table_create', {
+    kind: 'dungeon',
+    atmosphere: 'crypt',
+    roomCount: 4,
+    seed: 11,
+    name: '地下墓地',
+  });
+  expect(created).toMatchObject({ ok: true, data: { name: '地下墓地', unit: 'grid' } });
+  const dungeon = (created as { data: { identifier: string; rooms: { x: number; w: number }[]; width: number } }).data;
+  expect(dungeon.rooms.length).toBeGreaterThanOrEqual(3);
+  for (const room of dungeon.rooms) expect(room.x + room.w).toBeLessThanOrEqual(dungeon.width);
+
+  expect((await invoke(gm, 'table_select', { identifier: dungeon.identifier })).ok).toBe(true);
+  await expect.poll(() => viewing(player).then((table) => table.identifier)).toBe(dungeon.identifier);
+
+  const tab = await invoke(gm, 'chat_tab_create', { name: 'GM', playersRead: false, guestsRead: false });
+  const tabId = (tab as { data: { identifier: string } }).data.identifier;
+  await expect.poll(() => invoke(gm, 'session_get').then((result) => JSON.stringify(result))).toContain(tabId);
+  expect(JSON.stringify(await invoke(player, 'session_get'))).not.toContain(tabId);
+
+  const note = await invoke(gm, 'note_create', { title: '依頼書', text: '墓地の調査', x: 1, y: 1, concealed: true });
+  const noteId = (note as { data: { identifier: string } }).data.identifier;
+  await expect
+    .poll(() => player.evaluate((id) => window.__automationTest.position(id), noteId))
+    .toMatchObject({ name: 'concealed' });
+  expect((await invoke(gm, 'piece_reveal', { identifiers: [noteId] })).ok).toBe(true);
+  await expect
+    .poll(() => player.evaluate((id) => window.__automationTest.position(id), noteId))
+    .toMatchObject({ name: 'table', x: 50, y: 50 });
+});
+
 test('stop and reload remove the API and discard write grants and old session IDs', async ({ page }) => {
   await ready(page, 'a');
   const old = await page.evaluate(() => window.udonariumAxeAutomation!.health());
