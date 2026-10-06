@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { expect, Page, test } from '@playwright/test';
 
 import type { BrowserAutomationApi } from '../../src/app/application/automation/automation-contract';
@@ -157,6 +159,58 @@ test('a GM sets the room up: a generated dungeon in view, a tab of its own and a
   await expect
     .poll(() => player.evaluate((id) => window.__automationTest.position(id), noteId))
     .toMatchObject({ name: 'table', x: 50, y: 50 });
+});
+
+test('a GM puts out a piece of this tool’s own, wearing a picture the players receive', async ({ context }) => {
+  const gm = await context.newPage();
+  const player = await context.newPage();
+  await ready(gm, 'a');
+  await ready(player, 'b');
+  await gm.evaluate(() => window.__automationTest.seed());
+  await gm.evaluate(() => window.__automationTest.snapshot());
+  await gm.getByTestId('automation-scope-create_piece').check();
+  // A picture drawn in the browser, identified by its SHA-256 as save data names pictures.
+  const png = Buffer.from(
+    await gm.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 8;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = '#3a6';
+      context.fillRect(0, 0, 8, 8);
+      return canvas.toDataURL('image/png').split(',')[1];
+    }),
+    'base64'
+  );
+  const identifier = createHash('sha256').update(png).digest('hex');
+  // Dotted attributes such as location.name are what save data carries; a browser reads them.
+  const xml = `<character location.name="graveyard" location.x="0" location.y="0" posZ="0" disclosureMode="all" owner="">
+  <data name="character">
+    <data name="image"><data type="image" name="imageIdentifier">${identifier}</data></data>
+    <data name="common"><data name="name">トロール</data><data name="size">1</data><data name="altitude">0</data></data>
+    <data name="detail"><data role="section" name="リソース"><data role="group" name="基本">
+      <data fieldType="resource" type="numberResource" currentValue="30" role="field" name="HP">30</data>
+    </data></data></data>
+  </data>
+  <chat-palette dicebot="SwordWorld2.5">2d6+5 【命中力判定】</chat-palette>
+</character>`;
+
+  const created = await invoke(gm, 'character_create', {
+    pieces: [xml],
+    x: 3,
+    y: 3,
+    disclosure: 'all',
+    images: [{ identifier, type: 'image/png', data: png.toString('base64') }],
+  });
+  expect(created).toMatchObject({ ok: true, data: { pieces: [{ name: 'トロール', x: 150, y: 150 }] } });
+  const [troll] = (created as { data: { pieces: { identifier: string }[] } }).data.pieces;
+  await expect
+    .poll(() => player.evaluate((id) => window.__automationTest.position(id), troll.identifier))
+    .toMatchObject({ name: 'table', x: 150, y: 150 });
+  expect(await gm.evaluate((id) => window.__automationTest.imageState(id), identifier)).toBeGreaterThanOrEqual(2);
+  await expect
+    .poll(() => player.evaluate((id) => window.__automationTest.imageState(id), identifier))
+    .toBeGreaterThanOrEqual(2);
+  expect(JSON.stringify(await invoke(player, 'scene_list'))).toContain('トロール');
 });
 
 test('stop and reload remove the API and discard write grants and old session IDs', async ({ page }) => {

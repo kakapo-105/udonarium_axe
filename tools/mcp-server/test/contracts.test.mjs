@@ -245,3 +245,55 @@ test('refuses piece sources that are not allowed, and passes on what a source co
   assert.throws(() => pieceSourceOrigins('file:///etc'));
   assert.deepEqual(pieceSourceOrigins(' http://a:1/x , https://b '), ['http://a:1', 'https://b']);
 });
+test('fetches the pictures a source names and hands them to the browser in base64', async () => {
+  const hash = 'a'.repeat(64);
+  const other = 'b'.repeat(64);
+  const missing = 'c'.repeat(64);
+  let received;
+  const asked = [];
+  await connected(
+    async (command, args) => {
+      received = args;
+      return { ok: true, data: { pieces: [{ identifier: 'made' }] } };
+    },
+    async (client) => {
+      const result = await client.callTool({
+        name: 'character_create',
+        arguments: { sessionId: 'session', sourceUrl: 'http://rules:8765/api/udonarium?name=x', x: 0, y: 0 },
+      });
+      assert.deepEqual(received.pieces, ['<character/>']);
+      assert.deepEqual(received.images, [
+        { identifier: hash, type: 'image/webp', data: Buffer.from([1, 2, 3]).toString('base64') },
+      ]);
+      assert.deepEqual(asked, [
+        `http://rules:8765/api/images/${hash}.webp`,
+        `http://rules:8765/api/images/${missing}.webp`,
+      ]);
+      const warnings = result.structuredContent.data.sourceWarnings.join(' ');
+      assert.match(warnings, /outside the allowed sources/);
+      assert.match(warnings, /could not be fetched/);
+    },
+    {
+      pieceSources: pieceSourceOrigins('http://rules:8765'),
+      fetchText: async () => ({
+        ok: true,
+        status: 200,
+        text: JSON.stringify({
+          pieces: ['<character/>'],
+          images: {
+            [hash]: `/api/images/${hash}.webp`,
+            [other]: 'http://elsewhere/evil.webp',
+            [missing]: `/api/images/${missing}.webp`,
+            'not-a-hash': '/api/images/x.webp',
+          },
+        }),
+      }),
+      fetchBytes: async (url) => {
+        asked.push(url.href);
+        return url.href.includes(hash)
+          ? { ok: true, status: 200, type: 'image/webp', bytes: new Uint8Array([1, 2, 3]) }
+          : { ok: false, status: 404, type: 'application/json', bytes: new Uint8Array() };
+      },
+    }
+  );
+});

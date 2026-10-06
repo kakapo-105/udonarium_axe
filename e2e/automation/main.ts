@@ -4,6 +4,7 @@ import '../../src/main';
 import { Network } from '@axe/core/network/network';
 import { EventContext } from '@axe/core/network/network-messaging';
 import { PeerContext } from '@axe/core/network/peer-context';
+import { ImageStorage } from '@axe/core/storage/image-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
@@ -86,6 +87,9 @@ window.__automationTest = {
   position(id: string) {
     return ObjectStore.instance.get<GameCharacter>(id)?.location;
   },
+  imageState(identifier: string) {
+    return ImageStorage.instance.get(identifier)?.state ?? null;
+  },
   messages(id: string) {
     return ObjectStore.instance.get<ChatTab>(id)?.chatMessages.map((m) => m.text) ?? [];
   },
@@ -98,6 +102,7 @@ declare global {
       snapshot(): void;
       position(id: string): unknown;
       messages(id: string): string[];
+      imageState(identifier: string): number | null;
     };
   }
 }

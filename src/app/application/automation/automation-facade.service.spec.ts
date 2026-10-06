@@ -7,6 +7,8 @@ import { VisionService } from '@axe/application/tabletop/vision.service';
 import { LocalModePreferenceService } from '@axe/application/ui/local-mode-preference.service';
 import { Network } from '@axe/core/network/network';
 import { localDispatch } from '@axe/core/network/network-messaging';
+import { calcSHA256Async } from '@axe/core/storage/file-reader-util';
+import { ImageStorage } from '@axe/core/storage/image-storage';
 import { ObjectContext } from '@axe/core/sync/game-object';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { ObjectSynchronizer } from '@axe/core/sync/object-synchronizer';
@@ -686,7 +688,7 @@ describe('AutomationFacadeService', () => {
       policy.setScope('create_piece', true);
     }
     function created(result: AutomationResult) {
-      expect(result.ok).toBe(true);
+      expect(result).toMatchObject({ ok: true });
       return (result as { data: { pieces: { identifier: string; name: string; x: number; y: number }[] } }).data.pieces;
     }
 
@@ -704,6 +706,83 @@ describe('AutomationFacadeService', () => {
       expect(made.owner).toBe('operator');
       expect(made.location.name).toBe('table');
       expect(made.disclosureMode).toBe('all');
+    });
+
+    describe('from this tool’s own XML', () => {
+      // happy-dom cannot read dotted attribute names such as location.name, which browsers read; the
+      // end-to-end test reads a piece with them.
+      const xml = (name: string, image = '') => `<character disclosureMode="all" owner="someone">
+  <data name="character">
+    <data name="image"><data type="image" name="imageIdentifier">${image}</data></data>
+    <data name="common"><data name="name">${name}</data><data name="size">2</data><data name="altitude">0</data></data>
+    <data name="detail">
+      <data role="section" name="パラメータ"><data role="group" name="基本">
+        <data fieldType="number" role="field" name="命中力修正">1</data>
+        <data fieldType="calc" role="field" name="命中力固定値" formula="10+命中力修正">10</data>
+      </data></data>
+    </data>
+  </data>
+  <chat-palette dicebot="SwordWorld2.5">2d6+3 【命中力判定】</chat-palette>
+</character>`;
+
+      it('builds a piece as a dropped file would, owned by the operator and placed as asked', async () => {
+        grant();
+        const [made] = created(
+          await call('character_create', { pieces: [xml('トロール')], x: 2, y: 3, disclosure: 'gm', concealed: false })
+        );
+
+        const piece = store.get<GameCharacter>(made.identifier)!;
+        expect(made).toMatchObject({ name: 'トロール', x: 100, y: 150, size: 2 });
+        expect(piece.owner).toBe('operator');
+        expect(piece.disclosureMode).toBe('gm');
+        expect(piece.chatPalette?.dicebot).toBe('SwordWorld2.5');
+        const sheet = await call('character_sheet_get', { identifier: made.identifier, paths: ['パラメータ'] });
+        expect(JSON.stringify(sheet)).toContain('"path":"パラメータ/基本/命中力固定値","type":"calc","value":"11"');
+      });
+
+      it('takes only a piece, never room data or a chat tab', async () => {
+        grant();
+        const before = store.getObjects(GameCharacter).length;
+        for (const sheet of ['<chat-tab name="x"></chat-tab>', '<room></room>', 'not xml at all']) {
+          error(await call('character_create', { pieces: [xml('ゴブリン'), sheet], x: 0, y: 0 }), 'INVALID_ARGUMENT');
+        }
+        expect(store.getObjects(GameCharacter)).toHaveLength(before);
+      });
+
+      it('adds the picture a piece wears under the identifier it names, after checking the bytes', async () => {
+        grant();
+        const bytes = new Uint8Array([0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4]);
+        const identifier = await calcSHA256Async(bytes.buffer);
+        const data = btoa(String.fromCharCode(...bytes));
+        // A test DOM cannot decode a picture to make its thumbnail, so the storage itself is left out.
+        const added = vi.spyOn(ImageStorage.instance, 'addAsync').mockResolvedValue(null as never);
+
+        error(
+          await call('character_create', {
+            pieces: [xml('ゴブリン', identifier)],
+            x: 0,
+            y: 0,
+            images: [{ identifier: 'f'.repeat(64), type: 'image/webp', data }],
+          }),
+          'INVALID_ARGUMENT'
+        );
+        expect(added).not.toHaveBeenCalled();
+
+        const [made] = created(
+          await call('character_create', {
+            pieces: [xml('ゴブリン', identifier)],
+            x: 0,
+            y: 0,
+            images: [{ identifier, type: 'image/webp', data }],
+          })
+        );
+        expect(added).toHaveBeenCalledTimes(1);
+        expect((added.mock.calls[0][0] as File).name).toBe(`${identifier}.webp`);
+        const worn = store
+          .get<GameCharacter>(made.identifier)!
+          .imageDataElement?.getFirstElementByName('imageIdentifier');
+        expect(worn?.value).toBe(identifier);
+      });
     });
 
     it('gives the pieces the dice bot asked for, which a sheet from another tool does not name', async () => {

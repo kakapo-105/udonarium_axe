@@ -4,8 +4,23 @@ export const MAX_PIECES = 20;
 const MAX_BYTES = 2 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 10000;
 
+export const MAX_IMAGES = 20;
+const IMAGE_IDENTIFIER = /^[0-9a-f]{64}$/;
+const IMAGE_TYPES: Record<string, string> = {
+  webp: 'image/webp',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+};
+
 export type FetchText = (url: URL) => Promise<{ ok: boolean; status: number; text: string }>;
-export type PieceSheets = { ok: true; pieces: unknown[]; warnings: string[] };
+export type FetchBytes = (url: URL) => Promise<{ ok: boolean; status: number; type: string; bytes: Uint8Array }>;
+/** A picture a sheet names: its SHA-256 and where the source keeps it. */
+export type ImageRef = { identifier: string; url: URL };
+/** A picture as the browser takes it: its SHA-256, type and bytes in base64. */
+export type PieceImage = { identifier: string; type: string; data: string };
+export type PieceSheets = { ok: true; pieces: unknown[]; images: ImageRef[]; warnings: string[] };
 
 /**
  * The origins pieces may be fetched from, read from a comma-separated list such as
@@ -30,6 +45,13 @@ function candidateName(candidate: unknown): string {
   return typeof record['level'] === 'number' ? `${name} (Lv${record['level']})` : name;
 }
 
+export const fetchBytes: FetchBytes = async (url) => {
+  const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.length > MAX_BYTES) throw new Error('Piece source answered with too large a picture.');
+  return { ok: response.ok, status: response.status, type: response.headers.get('content-type') ?? '', bytes };
+};
+
 export const fetchText: FetchText = async (url) => {
   const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   const text = await response.text();
@@ -42,8 +64,10 @@ export const fetchText: FetchText = async (url) => {
  * the model.
  *
  * The answer may be a list of sheets, one sheet in the clipboard form (`{"kind":"character",...}`)
- * or an object carrying them in `pieces`, as the rulebook search server's `/api/ccfolia` gives them;
- * its `warnings` are passed on. An `error` with `candidates` in a failed answer is passed on too, so
+ * or an object carrying them in `pieces`, as the rulebook search server's `/api/ccfolia` and
+ * `/api/udonarium` give them; its `warnings` are passed on, and its `images`, each SHA-256 with where
+ * the picture is kept, are gathered for {@link fetchPieceImages}. A picture kept anywhere but an
+ * allowed source is left out. An `error` with `candidates` in a failed answer is passed on too, so
  * a name that matched several monsters can be asked again.
  */
 export async function fetchPieceSheets(
@@ -94,5 +118,55 @@ export async function fetchPieceSheets(
   const warnings = Array.isArray(record['warnings'])
     ? record['warnings'].slice(0, 20).map((w) => String(w).slice(0, 300))
     : [];
-  return { ok: true, pieces, warnings };
+  const images: ImageRef[] = [];
+  const named =
+    record['images'] && typeof record['images'] === 'object' ? (record['images'] as Record<string, unknown>) : {};
+  for (const [identifier, where] of Object.entries(named)) {
+    if (!IMAGE_IDENTIFIER.test(identifier) || typeof where !== 'string') continue;
+    let at: URL;
+    try {
+      at = new URL(where, url);
+    } catch {
+      continue;
+    }
+    if (!origins.includes(at.origin)) {
+      warnings.push(`A picture kept outside the allowed sources was left out: ${at.origin}`);
+      continue;
+    }
+    images.push({ identifier, url: at });
+  }
+  if (images.length > MAX_IMAGES)
+    return failure('INVALID_ARGUMENT', `The piece source must name at most ${MAX_IMAGES} pictures.`);
+  return { ok: true, pieces, images, warnings };
+}
+
+/**
+ * Fetches the pictures the sheets wear. One that cannot be fetched is left out with a warning rather
+ * than failing the pieces: they are built all the same, only without it. The browser checks each
+ * picture against its SHA-256 before taking it.
+ */
+export async function fetchPieceImages(
+  images: readonly ImageRef[],
+  fetchImpl: FetchBytes = fetchBytes
+): Promise<{ images: PieceImage[]; warnings: string[] }> {
+  const fetched: PieceImage[] = [];
+  const warnings: string[] = [];
+  for (const { identifier, url } of images) {
+    try {
+      const answer = await fetchImpl(url);
+      const type =
+        answer.type.split(';')[0].trim().toLowerCase() || IMAGE_TYPES[url.pathname.split('.').pop() ?? ''] || '';
+      if (!answer.ok || !Object.values(IMAGE_TYPES).includes(type)) {
+        warnings.push(
+          `The picture ${identifier.slice(0, 12)}… could not be fetched (HTTP ${answer.status}, ${type || 'no type'}).`
+        );
+        continue;
+      }
+      fetched.push({ identifier, type, data: Buffer.from(answer.bytes).toString('base64') });
+    } catch (error) {
+      console.error('Piece source picture:', error instanceof Error ? error.message : 'request failed');
+      warnings.push(`The picture ${identifier.slice(0, 12)}… could not be fetched.`);
+    }
+  }
+  return { images: fetched, warnings };
 }

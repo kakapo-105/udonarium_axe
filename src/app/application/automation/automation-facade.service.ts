@@ -19,7 +19,12 @@ import { BuffChanges, BuffCommandService } from '@axe/application/automation/buf
 import { characterSheetView } from '@axe/application/automation/character-sheet-view';
 import { ChatWaitService, isPublicMessage } from '@axe/application/automation/chat-wait.service';
 import { MapRequest } from '@axe/application/automation/map-generator';
-import { MAX_CREATED_PIECES, PieceCommandService } from '@axe/application/automation/piece-command.service';
+import {
+  MAX_CREATED_PIECES,
+  MAX_PIECE_IMAGES,
+  PieceCommandService,
+  PieceImage,
+} from '@axe/application/automation/piece-command.service';
 import { RoomPrepCommandService } from '@axe/application/automation/room-prep-command.service';
 import { SessionCommandService } from '@axe/application/automation/session-command.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
@@ -43,6 +48,8 @@ const MAX_SHEET_PATHS = 50;
 /** Building a large generated map stands thousands of blocks, which takes a while. */
 const TABLE_CREATE_TIMEOUT_MS = 120000;
 const MAX_NOTE_TEXT = 10000;
+/** A picture of up to 2 MB, as base64 grows it. */
+const MAX_IMAGE_BASE64 = 3_000_000;
 /** The commands that set the room up, which only the game master runs. */
 const ROOM_PREP_WRITES: readonly AutomationCommand[] = [
   'table_create',
@@ -178,6 +185,21 @@ function booleanOf(value: unknown, key: string): boolean {
   if (value === undefined) return false;
   if (typeof value !== 'boolean') fail('INVALID_ARGUMENT', `${key} must be boolean.`);
   return value;
+}
+
+/** The pictures a character_create brings, each with its identifier, type and base64 bytes as strings. */
+function pieceImagesOf(value: unknown): PieceImage[] {
+  if (!Array.isArray(value) || value.length > MAX_PIECE_IMAGES)
+    fail('INVALID_ARGUMENT', `images must list at most ${MAX_PIECE_IMAGES} pictures.`);
+  return value.map((image) => {
+    const picture = record(image);
+    onlyKeys(picture, ['identifier', 'type', 'data']);
+    return {
+      identifier: textArgument(picture['identifier'], 64),
+      type: textArgument(picture['type'], 64),
+      data: textArgument(picture['data'], MAX_IMAGE_BASE64),
+    };
+  });
 }
 
 /** A list of strings, one to `max` of them, each checked as an argument. */
@@ -566,7 +588,7 @@ export class AutomationFacadeService {
         return this.buffCommands.sweep(sweepRuleOf(a), a['dryRun'] === true);
       }
       case 'character_create': {
-        onlyKeys(a, ['pieces', 'x', 'y', 'unit', 'disclosure', 'concealed', 'dicebot', 'dryRun']);
+        onlyKeys(a, ['pieces', 'x', 'y', 'unit', 'disclosure', 'concealed', 'dicebot', 'images', 'dryRun']);
         const pieces = a['pieces'];
         if (!Array.isArray(pieces) || pieces.length < 1 || pieces.length > MAX_CREATED_PIECES)
           fail('INVALID_ARGUMENT', `pieces must list 1 to ${MAX_CREATED_PIECES} sheets.`);
@@ -585,6 +607,7 @@ export class AutomationFacadeService {
             disclosure,
             concealed: booleanOf(a['concealed'], 'concealed'),
             dicebot: a['dicebot'] === undefined ? undefined : textArgument(a['dicebot'], 64).trim(),
+            images: a['images'] === undefined ? undefined : pieceImagesOf(a['images']),
           },
           booleanOf(a['dryRun'], 'dryRun'),
           guard

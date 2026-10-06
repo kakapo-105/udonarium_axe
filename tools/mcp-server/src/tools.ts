@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import { type FacadeResult, failure } from '#mcp/facade-client.js';
-import { fetchPieceSheets, type FetchText, MAX_PIECES } from '#mcp/piece-source.js';
+import { type FetchBytes, fetchPieceImages, fetchPieceSheets, type FetchText, MAX_PIECES } from '#mcp/piece-source.js';
 import { mapResult } from '#mcp/result-mapper.js';
 
 export interface SessionInvoker {
@@ -21,6 +21,7 @@ export interface ServerOptions {
   /** Origins character_create may fetch sheets from by sourceUrl. None, and only inline sheets are taken. */
   pieceSources?: readonly string[];
   fetchText?: FetchText;
+  fetchBytes?: FetchBytes;
 }
 
 /** How long the browser is given for a request; a wait for chat gets its own wait and a margin. */
@@ -224,10 +225,14 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
     {
       name: 'character_create',
       read: false,
-      description: `Put 1 to ${MAX_PIECES} new pieces on the table in a row from x, y (the top-left cell, grid by default), owned by you, from sheets in the ccfolia clipboard form ({"kind":"character","data":{...}}). Give them inline as pieces, or as sourceUrl on an allowed piece source (such as the rulebook server's /api/ccfolia?name=...&count=3), which is fetched here so the sheets never pass through the conversation. disclosure gm leaves the piece and its name on the table but keeps its sheet and numbers to the game master; it is the default for a game master. concealed: true (game master only) makes them out of sight instead, drawn on no table and listed to no player, until piece_reveal brings them out where they were put; this is how monsters are set out before a session. Pieces are shared by every table, so a piece left on the table shows on whichever table is in view. dicebot sets the palette's dice bot (SwordWorld2.5 for Sword World 2.5, whose power-table lines need it); a ccfolia sheet names none. Nothing is built if any sheet cannot be read or the row will not fit. Requires the create_piece browser grant.`,
+      description: `Put 1 to ${MAX_PIECES} new pieces on the table in a row from x, y (the top-left cell, grid by default), owned by you, from sheets: this tool's own <character> XML (as its save data holds) or the ccfolia clipboard form ({"kind":"character","data":{...}}). Give them inline as pieces, or as sourceUrl on an allowed piece source (such as the rulebook server's /api/udonarium?name=...&count=3), which is fetched here, with the pictures it names, so neither ever passes through the conversation; a picture that cannot be fetched is reported in sourceWarnings and the piece is built without it. disclosure gm leaves the piece and its name on the table but keeps its sheet and numbers to the game master; it is the default for a game master. concealed: true (game master only) makes them out of sight instead, drawn on no table and listed to no player, until piece_reveal brings them out where they were put; this is how monsters are set out before a session. Pieces are shared by every table, so a piece left on the table shows on whichever table is in view. dicebot sets the palette's dice bot (SwordWorld2.5 for Sword World 2.5, whose power-table lines need it); a ccfolia sheet names none. Nothing is built if any sheet cannot be read or the row will not fit. Requires the create_piece browser grant.`,
       shape: {
         ...retry,
-        pieces: z.array(z.record(z.string(), z.unknown())).min(1).max(MAX_PIECES).optional(),
+        pieces: z
+          .array(z.union([z.string().min(1).max(200000), z.record(z.string(), z.unknown())]))
+          .min(1)
+          .max(MAX_PIECES)
+          .optional(),
         sourceUrl: z.string().min(1).max(2048).optional(),
         x: z.number().finite().min(0),
         y: z.number().finite().min(0),
@@ -358,8 +363,10 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
           if (typeof sourceUrl === 'string') {
             const fetched = await fetchPieceSheets(sourceUrl, options.pieceSources ?? [], options.fetchText);
             if (!('pieces' in fetched)) return mapResult(fetched);
-            warnings = fetched.warnings;
+            const pictures = await fetchPieceImages(fetched.images, options.fetchBytes);
+            warnings = [...fetched.warnings, ...pictures.warnings];
             rest['pieces'] = fetched.pieces;
+            if (pictures.images.length > 0) rest['images'] = pictures.images;
           }
           args = rest;
         }
