@@ -224,7 +224,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
     {
       name: 'character_create',
       read: false,
-      description: `Put 1 to ${MAX_PIECES} new pieces on the table in a row from x, y (the top-left cell, grid by default), owned by you, from sheets in the ccfolia clipboard form ({"kind":"character","data":{...}}). Give them inline as pieces, or as sourceUrl on an allowed piece source (such as the rulebook server's /api/ccfolia?name=...&count=3), which is fetched here so the sheets never pass through the conversation. disclosure gm leaves the piece and its name on the table but keeps its sheet and numbers to the game master; it is the default for a game master. concealed: true (game master only) makes them out of sight instead, drawn on no table and listed to no player, until piece_reveal brings them out where they were put; this is how monsters are set out before a session. Pieces are shared by every table, so a piece left on the table shows on whichever table is in view. Nothing is built if any sheet cannot be read or the row will not fit. Requires the create_piece browser grant.`,
+      description: `Put 1 to ${MAX_PIECES} new pieces on the table in a row from x, y (the top-left cell, grid by default), owned by you, from sheets in the ccfolia clipboard form ({"kind":"character","data":{...}}). Give them inline as pieces, or as sourceUrl on an allowed piece source (such as the rulebook server's /api/ccfolia?name=...&count=3), which is fetched here so the sheets never pass through the conversation. disclosure gm leaves the piece and its name on the table but keeps its sheet and numbers to the game master; it is the default for a game master. concealed: true (game master only) makes them out of sight instead, drawn on no table and listed to no player, until piece_reveal brings them out where they were put; this is how monsters are set out before a session. Pieces are shared by every table, so a piece left on the table shows on whichever table is in view. dicebot sets the palette's dice bot (SwordWorld2.5 for Sword World 2.5, whose power-table lines need it); a ccfolia sheet names none. Nothing is built if any sheet cannot be read or the row will not fit. Requires the create_piece browser grant.`,
       shape: {
         ...retry,
         pieces: z.array(z.record(z.string(), z.unknown())).min(1).max(MAX_PIECES).optional(),
@@ -234,6 +234,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
         unit: z.enum(['grid', 'px']).optional(),
         disclosure: z.enum(['all', 'gm']).optional(),
         concealed: z.boolean().optional(),
+        dicebot: z.string().min(1).max(64).optional(),
         dryRun: z.boolean().optional(),
       },
     },

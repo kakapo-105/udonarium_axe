@@ -706,6 +706,14 @@ describe('AutomationFacadeService', () => {
       expect(made.disclosureMode).toBe('all');
     });
 
+    it('gives the pieces the dice bot asked for, which a sheet from another tool does not name', async () => {
+      grant();
+      const [made] = created(
+        await call('character_create', { pieces: [goblin()], x: 0, y: 0, dicebot: 'SwordWorld2.5' })
+      );
+      expect(store.get<GameCharacter>(made.identifier)!.chatPalette?.dicebot).toBe('SwordWorld2.5');
+    });
+
     it('keeps what a piece says about itself to the game master by default when run by one', async () => {
       PeerCursor.myCursor.role = PeerRole.GameMaster;
       facade.health();

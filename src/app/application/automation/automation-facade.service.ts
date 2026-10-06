@@ -566,7 +566,7 @@ export class AutomationFacadeService {
         return this.buffCommands.sweep(sweepRuleOf(a), a['dryRun'] === true);
       }
       case 'character_create': {
-        onlyKeys(a, ['pieces', 'x', 'y', 'unit', 'disclosure', 'concealed', 'dryRun']);
+        onlyKeys(a, ['pieces', 'x', 'y', 'unit', 'disclosure', 'concealed', 'dicebot', 'dryRun']);
         const pieces = a['pieces'];
         if (!Array.isArray(pieces) || pieces.length < 1 || pieces.length > MAX_CREATED_PIECES)
           fail('INVALID_ARGUMENT', `pieces must list 1 to ${MAX_CREATED_PIECES} sheets.`);
@@ -581,7 +581,11 @@ export class AutomationFacadeService {
         return this.pieceCommands.create(
           pieces,
           { x: numberArgument(a['x']), y: numberArgument(a['y']), unit },
-          { disclosure, concealed: booleanOf(a['concealed'], 'concealed') },
+          {
+            disclosure,
+            concealed: booleanOf(a['concealed'], 'concealed'),
+            dicebot: a['dicebot'] === undefined ? undefined : textArgument(a['dicebot'], 64).trim(),
+          },
           booleanOf(a['dryRun'], 'dryRun'),
           guard
         );

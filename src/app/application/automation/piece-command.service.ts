@@ -66,13 +66,15 @@ export class PieceCommandService {
   async create(
     sheets: readonly unknown[],
     anchor: PieceAnchor,
-    options: { disclosure: DisclosureMode; concealed: boolean },
+    options: { disclosure: DisclosureMode; concealed: boolean; dicebot?: string },
     dryRun: boolean,
     guard: () => void
   ) {
     const imported: ImportedCharacter[] = [];
     for (const sheet of sheets) {
       const read = await this.importer.readSheet(sheet);
+      // A sheet from another tool names no dice bot, and a palette line on the power table needs the system's own.
+      if (read && options.dicebot) read.dicebot = options.dicebot;
       if (!read) fail('INVALID_ARGUMENT', `Piece ${imported.length + 1} is not a sheet that can be read.`);
       imported.push(read);
     }
