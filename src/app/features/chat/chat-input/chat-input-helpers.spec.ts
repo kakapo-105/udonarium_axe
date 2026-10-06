@@ -50,6 +50,11 @@ describe('allowsChat()', () => {
     expect(allowsChat(makeCharacter('graveyard', true) as unknown as GameCharacter, 'me', true)).toBe(false);
   });
 
+  it('is always false for a piece the master has put out of sight, so its name is not given away', () => {
+    expect(allowsChat(makeCharacter('concealed') as unknown as GameCharacter, 'me')).toBe(false);
+    expect(allowsChat(makeCharacter('concealed') as unknown as GameCharacter, 'me', true)).toBe(false);
+  });
+
   it('is false in the open hands of another peer', () => {
     setPeerContexts([{ peerId: 'other', isOpen: true }]);
     const c = makeCharacter('other');
