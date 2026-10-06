@@ -19,6 +19,7 @@ import { Party } from '@axe/domain/party/party';
 import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
+import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 import { GameObjectInventoryComponent } from '@axe/features/inventory/game-object-inventory/game-object-inventory.component';
 import { InventoryObjectDrag } from '@axe/features/inventory/game-object-inventory/inventory-object-drag';
 import { expectPanelDragRecovery, PanelDragTestHostComponent } from '@axe/testing/panel-drag-recovery';
@@ -817,6 +818,55 @@ describe('GameObjectInventoryComponent', () => {
       dragOnto(goblin, folderHeading('第1話'));
 
       expect(goblin.folderName).toBe('');
+    });
+
+    describe('the pieces put out of sight', () => {
+      const originalCursor = PeerCursor.myCursor;
+
+      function beSeat(role: PeerRole): void {
+        PeerCursor.myCursor = { role, identifier: 'seat-cursor' } as PeerCursor;
+      }
+
+      function putOutOfSight(name: string): GameCharacter {
+        const character = GameCharacter.create(name, 1, '');
+        character.location = { name: CONCEALED_LOCATION, x: 100, y: 150 };
+        return character;
+      }
+
+      afterEach(() => {
+        PeerCursor.myCursor = originalCursor;
+      });
+
+      it('lists them for the master in a tab of their own, and nowhere else', () => {
+        beSeat(PeerRole.GameMaster);
+        putOutOfSight('ドレイク');
+        putOnTable('村長');
+
+        expect(component.inventoryTypes()).toContain(CONCEALED_LOCATION);
+        component.selectTab.set(CONCEALED_LOCATION);
+        expect(component.getTabTitle(CONCEALED_LOCATION)).toBe('伏せ');
+        expect(component.filteredRows().map((row) => row.object.name)).toEqual(['ドレイク']);
+        component.selectTab.set('common');
+        expect(component.filteredRows()).toEqual([]);
+      });
+
+      it('offers a player no such tab, and lists nothing even when asked for it', () => {
+        beSeat(PeerRole.Player);
+        putOutOfSight('ドレイク');
+
+        expect(component.inventoryTypes()).not.toContain(CONCEALED_LOCATION);
+        component.selectTab.set(CONCEALED_LOCATION);
+        expect(component.filteredRows()).toEqual([]);
+      });
+
+      it('brings a piece back to where it was put out of sight when it is moved to the table', () => {
+        beSeat(PeerRole.GameMaster);
+        const drake = putOutOfSight('ドレイク');
+
+        drake.setLocation('table');
+
+        expect(drake.location).toMatchObject({ name: 'table', x: 100, y: 150 });
+      });
     });
 
     describe('the pieces the inventory hides', () => {

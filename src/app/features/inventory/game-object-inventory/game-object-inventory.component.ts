@@ -65,6 +65,7 @@ import {
 } from '@axe/domain/inventory/inventory-view-mode';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 import { OwnedTabletopObject } from '@axe/domain/tabletop/owned-tabletop-object';
 import { TabletopObject } from '@axe/domain/tabletop/tabletop-object';
 import { NpcDragService } from '@axe/features/gm-tools/npc-bar/npc-drag.service';
@@ -210,15 +211,24 @@ export class GameObjectInventoryComponent {
       this.panelService.headerControls.set(this.viewControls());
     });
     this.objectChange.networkOpen$.subscribe(() => {
-      this.inventoryTypes.set(['table', 'common', Network.peerId, 'graveyard']);
+      this.placeTypes.set(['table', 'common', Network.peerId, 'graveyard']);
       if (!this.inventoryTypes().includes(this.selectTab())) {
         this.selectTab.set(Network.peerId);
       }
     }, this.destroyRef);
-    this.inventoryTypes.set(['table', 'common', Network.peerId, 'graveyard']);
+    this.placeTypes.set(['table', 'common', Network.peerId, 'graveyard']);
+    // Somebody who stops being the master is not left looking at what was put out of sight.
+    effect(() => {
+      if (!this.inventoryTypes().includes(this.selectTab())) untracked(() => this.selectTab.set('table'));
+    });
   }
 
-  readonly inventoryTypes = signal<string[]>(['table', 'common', 'graveyard']);
+  private readonly placeTypes = signal<string[]>(['table', 'common', 'graveyard']);
+  /** The tabs on view: every place, and for the master alone what has been put out of sight. */
+  readonly inventoryTypes = computed<string[]>(() => {
+    this.objectChange.trackMyCursor();
+    return this.rolePermission.canSeeHidden ? [...this.placeTypes(), CONCEALED_LOCATION] : this.placeTypes();
+  });
 
   readonly selectTab = signal('table');
   readonly selectedIdentifier = signal('');
@@ -638,8 +648,8 @@ export class GameObjectInventoryComponent {
   }
 
   /**
-   * The translated title of an inventory tab; any name that is not the table, this peer or the
-   * graveyard is the common tab.
+   * The translated title of an inventory tab; any name that is not the table, this peer, the
+   * graveyard or the out-of-sight tab is the common tab.
    */
   getTabTitle(inventoryType: string) {
     switch (inventoryType) {
@@ -649,14 +659,16 @@ export class GameObjectInventoryComponent {
         return this.t('feature.inventory.tabs.personal');
       case 'graveyard':
         return this.t('feature.inventory.tabs.graveyard');
+      case CONCEALED_LOCATION:
+        return this.t('feature.inventory.tabs.concealed');
       default:
         return this.t('feature.inventory.tabs.common');
     }
   }
 
   /**
-   * The inventory behind a tab; any name that is not the table, this peer or the graveyard gives
-   * the common one.
+   * The inventory behind a tab; any name that is not the table, this peer, the graveyard or the
+   * out-of-sight tab gives the common one.
    */
   getInventory(inventoryType: string) {
     switch (inventoryType) {
@@ -666,6 +678,8 @@ export class GameObjectInventoryComponent {
         return this.inventoryService.privateInventory;
       case 'graveyard':
         return this.inventoryService.graveyardInventory;
+      case CONCEALED_LOCATION:
+        return this.inventoryService.concealedInventory;
       default:
         return this.inventoryService.commonInventory;
     }
@@ -673,6 +687,9 @@ export class GameObjectInventoryComponent {
 
   private baseObjectsOf(inventoryType: string): TabletopObject[] {
     switch (inventoryType) {
+      case CONCEALED_LOCATION:
+        // Out of sight is out of sight for everybody but the master, whatever tab is asked for.
+        return this.rolePermission.canSeeHidden ? this.inventoryService.concealedInventory.tabletopObjects : [];
       case 'table': {
         // What the table does not draw for this reader is not listed either, whatever mode the
         // list is in: a row would name what the dark or the fog is keeping back.

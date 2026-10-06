@@ -1311,7 +1311,8 @@
         "table": "テーブル",
         "common": "共有",
         "personal": "個人",
-        "graveyard": "墓場"
+        "graveyard": "墓場",
+        "concealed": "伏せ"
       },
       "list": {
         "tabTable": "テーブル",

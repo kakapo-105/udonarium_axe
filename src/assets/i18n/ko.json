@@ -1311,7 +1311,8 @@
         "table": "테이블",
         "common": "공유",
         "personal": "개인",
-        "graveyard": "무덤"
+        "graveyard": "무덤",
+        "concealed": "숨김"
       },
       "list": {
         "tabTable": "테이블",

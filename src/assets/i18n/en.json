@@ -1311,7 +1311,8 @@
         "table": "Table",
         "common": "Shared",
         "personal": "Personal",
-        "graveyard": "Graveyard"
+        "graveyard": "Graveyard",
+        "concealed": "Out of sight"
       },
       "list": {
         "tabTable": "Table",
