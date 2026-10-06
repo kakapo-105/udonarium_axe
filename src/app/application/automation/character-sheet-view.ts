@@ -25,12 +25,17 @@ const UNREADABLE = new Set<string>([
  * The fields of a character's sheet, section by section, with calculating fields worked out.
  *
  * Pictures, drawn ranges and stored effects are left out, long text is cut short, and at most
- * {@link MAX_FIELDS} fields are listed; `truncated` says when there were more.
+ * {@link MAX_FIELDS} fields are listed; `truncated` says when there were more. Given `paths`, only
+ * the fields at one of them, or under a section or group at one of them, are listed.
  */
-export function characterSheetView(character: GameCharacter): { fields: SheetFieldView[]; truncated: boolean } {
+export function characterSheetView(
+  character: GameCharacter,
+  paths?: readonly string[]
+): { fields: SheetFieldView[]; truncated: boolean } {
   const fields: SheetFieldView[] = [];
   const pass = createCalcPass();
   let truncated = false;
+  const wanted = (path: string) => !paths || paths.some((asked) => path === asked || path.startsWith(`${asked}/`));
 
   const visit = (element: DataElement, trail: readonly string[]) => {
     if (truncated) return;
@@ -39,7 +44,7 @@ export function characterSheetView(character: GameCharacter): { fields: SheetFie
       for (const child of element.children) visit(child, path);
       return;
     }
-    if (UNREADABLE.has(element.fieldType)) return;
+    if (UNREADABLE.has(element.fieldType) || !wanted(path.join('/'))) return;
     if (fields.length >= MAX_FIELDS) {
       truncated = true;
       return;

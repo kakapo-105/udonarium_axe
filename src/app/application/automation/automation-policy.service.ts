@@ -47,6 +47,10 @@ export class AutomationPolicyService {
     if (!this.role.canEditTabletop) fail('FORBIDDEN', 'Guests cannot manage pieces.');
     if (!this.canSee(piece)) fail('NOT_FOUND', 'Visible piece not found.');
   }
+  /** Whether new pieces may be put on the table, which a guest, who only watches, may not. */
+  canCreatePieces(): void {
+    if (!this.role.canEditTabletop) fail('FORBIDDEN', 'Guests cannot put pieces on the table.');
+  }
   canControl(piece: GameCharacter): void {
     if (!this.role.canEditTabletop) fail('FORBIDDEN', 'Guests cannot control pieces.');
     if (!this.canSee(piece)) fail('NOT_FOUND', 'Visible piece not found.');

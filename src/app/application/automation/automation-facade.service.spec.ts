@@ -576,4 +576,187 @@ describe('AutomationFacadeService', () => {
       expect(tab.chatMessages.at(-1)?.text).toContain('（2体・2件）');
     });
   });
+
+  it('reads only the sheet fields asked for, whole sections included', async () => {
+    const read = async (paths: string[]) =>
+      (
+        (await call('character_sheet_get', { identifier: piece.identifier, paths })) as {
+          data: { fields: { path: string }[] };
+        }
+      ).data.fields.map((f) => f.path);
+
+    expect(await read(['リソース/基本/HP'])).toEqual(['リソース/基本/HP']);
+    expect(await read(['リソース'])).toEqual(expect.arrayContaining(['リソース/基本/HP', 'リソース/基本/MP']));
+    expect(await read(['リソース/基'])).toEqual([]);
+    error(await call('character_sheet_get', { identifier: piece.identifier, paths: [] }), 'INVALID_ARGUMENT');
+  });
+
+  describe('waiting for chat', () => {
+    let at = 1000;
+    function say(text: string, from = 'player') {
+      return tab.addMessage({ name: 'Player', text, from, timestamp: at++ });
+    }
+    async function wait(args: Record<string, unknown> = {}) {
+      const pending = call('chat_wait', { waitSeconds: 2, ...args });
+      await vi.advanceTimersByTimeAsync(2500);
+      return (await pending) as { ok: true; data: { messages: { text: string }[]; timedOut: boolean; more: boolean } };
+    }
+    beforeEach(() => vi.useFakeTimers());
+
+    it('hands over what arrives after the first wait began, each message once', async () => {
+      say('before');
+      expect((await wait()).data).toMatchObject({ messages: [], timedOut: true });
+
+      const pending = call('chat_wait', { waitSeconds: 10 });
+      await vi.advanceTimersByTimeAsync(1000);
+      say('first');
+      say('second');
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect((await pending) as unknown).toMatchObject({
+        ok: true,
+        data: { messages: [{ text: 'first' }, { text: 'second' }], timedOut: false },
+      });
+      expect((await wait()).data.timedOut).toBe(true);
+    });
+
+    it('hands over at most the limit, keeping the rest for the next wait', async () => {
+      await wait();
+      say('one');
+      say('two');
+      expect((await wait({ limit: 1 })).data).toMatchObject({ messages: [{ text: 'one' }], more: true });
+      expect((await wait()).data.messages).toMatchObject([{ text: 'two' }]);
+    });
+
+    it('leaves out secret rolls and what automation said, but not a person at the same browser', async () => {
+      await wait();
+      tab.addMessage({ name: 'Secret', text: 'secret value', tag: 'secret', timestamp: at++ });
+      const sent = call('chat_send', { tabId: tab.identifier, text: 'said by automation' });
+      await vi.advanceTimersByTimeAsync(100);
+      expect((await sent).ok).toBe(true);
+      expect((await wait()).data.messages).toEqual([]);
+
+      say('typed by hand', Network.peerContext.userId);
+      expect((await wait()).data.messages).toMatchObject([{ text: 'typed by hand' }]);
+    });
+
+    it('waits only on the tabs named, and refuses tabs it cannot read', async () => {
+      const other = new ChatTab();
+      other.name = 'Chatter';
+      other.initialize();
+      ChatTabList.instance.addChatTab(other);
+      await wait();
+      other.addMessage({ name: 'Player', text: 'off topic', from: 'player', timestamp: at++ });
+      expect((await wait({ tabIds: [tab.identifier] })).data.timedOut).toBe(true);
+      other.plCanView = false;
+      error(await call('chat_wait', { tabIds: [other.identifier] }), 'NOT_FOUND');
+    });
+
+    it('bounds the wait and forgets what it handed over when the session starts again', async () => {
+      error(await call('chat_wait', { waitSeconds: 301 }), 'INVALID_ARGUMENT');
+      error(await call('chat_wait', { waitSeconds: 0.5 }), 'INVALID_ARGUMENT');
+      await wait();
+      say('during the old session');
+      policy.enable();
+      expect((await wait()).data.timedOut).toBe(true);
+    });
+
+    it('ends the wait when automation is stopped', async () => {
+      const pending = call('chat_wait', { waitSeconds: 10 });
+      await vi.advanceTimersByTimeAsync(500);
+      policy.stop();
+      await vi.advanceTimersByTimeAsync(1000);
+      error(await pending, 'NOT_READY');
+    });
+  });
+
+  describe('pieces made by automation', () => {
+    const goblin = (name = 'ゴブリン') => ({
+      kind: 'character',
+      data: {
+        name,
+        status: [{ label: 'HP', value: '16', max: '16' }],
+        params: [{ label: 'LV', value: '1' }],
+        commands: '2d+3【命中力／武器】',
+      },
+    });
+    function grant() {
+      policy.setScope('create_piece', true);
+    }
+    function created(result: AutomationResult) {
+      expect(result.ok).toBe(true);
+      return (result as { data: { pieces: { identifier: string; name: string; x: number; y: number }[] } }).data.pieces;
+    }
+
+    it('puts pieces from sheets in a row from the cell asked for, owned by the operator', async () => {
+      grant();
+      const pieces = created(
+        await call('character_create', { pieces: [goblin('ゴブリンA'), goblin('ゴブリンB')], x: 2, y: 3 })
+      );
+
+      expect(pieces).toMatchObject([
+        { name: 'ゴブリンA', x: 100, y: 150 },
+        { name: 'ゴブリンB', x: 150, y: 150 },
+      ]);
+      const made = store.get<GameCharacter>(pieces[0].identifier)!;
+      expect(made.owner).toBe('operator');
+      expect(made.location.name).toBe('table');
+      expect(made.disclosureMode).toBe('all');
+    });
+
+    it('keeps what a piece says about itself to the game master by default when run by one', async () => {
+      PeerCursor.myCursor.role = PeerRole.GameMaster;
+      facade.health();
+      policy.enable();
+      grant();
+      const [piece] = created(await call('character_create', { pieces: [goblin()], x: 0, y: 0 }));
+      expect(store.get<GameCharacter>(piece.identifier)!.disclosureMode).toBe('gm');
+
+      expect(await call('piece_disclose', { identifier: piece.identifier, disclosure: 'all' })).toMatchObject({
+        ok: true,
+        data: { disclosure: 'all' },
+      });
+      expect(store.get<GameCharacter>(piece.identifier)!.disclosureMode).toBe('all');
+    });
+
+    it('builds nothing when a sheet cannot be read, the row runs off the table, or on a dry run', async () => {
+      grant();
+      const before = store.getObjects(GameCharacter).length;
+      error(await call('character_create', { pieces: [goblin(), { nonsense: true }], x: 0, y: 0 }), 'INVALID_ARGUMENT');
+      error(await call('character_create', { pieces: [goblin(), goblin()], x: 19, y: 0 }), 'INVALID_ARGUMENT');
+      expect(await call('character_create', { pieces: [goblin()], x: 0, y: 0, dryRun: true })).toMatchObject({
+        ok: true,
+        data: { pieces: [{ name: 'ゴブリン', x: 0, y: 0 }], dryRun: true },
+      });
+      expect(store.getObjects(GameCharacter)).toHaveLength(before);
+    });
+
+    it('needs its own grant and refuses guests', async () => {
+      error(await call('character_create', { pieces: [goblin()], x: 0, y: 0 }), 'FORBIDDEN');
+      PeerCursor.myCursor.role = 'guest';
+      facade.health();
+      policy.enable();
+      grant();
+      error(await call('character_create', { pieces: [goblin()], x: 0, y: 0 }), 'FORBIDDEN');
+    });
+
+    it('clears away its own pieces to the graveyard, and never a player’s', async () => {
+      grant();
+      const [made] = created(await call('character_create', { pieces: [goblin()], x: 0, y: 0 }));
+      const players = GameCharacter.create('PC', 1, '');
+      players.owner = 'player';
+      players.location = { name: 'table', x: 100, y: 100 };
+
+      error(await call('piece_remove', { identifiers: [made.identifier, players.identifier] }), 'NOT_FOUND');
+      error(await call('piece_disclose', { identifier: players.identifier, disclosure: 'gm' }), 'NOT_FOUND');
+      expect(store.get<GameCharacter>(made.identifier)!.location.name).toBe('table');
+
+      expect(await call('piece_remove', { identifiers: [made.identifier] })).toMatchObject({
+        ok: true,
+        data: { removed: [made.identifier] },
+      });
+      expect(store.get<GameCharacter>(made.identifier)!.location.name).toBe('graveyard');
+      expect(players.location.name).toBe('table');
+    });
+  });
 });

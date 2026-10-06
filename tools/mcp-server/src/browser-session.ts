@@ -77,7 +77,8 @@ export class BrowserSession {
     command: string,
     args: Record<string, unknown>,
     requestId: string,
-    sessionId?: string
+    sessionId?: string,
+    timeoutMs = 20000
   ): Promise<FacadeResult> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -97,7 +98,7 @@ export class BrowserSession {
                 'Browser request timed out. Restart the MCP server and inspect the board before retrying.'
               )
             );
-          }, 20000);
+          }, timeoutMs);
         }),
       ]);
     } catch (error) {

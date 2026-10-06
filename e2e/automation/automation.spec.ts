@@ -52,6 +52,50 @@ test('two clients receive movement and chat, while the PL facade excludes privat
   expect(chat).not.toContain('private whisper');
 });
 
+test('a GM puts monsters out, discloses and clears them, and hears the players through a wait', async ({ context }) => {
+  const gm = await context.newPage();
+  const player = await context.newPage();
+  await ready(gm, 'a');
+  await ready(player, 'b');
+  const ids = await gm.evaluate(() => window.__automationTest.seed());
+  await gm.evaluate(() => window.__automationTest.snapshot());
+  await gm.getByTestId('automation-scope-create_piece').check();
+  await gm.getByTestId('automation-scope-send_chat').check();
+  await player.getByTestId('automation-scope-send_chat').check();
+  const sheet = (name: string) => ({
+    kind: 'character',
+    data: { name, status: [{ label: 'HP', value: '16', max: '16' }] },
+  });
+
+  const created = await invoke(gm, 'character_create', {
+    pieces: [sheet('ゴブリンA'), sheet('ゴブリンB')],
+    x: 6,
+    y: 1,
+  });
+  expect(created.ok).toBe(true);
+  const [first] = (created as { data: { pieces: { identifier: string }[] } }).data.pieces;
+  const seen = () => invoke(player, 'scene_list').then((result) => JSON.stringify(result));
+  // Kept to the game master, the monster's numbers are not for the players to read yet.
+  await expect
+    .poll(() => player.evaluate((id) => window.__automationTest.position(id), first.identifier))
+    .toMatchObject({ x: 300, y: 50 });
+  expect(await seen()).not.toContain(first.identifier);
+  expect((await invoke(gm, 'piece_disclose', { identifier: first.identifier, disclosure: 'all' })).ok).toBe(true);
+  await expect.poll(seen).toContain(first.identifier);
+
+  expect(await invoke(gm, 'chat_wait', { tabIds: [ids.tabId], waitSeconds: 1 })).toMatchObject({
+    ok: true,
+    data: { timedOut: true },
+  });
+  const waiting = invoke(gm, 'chat_wait', { tabIds: [ids.tabId], waitSeconds: 20 });
+  expect((await invoke(gm, 'chat_send', { tabId: ids.tabId, text: 'GM narration' })).ok).toBe(true);
+  expect((await invoke(player, 'chat_send', { tabId: ids.tabId, text: '攻撃します' })).ok).toBe(true);
+  expect(await waiting).toMatchObject({ ok: true, data: { messages: [{ text: '攻撃します' }], timedOut: false } });
+
+  expect((await invoke(gm, 'piece_remove', { identifiers: [first.identifier] })).ok).toBe(true);
+  await expect.poll(seen).not.toContain(first.identifier);
+});
+
 test('stop and reload remove the API and discard write grants and old session IDs', async ({ page }) => {
   await ready(page, 'a');
   const old = await page.evaluate(() => window.udonariumAxeAutomation!.health());

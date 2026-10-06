@@ -5,6 +5,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { appUrl } from '../dist/browser-session.js';
+import { pieceSourceOrigins } from '../dist/piece-source.js';
 import { createServer } from '../dist/tools.js';
 
 test('the real stdio entry point lists tools and reports missing Chromium without corrupting stdout', async () => {
@@ -24,7 +25,7 @@ test('the real stdio entry point lists tools and reports missing Chromium withou
   });
   try {
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length, 13);
+    assert.equal((await client.listTools()).tools.length, 17);
     const result = await client.callTool({ name: 'session_get', arguments: {} });
     assert.equal(result.structuredContent.error.code, 'NOT_READY');
     assert.match(stderr, /Udonarium browser/);
@@ -33,8 +34,8 @@ test('the real stdio entry point lists tools and reports missing Chromium withou
   }
 });
 
-async function connected(invoke, work) {
-  const server = createServer({ invoke });
+async function connected(invoke, work, options) {
+  const server = createServer({ invoke }, options);
   const client = new Client({ name: 'contract-test', version: '1' });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
@@ -47,7 +48,7 @@ async function connected(invoke, work) {
   }
 }
 
-test('exposes exactly the thirteen bounded tools with schemas and read annotations', async () => {
+test('exposes exactly the seventeen bounded tools with schemas and read annotations', async () => {
   await connected(
     async () => ({ ok: true, data: {} }),
     async (client) => {
@@ -57,13 +58,17 @@ test('exposes exactly the thirteen bounded tools with schemas and read annotatio
         'buff_list',
         'buff_send',
         'buff_sweep',
+        'character_create',
         'character_sheet_get',
         'chat_read_recent',
         'chat_send',
+        'chat_wait',
         'object_get',
         'palette_get',
         'palette_send',
+        'piece_disclose',
         'piece_move',
+        'piece_remove',
         'scene_list',
         'session_get',
       ]);
@@ -105,7 +110,7 @@ test('passes retry identity separately from operation arguments and maps structu
         name: 'piece_move',
         arguments: { sessionId: 'session', requestId: 'retry', identifier: 'piece', x: 1, y: 2 },
       });
-      assert.deepEqual(received, ['piece_move', { identifier: 'piece', x: 1, y: 2 }, 'retry', 'session']);
+      assert.deepEqual(received, ['piece_move', { identifier: 'piece', x: 1, y: 2 }, 'retry', 'session', 20000]);
       assert.equal(result.isError, true);
       assert.equal(result.structuredContent.error.code, 'CONFLICT');
       assert.deepEqual(JSON.parse(result.content[0].text), result.structuredContent);
@@ -139,4 +144,89 @@ test('only opens a fixed HTTP(S) application origin with explicit opt-in', () =>
     assert.throws(() => appUrl(url));
   }
   assert.equal(appUrl('https://example.com').origin, 'https://example.com');
+});
+test('gives a wait for chat as long as it asks for, and other requests the usual time', async () => {
+  const timeouts = {};
+  await connected(
+    async (command, args, requestId, sessionId, timeoutMs) => {
+      timeouts[command] = timeoutMs;
+      return { ok: true, data: { messages: [] } };
+    },
+    async (client) => {
+      await client.callTool({ name: 'chat_wait', arguments: { waitSeconds: 120 } });
+      await client.callTool({ name: 'session_get', arguments: {} });
+      assert.equal((await client.callTool({ name: 'chat_wait', arguments: { waitSeconds: 301 } })).isError, true);
+    }
+  );
+  assert.deepEqual(timeouts, { chat_wait: 130000, session_get: 20000 });
+});
+test('fetches pieces from an allowed source so they reach the browser, not the conversation', async () => {
+  const sheet = { kind: 'character', data: { name: 'ゴブリン' } };
+  let fetched;
+  let received;
+  await connected(
+    async (command, args) => {
+      received = args;
+      return { ok: true, data: { pieces: [{ identifier: 'made', name: 'ゴブリン' }] } };
+    },
+    async (client) => {
+      const result = await client.callTool({
+        name: 'character_create',
+        arguments: {
+          sessionId: 'session',
+          sourceUrl: 'http://rules:8765/api/ccfolia?name=ゴブリン&count=2',
+          x: 1,
+          y: 2,
+        },
+      });
+      assert.equal(new URL(fetched).pathname, '/api/ccfolia');
+      assert.deepEqual(received, { pieces: [sheet, sheet], x: 1, y: 2 });
+      assert.deepEqual(result.structuredContent.data.sourceWarnings, ['no palette']);
+      assert.doesNotMatch(result.content[0].text, /"kind"/);
+    },
+    {
+      pieceSources: pieceSourceOrigins('http://rules:8765'),
+      fetchText: async (url) => {
+        fetched = url.href;
+        return { ok: true, status: 200, text: JSON.stringify({ pieces: [sheet, sheet], warnings: ['no palette'] }) };
+      },
+    }
+  );
+});
+test('refuses piece sources that are not allowed, and passes on what a source could not find', async () => {
+  let count = 0;
+  await connected(
+    async () => {
+      count++;
+      return { ok: true, data: {} };
+    },
+    async (client) => {
+      const create = (args) =>
+        client.callTool({ name: 'character_create', arguments: { sessionId: 'session', x: 0, y: 0, ...args } });
+      assert.equal((await create({ sourceUrl: 'http://elsewhere/api' })).structuredContent.error.code, 'FORBIDDEN');
+      assert.equal((await create({})).structuredContent.error.code, 'INVALID_ARGUMENT');
+      assert.equal(
+        (await create({ pieces: [{ kind: 'character' }], sourceUrl: 'http://rules:8765/a' })).structuredContent.error
+          .code,
+        'INVALID_ARGUMENT'
+      );
+      const missing = await create({ sourceUrl: 'http://rules:8765/api/ccfolia?name=ドレイク' });
+      assert.equal(missing.structuredContent.error.code, 'INVALID_ARGUMENT');
+      assert.match(missing.structuredContent.error.message, /ドレイク\(竜形態\)/);
+      assert.equal(count, 0);
+    },
+    {
+      pieceSources: pieceSourceOrigins('http://rules:8765'),
+      fetchText: async () => ({
+        ok: false,
+        status: 404,
+        text: JSON.stringify({
+          error: '魔物が1体に決まりませんでした',
+          candidates: ['ドレイク(竜形態)', 'ドレイク(人間形態)'],
+        }),
+      }),
+    }
+  );
+  assert.throws(() => pieceSourceOrigins('file:///etc'));
+  assert.deepEqual(pieceSourceOrigins(' http://a:1/x , https://b '), ['http://a:1', 'https://b']);
 });

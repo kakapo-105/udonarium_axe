@@ -171,7 +171,8 @@
         "send_chat": "Send chat",
         "edit_resource": "Adjust the speaking character’s resources (e.g. :HP-5)",
         "use_palette": "Use chat palettes (references, targets and resource edits included)",
-        "edit_buff": "Edit buffs and debuffs"
+        "edit_buff": "Edit buffs and debuffs",
+        "create_piece": "Create pieces, change who can read them and clear them away (own pieces only)"
       },
       "ownedOnly": "Limit AI control to pieces owned by this user",
       "roomHint": "The ownership limit is shared by the room. Only the GM can change it.",
