@@ -22,6 +22,7 @@ import { BUFF_VIEW_LABEL_KEYS, type BuffViewMode } from '@axe/domain/character/b
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
 import { findOrphanedOwnership } from '@axe/domain/tabletop/ownership';
+import { manualUrl } from '@axe/domain/ui/manual-link';
 import {
   isMenuCommandOffered,
   MenuActName,
@@ -364,6 +365,8 @@ export class MenuCommandService {
         return this.widgets.miniPlayer();
       case 'widgetHotbar':
         return this.widgets.hotbar();
+      case 'widgetRoster':
+        return this.widgets.roster();
     }
   }
 
@@ -454,6 +457,9 @@ export class MenuCommandService {
       case 'widgetHotbar':
         this.widgets.toggleHotbar();
         return;
+      case 'widgetRoster':
+        this.widgets.toggleRoster();
+        return;
     }
   }
 
@@ -507,6 +513,9 @@ export class MenuCommandService {
         return 'done';
       case 'buttonGuide':
         this.buttonGuide.show();
+        return 'done';
+      case 'manual':
+        window.open(manualUrl(document.baseURI), '_blank', 'noopener');
         return 'done';
     }
   }

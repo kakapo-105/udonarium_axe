@@ -54,6 +54,7 @@ const FAB: MenuLayout = {
       [
         'widgetPlToolbar',
         'widgetGmToolbar',
+        'widgetRoster',
         'widgetClock',
         'widgetCompass',
         'widgetRecording',
@@ -70,6 +71,7 @@ const FAB: MenuLayout = {
       ['viewMode', 'theme', 'skin', 'motion', 'renderLite', 'language', 'menuEditor', 'useMobileLayout'],
       { testId: 'fab-display', menuTestId: 'seat-display' }
     ),
+    item('manual'),
     item('buttonGuide'),
   ],
 };

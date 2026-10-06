@@ -41,6 +41,7 @@ export const MENU_TOGGLES = [
   'widgetConnectionQuality',
   'widgetMiniPlayer',
   'widgetHotbar',
+  'widgetRoster',
 ] as const;
 
 export type MenuToggleName = (typeof MENU_TOGGLES)[number];
@@ -60,6 +61,7 @@ export const MENU_ACTS = [
   'turnPrev',
   'releaseOwnership',
   'buttonGuide',
+  'manual',
 ] as const;
 
 export type MenuActName = (typeof MENU_ACTS)[number];
@@ -231,6 +233,7 @@ export const MENU_COMMANDS: readonly MenuCommand[] = [
   }),
   widget('widgetMiniPlayer', 'play_circle', 'app.fab.miniPlayer', { testId: 'seat-widget-miniPlayer' }),
   widget('widgetHotbar', 'apps', 'feature.hotbar.toggle', { audience: 'playing', testId: 'seat-widget-hotbar' }),
+  widget('widgetRoster', 'groups', 'feature.roster.title', { testId: 'seat-widget-roster' }),
 
   cycle('viewMode', 'view_in_ar', 'app.fab.viewPerspective', { testId: 'seat-view' }),
   cycle('theme', 'brightness_auto', 'common.theme.auto', { testId: 'seat-theme' }),
@@ -253,6 +256,7 @@ export const MENU_COMMANDS: readonly MenuCommand[] = [
   act('turnPrev', 'chevron_left', 'feature.turnOrder.prev', { audience: 'gameMaster' }),
   act('releaseOwnership', 'key_off', 'app.fab.releaseOwnership', { audience: 'gameMaster' }),
   act('buttonGuide', 'help_outline', 'app.fab.buttonGuide'),
+  act('manual', 'menu_book', 'app.fab.manual', { testId: 'fab-entry-manual' }),
 
   custom('turnIndicator', 'hourglass_top', 'feature.turnOrder.title', { surfaces: TOOLBARS }),
   custom('persona', 'visibility', 'feature.gmTools.persona.title', {

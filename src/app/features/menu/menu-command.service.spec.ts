@@ -105,6 +105,25 @@ describe('MenuCommandService', () => {
       expect(guide.shown()).toBe(true);
     });
 
+    it('shows and hides the character roster, and reads it as lit while it is shown', () => {
+      seatAs(PeerRole.Player);
+      const widgets = TestBed.inject(WidgetVisibilityService);
+      widgets.roster.set(true);
+
+      expect(commands.litOf(commandOf('widgetRoster'))).toBe(true);
+      commands.run(commandOf('widgetRoster'));
+      expect(widgets.roster()).toBe(false);
+      expect(commands.litOf(commandOf('widgetRoster'))).toBe(false);
+    });
+
+    it('opens the user guide beside the app in a tab of its own, for watchers too', () => {
+      seatAs(PeerRole.Guest);
+      const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+      expect(commands.run(commandOf('manual'))).toBe('done');
+      expect(open).toHaveBeenCalledWith(expect.stringMatching(/\/docs\/$/), '_blank', 'noopener');
+    });
+
     it('puts the guide away once anything else is pressed', () => {
       seatAs(PeerRole.Player);
       vi.spyOn(TestBed.inject(RoomPanelService), 'open').mockImplementation(() => {});

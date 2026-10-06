@@ -117,8 +117,16 @@ describe('how a menu is arranged', () => {
         'saveLoad',
         'widgets',
         'display',
+        'manual',
         'buttonGuide',
       ]);
+    });
+
+    it("offers this fork's user guide and character roster from the drawer", () => {
+      const widgets = DEFAULT_MENU_LAYOUTS.fab.nodes.find((node) => node.id === 'widgets') as MenuGroup;
+
+      expect(widgets.items.map((item) => item.command)).toContain('widgetRoster');
+      expect(DEFAULT_MENU_LAYOUTS.fab.nodes.map((node) => node.id)).toContain('manual');
     });
 
     it('puts the inventory on both toolbars, next to the lists each already leads with', () => {
