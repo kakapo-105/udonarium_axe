@@ -1,3 +1,4 @@
+import { BoardSwitch } from '@axe/domain/tabletop/board-switch/board-switch';
 import { cellGridOf } from '@axe/domain/tabletop/fog/cell-grid';
 import { GridType } from '@axe/domain/tabletop/game-table';
 import { DoorStyle, Terrain, TerrainViewState } from '@axe/domain/tabletop/terrain';
@@ -38,6 +39,16 @@ describe('which blocks may be drawn together with others', () => {
     turned.rotate = 90;
 
     for (const terrain of [unlocked, door, slope, turned]) expect(isBatchable(terrain, square)).toBe(false);
+  });
+
+  it('draws alone a block made into a switch, since the press lands on the block itself', () => {
+    const lever = wall();
+    const made = new BoardSwitch();
+    made.initialize();
+    lever.appendChild(made);
+
+    expect(isBatchable(lever, square)).toBe(false);
+    expect(isBatchable(lever, flat)).toBe(false);
   });
 
   it('draws alone a block off the ground, one carrying a grid, and one with a face left open', () => {

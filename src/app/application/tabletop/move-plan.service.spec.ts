@@ -8,6 +8,7 @@ import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { cellIndexOf } from '@axe/domain/tabletop/fog/cell-grid';
 import { GameTable } from '@axe/domain/tabletop/game-table';
+import { stepsFor } from '@axe/domain/tabletop/move/move-steps';
 import { Terrain } from '@axe/domain/tabletop/terrain';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 import { vi } from 'vitest';
@@ -117,7 +118,7 @@ describe('MovePlanService', () => {
     expect(plan.from).toBe(cell(5, 5));
     expect(plan.settled).toEqual([cell(5, 5)]);
     expect(plan.spent).toBe(0);
-    expect(plan.budget).toBe(3);
+    expect(plan.budget).toBe(stepsFor(3));
   });
 
   it('opens on nothing for a piece with no reach to draw', () => {
@@ -158,6 +159,25 @@ describe('MovePlanService', () => {
     expect(plan.ahead[plan.ahead.length - 1]).toBe(cell(7, 5));
   });
 
+  it('draws a way through its own side rather than round it, and not onto it', () => {
+    // Corners are left uncut so that one way through is the only cheapest way there is.
+    table.moveDiagonally = false;
+    table.samePartyPassage = 'pass';
+    const ally = pieceAt(6, 5, 1);
+    ally.partyIdentifier = 'heroes';
+    const hero = pieceAt(5, 5, 3);
+    hero.partyIdentifier = 'heroes';
+    service.begin(hero);
+
+    service.lookAt(6 * GRID + 10, 5 * GRID + 10);
+    expect(service.plan()!.ahead).toEqual([]);
+
+    service.lookAt(7 * GRID + 10, 5 * GRID + 10);
+    const plan = service.plan()!;
+    expect(plan.ahead).toContain(cell(6, 5));
+    expect(plan.ahead[plan.ahead.length - 1]).toBe(cell(7, 5));
+  });
+
   it('settles the way drawn, and works the next one out from where it ended', () => {
     service.begin(pieceAt(5, 5, 4));
     service.lookAt(7 * GRID + 10, 5 * GRID + 10);
@@ -166,7 +186,7 @@ describe('MovePlanService', () => {
 
     const plan = service.plan()!;
     expect(plan.from).toBe(cell(7, 5));
-    expect(plan.spent).toBe(2);
+    expect(plan.spent).toBe(stepsFor(2));
     expect(plan.waypoints).toEqual([cell(7, 5)]);
     expect(plan.ahead).toEqual([]);
     expect(plan.settled).toEqual([cell(5, 5), cell(6, 5), cell(7, 5)]);
@@ -224,6 +244,40 @@ describe('MovePlanService', () => {
       service.toggleJump();
 
       expect(service.plan()!.reach.get(cell(6, 5))).toBe(false);
+    });
+
+    describe('with a room that says how far a leap goes', () => {
+      afterEach(() => {
+        Config.instance.jumpCells = null;
+      });
+
+      it('leaps only as far as the room allows, though the move has more left', () => {
+        service.begin(pieceAt(5, 5, 4));
+        Config.instance.jumpCells = 2;
+
+        service.toggleJump();
+
+        expect(service.plan()!.reach.get(cell(7, 5))).toBe(true);
+        expect(service.plan()!.reach.get(cell(9, 5))).toBe(false);
+      });
+
+      it('leaps as far as the move carries where the room says nothing', () => {
+        service.begin(pieceAt(5, 5, 4));
+
+        service.toggleJump();
+
+        expect(service.plan()!.reach.get(cell(9, 5))).toBe(true);
+      });
+
+      it('draws no way past the end of one leap', () => {
+        service.begin(pieceAt(5, 5, 4));
+        Config.instance.jumpCells = 2;
+        service.toggleJump();
+
+        service.lookAt(9 * GRID + 10, 5 * GRID + 10);
+
+        expect(service.plan()!.ahead).toEqual([]);
+      });
     });
 
     it('takes the jumping back off again, and the block with it', () => {
@@ -323,14 +377,14 @@ describe('MovePlanService', () => {
       service.lookAt(6 * GRID + 10, 6 * GRID + 10);
       service.settle();
 
-      expect(service.plan()!.spent).toBe(1);
+      expect(service.plan()!.spent).toBe(stepsFor(1));
       expect(service.plan()!.cornersCut).toBe(1);
 
       service.lookAt(7 * GRID + 10, 7 * GRID + 10);
       service.settle();
 
       // The second corner of the move costs two, wherever the reader chose to break the way.
-      expect(service.plan()!.spent).toBe(3);
+      expect(service.plan()!.spent).toBe(stepsFor(3));
     });
 
     it('gives the count back with the corner when a leg is taken up again', () => {

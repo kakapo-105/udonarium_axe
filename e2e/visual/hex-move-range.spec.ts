@@ -16,8 +16,8 @@ test('a planned move shows its reach on a hex table', async ({ page }) => {
   await useHexGrid(page);
 
   await openPanel(page, '部屋設定');
-  await settleLazy(page);
   const panel = page.locator('room-settings-panel');
+  await settleLazy(page, panel.locator('[data-testid="room-settings-tab-move"]'));
   await expect(panel).toBeVisible({ timeout: 10000 });
   await panel.locator('[data-testid="room-settings-tab-move"]').click();
   await settle(page, 100);

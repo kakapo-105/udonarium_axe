@@ -204,6 +204,11 @@
               &nbsp;{{ 'feature.chat.message.edited' | transloco }}
             }
           </div>
+          @if (chatMessage.isDicebot && !isEditing()) {
+            <div class="px-2.5">
+              <dice-roll-stage [messageIdentifier]="chatMessage.identifier" />
+            </div>
+          }
         </div>
       </div>
     }

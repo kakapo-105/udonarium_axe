@@ -106,6 +106,18 @@
               <i class="material-icons align-middle text-[13px]! @max-[320px]:m-0 @max-[320px]:text-[14px]!">settings</i
               >{{ 'feature.chat.input.colorSetting' | transloco }}
             </button>
+            @if (showsMyDice()) {
+              <button
+                data-testid="chat-my-dice"
+                class="rounded-ui-sm border-ui-border-panel text-ui-muted hover:border-ui-accent hover:bg-ui-hover hover:text-ui-accent m-0 shrink-0 cursor-pointer border border-solid bg-transparent px-1 py-0.5 transition-colors hover:shadow-none"
+                type="button"
+                [title]="'feature.chat.input.myDice' | transloco"
+                [attr.aria-label]="'feature.chat.input.myDice' | transloco"
+                (click)="openMyDice()"
+              >
+                <i class="material-icons align-middle text-[14px]!">casino</i>
+              </button>
+            }
             @if (showsTickerSwitch()) {
               <button
                 data-testid="chat-send-to-ticker"

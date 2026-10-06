@@ -48,6 +48,7 @@ import {
   decreaseBuffRound,
   deleteZeroRoundBuffs,
   parseBuffInput,
+  pileBuffRound,
   RemoteControllerSelect,
 } from '@axe/features/controller/remote-controller/remote-controller-buff';
 import {
@@ -308,8 +309,10 @@ export class RemoteControllerComponent {
    * Puts the buff typed into the buff field on every ticked target and announces it in the chat,
    * from Enter or the add button.
    *
-   * A colour chosen in the panel is added unless the typed line names one. Empty text does nothing,
-   * and with no ticked target an error is shown instead.
+   * A colour chosen in the panel is added unless the typed line names one. A `+` in front of the
+   * name adds the line's number to a buff of that name already standing, and `++` lengthens it by
+   * the rounds as well. Empty text does nothing, and with no ticked target an error is shown
+   * instead.
    */
   sendBuffChat(event: KeyboardEvent | null): void {
     if (event) event.preventDefault();
@@ -330,8 +333,13 @@ export class RemoteControllerComponent {
       appearance.color = resolveBuffColor(this.buffColorId());
       bufftext += `/${this.buffColorId()}`;
     }
-    addBuffRound(gameCharacters, parsed.buffname, parsed.sub, parsed.round, appearance);
-    this.announce(this.t('feature.controller.remote.addBuffMessage', { buff: bufftext, targets: parts }), {
+    if (parsed.piles === 'none') addBuffRound(gameCharacters, parsed.buffname, parsed.sub, parsed.round, appearance);
+    else pileBuffRound(gameCharacters, parsed.piles, parsed.buffname, parsed.sub, parsed.round, appearance);
+    const message =
+      parsed.piles === 'none'
+        ? 'feature.controller.remote.addBuffMessage'
+        : 'feature.controller.remote.stackBuffMessage';
+    this.announce(this.t(message, { buff: bufftext, targets: parts }), {
       portraitIndex: ci.portraitIndex(),
       color: ci.selectChatColor,
     });

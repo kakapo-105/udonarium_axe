@@ -226,7 +226,8 @@
         "focus": "コマへ移動",
         "gather": "この地点を中心にパーティを配置",
         "gatherOnTable": "{{name}}（卓上の{{count}}体）",
-        "gatherWithAway": "{{name}}（卓外の{{count}}体も出す）"
+        "gatherWithAway": "{{name}}（卓外の{{count}}体も出す）",
+        "allies": "同盟:"
       }
     },
     "hotbar": {
@@ -361,6 +362,7 @@
     "plTools": {
       "buffView": "バフ表示（全体）",
       "active": {
+        "title": "操作対象キャラクター",
         "openChatPalette": "{{name}} のチャットパレットを開く"
       },
       "range": {
@@ -456,7 +458,6 @@
         "stopSE": "SE停止",
         "playBGM": "BGM再生",
         "stop": "停止",
-        "addToPlaylist": "再生リストに追加",
         "removeFromPlaylist": "再生リストから削除",
         "noAudioInCategory": "この分類に音楽ファイルはありません",
         "playlistEmpty": "再生リストにBGMを追加してください",
@@ -469,7 +470,24 @@
         "note2": "※「BGM/SE」はルーム内全員で再生します。",
         "note3": "※セーブデータ（zip）に音楽ファイルは含まれません。",
         "tagAll": "全て",
-        "clickToSelectTouch": "またはここをタップして選択"
+        "clickToSelectTouch": "またはここをタップして選択",
+        "paused": "一時停止中",
+        "seek": "再生位置",
+        "activePlaylist": "いま流している再生リスト",
+        "createPlaylist": "新しい再生リストを作る",
+        "createPlaylistShort": "新規",
+        "playlistName": "再生リストの名前",
+        "playPlaylist": "この再生リストを最初から流す",
+        "deletePlaylist": "この再生リストを削除",
+        "deletePlaylistConfirm": "再生リスト「{{name}}」を削除します。入っている曲はライブラリに残ります。よろしいですか？",
+        "playlistDefaultName": "メイン",
+        "playlistUntitled": "名前なし",
+        "playlistNewName": "再生リスト {{number}}",
+        "addToPlaylistNamed": "「{{name}}」に追加",
+        "removeFromPlaylistNamed": "「{{name}}」から外す",
+        "moveToPlaylist": "別の再生リストへ移す",
+        "copyToPlaylist": "別の再生リストにコピー",
+        "playlistsOfTrack": "再生リスト"
       },
       "miniJukebox": {
         "stopped": "— 停止中 —",
@@ -479,12 +497,16 @@
         "prev": "前の曲",
         "next": "次の曲",
         "play": "再生",
-        "stop": "停止",
-        "repeatOne": "リピート1曲",
-        "repeatAll": "リピート全曲",
+        "repeatOne": "1曲リピート",
+        "repeatAll": "再生リストをリピート",
         "repeatOff": "リピートなし",
         "playlist": "再生リスト",
-        "playlistEmpty": "再生リストは空です"
+        "playlistEmpty": "再生リストは空です",
+        "pause": "一時停止",
+        "shuffleOn": "シャッフル: オン",
+        "shuffleOff": "シャッフル: オフ",
+        "prevPlaylist": "前の再生リスト",
+        "nextPlaylist": "次の再生リスト"
       },
       "cutIn": {
         "panelTitle": "カットインリスト",
@@ -947,6 +969,35 @@
       "log": {
         "reveal": "{{name}} の出目は {{face}} です。",
         "revealNoName": "ダイスの出目は {{face}} です。"
+      },
+      "myDice": {
+        "title": "マイダイス",
+        "hint": "自分が振るダイスの材質と色を選びます。",
+        "rollAgain": "もう一度振る",
+        "material": "材質",
+        "material_resin": "樹脂",
+        "material_marble": "マーブル",
+        "material_metal": "金属",
+        "material_glass": "半透明",
+        "glassDrawnLightly": "この端末は描画を軽くしているので、半透明は樹脂で描いています。ほかの人の画面では半透明で見えます。",
+        "body": "ダイスの色",
+        "bodyFollowsRoll": "発言の色に合わせる",
+        "ink": "数字の色",
+        "inkAuto": "ダイスの色から自動で決める",
+        "pickColor": "色を選ぶ",
+        "seenByAll": "部屋の全員に、この見た目で転がって見えます。設定はこのブラウザに保存されます。",
+        "picture": "画像",
+        "choosePicture": "画像を選ぶ",
+        "changePicture": "画像を替える",
+        "removePicture": "外す",
+        "fit_wrap": "巻き付ける",
+        "fit_faces": "各面に貼る",
+        "pictureMakesResin": "画像を貼っているあいだは樹脂になります。",
+        "pictureHint": "石や木目のような模様は「巻き付ける」、ロゴや紋章は「各面に貼る」が向いています。画像は部屋の全員に送られ、部屋の保存にも入ります。",
+        "trouble_notPicture": "画像として読めませんでした。",
+        "trouble_tooLarge": "8MB を超える画像は使えません。",
+        "trouble_unstored": "このブラウザに画像を保存できませんでした。",
+        "trouble_notAllowed": "見学中はダイスに画像を貼れません。"
       }
     },
     "effect": {
@@ -1465,7 +1516,9 @@
         "showRoundLine": "ラウンド操作",
         "showPartsHint": "外した行は詰まります。この設定はこの端末だけのものです",
         "displayItemsRich": "表示項目（リッチ）",
-        "displayItemsTable": "表示項目（簡略）"
+        "displayItemsTable": "表示項目（簡略）",
+        "foldsOnOpen": "開いたときフォルダを畳んでおく",
+        "foldsOnOpenHint": "次に開くインベントリから効きます。フォルダに入れていないコマはそのまま出ます"
       }
     },
     "file": {
@@ -1523,7 +1576,8 @@
         "radialDisplay": "表示",
         "radialMove": "移動",
         "radialDisclosure": "公開・所有",
-        "radialObject": "コマ操作"
+        "radialObject": "コマ操作",
+        "moveMode": "移動の仕方"
       },
       "panel": {
         "sheet": "キャラクターシート",
@@ -1590,6 +1644,7 @@
         "failed": "取り込みに失敗しました。",
         "success": "キャラコマを生成しました。",
         "successNoImage": "キャラコマを生成しました（画像は取得できなかったため、後から設定してください）。",
+        "systemUnknown": "取り込みました。倉庫のデータは URL を貼ると、特技表とチャットパレットも一緒に入ります。",
         "sourceAppspot": "キャラクターシート倉庫(character-sheets.appspot.com)：JSONまたはキャラURLを貼り付け（自動取得）",
         "sourceYtsheet": "ゆとシートⅡ(SW2.5)：キャラURLを貼り付け（自動取得）、または ?mode=json のJSONを貼り付け",
         "unsupported": "対応していないURLです。ココフォリアのコマJSONを貼り付けてください。",
@@ -1634,7 +1689,12 @@
             "charaxiv": "ココフォリア用コピー経由で取り込み"
           }
         }
-      }
+      },
+      "moveMode_walk": "歩く",
+      "moveMode_climb": "登る",
+      "moveMode_swim": "泳ぐ",
+      "moveMode_crawl": "這う",
+      "moveMode_fly": "飛ぶ"
     },
     "light": {
       "contextMenu": {
@@ -1954,6 +2014,8 @@
         "surfaceWestWall": "西壁",
         "createWithOptions": "コマを作る…",
         "tiledTextureOn": "テクスチャをタイル貼りにする",
+        "terrainToGlass": "テクスチャを外して透明にする",
+        "terrainDressGlass": "テクスチャを選ぶ（透明をやめる）",
         "tiledTextureOff": "テクスチャを引き伸ばしに戻す",
         "doorOpen": "扉を開く",
         "doorClose": "扉を閉じる",
@@ -2042,6 +2104,8 @@
         "sectionDarkness": "暗闇（視界・照明）",
         "darknessEnabled": "暗闇を有効化",
         "lightSnapToGrid": "照明をマス目に沿わせる",
+        "magneticAnomaly": "磁場異常（方位磁石が狂う）",
+        "magneticAnomalyHint": "方位磁石ウィジェットの針が定まらなくなります。このテーブルにいるあいだだけです。",
         "darknessLevel": "暗さ",
         "globalIllumination": "環境光",
         "ambientColor": "暗闇の色",
@@ -2226,7 +2290,8 @@
           "ground": "地面",
           "standing": "地形",
           "fires": "灯り",
-          "hidden": "隠し扉"
+          "hidden": "隠し扉",
+          "traps": "罠"
         },
         "title": "マップ生成",
         "gmOnly": "このツールはゲームマスター専用です",
@@ -2258,7 +2323,8 @@
           "doubleDoors": "両開きの割合（％）",
           "muster": "入口に集めるパーティ",
           "musterNobody": "集めない",
-          "fog": "戦場の霧をかけた状態にする"
+          "fog": "戦場の霧をかけた状態にする",
+          "traps": "罠"
         },
         "actions": {
           "generate": "生成する",
@@ -2280,7 +2346,8 @@
           "corridorWidth": "広くするほど部屋も間隔も大きくなり、置ける部屋は減ります",
           "doorWidth": "扉が通路より広いときは、その分だけ入口の壁を削ります。入口のほうが広いときは扉が並びます",
           "doubleDoors": "両開きは、幅を半分ずつ分けた 2 枚の扉になります。幅 4 なら 2 マスの扉が 2 枚です",
-          "muster": "選んだパーティのコマを入口の近くに並べます。ほかのコマは動かしません"
+          "muster": "選んだパーティのコマを入口の近くに並べます。ほかのコマは動かしません",
+          "traps": "部屋と通路に仕掛けます。最初の部屋と階段の足元には置きません"
         },
         "entrance": {
           "stair": "階段（地下へ降りる）",
@@ -2317,6 +2384,14 @@
           "0": "四角",
           "1": "ヘクス（縦）",
           "2": "ヘクス（横）"
+        },
+        "trap": {
+          "pit": "落とし穴",
+          "dart": "毒針",
+          "blade": "刃の罠",
+          "alarm": "警報線",
+          "rune": "爆発の紋章",
+          "roll": "回避"
         }
       },
       "movePlan": {
@@ -2354,8 +2429,17 @@
         "took": "受けた",
         "gave": "回復した",
         "tookFrom": "【{{trigger}}】{{piece}} は {{element}} を {{amount}} {{verb}}",
-        "sprang": "【{{trigger}}】{{piece}} が踏んだ"
-      }
+        "sprang": "【{{trigger}}】{{piece}} が踏んだ",
+        "said": "【{{trigger}}】{{say}}",
+        "asks": "【{{trigger}}】{{piece}} は {{check}} で判定",
+        "asksFor": "【{{trigger}}】{{piece}} は {{check}} で {{target}} 以上",
+        "rolled": "【{{trigger}}】{{piece}} の判定 {{rolled}} / {{target}} — {{outcome}}",
+        "made": "成功",
+        "missed": "失敗"
+      },
+      "shownTo_master": "GM だけ",
+      "shownTo_sight": "視界に入ったら",
+      "shownTo_room": "全員"
     },
     "roomSettings": {
       "title": "部屋設定",
@@ -2388,6 +2472,15 @@
       "diagonalMove_double": "常に 2 マスとして数える",
       "diagonalMoveHint": "交互に数えるのは D&D 3.5e やパスファインダー 1e の数え方。1 回目の斜めが 1 マス、2 回目が 2 マスになる。",
       "piecesShareCells": "同じマスに複数のコマを置ける（切ると、他のコマがいるマスは移動先に出さない）",
+      "samePartyPassage": "同じパーティのコマ",
+      "otherPartyPassage": "別のパーティのコマ",
+      "noPartyPassage": "未所属のコマ",
+      "piecePassage_block": "通れない",
+      "piecePassage_pass": "通れるが止まれない",
+      "piecePassage_cost": "割高で通れて、止まれない",
+      "piecePassage_share": "通れて止まれる",
+      "piecePassageCost": "通り抜けの追加コスト",
+      "piecePassageHint": "パーティは同行パネルで編成します。どこにも入っていないコマは「未所属のコマ」として数えます。ここに触れるまでは、上の「同じマスに複数のコマを置ける」がそのまま効きます。",
       "moveRangeElementNames": "参照する項目",
       "moveRangeHint": "項目名はカンマ区切りで、シートに先に見つかったものを使う。シートの値を 1 マスの距離で割ってマス数にする（0 なら割らない）。単位がマスでも同じで、1 マスの距離を 0.5 にするとシートの 1 マスが卓の 2 マスになる。シートの単位が卓と違えば、フィートとメートルは換算する。卓がメートルかフィートでシートが「マス」なら、そのままマス数として読む。",
       "cellDistance": "1 マスの距離",
@@ -2418,6 +2511,12 @@
       "engagementCountsSizeHint": "大きいコマほど重く数える（切ると 1 体 1 として数える）",
       "zocHint": "NPC かどうかが違うコマを敵とみなし、その周りのマスが移動を妨げる。自分に見えていないコマは ZOC を張らない。",
       "diceBotHint": "部屋に入ったときに選ばれるダイスボットです",
+      "diceStage": "ダイスの演出",
+      "diceStage_off": "出さない",
+      "diceStage_frame": "セリフの枠",
+      "diceStage_table": "卓の上",
+      "diceStage_both": "両方",
+      "diceStageHint": "チャットで振ったダイスが 3D で転がり、出た目で止まります。シークレットのロールは振った人の画面にだけ出ます",
       "sectionControllerResources": "リモコンに出す数値とリソース",
       "controllerResourcesShowAll": "すべて出す",
       "controllerResourcesHideAll": "すべて外す",
@@ -2504,7 +2603,14 @@
       "tickerEnabled": "外周ティッカーを表示",
       "tickerSpeed": "速度",
       "tickerSpeedUnit": "px/秒",
-      "replayHint": "記録したセッションを読み返したり、盤面ごと再生したりします。記録はこの端末の中だけに残ります。"
+      "replayHint": "記録したセッションを読み返したり、盤面ごと再生したりします。記録はこの端末の中だけに残ります。",
+      "hostilityBy": "敵味方の分け方",
+      "hostilityBy_npc": "NPC かどうかで分ける",
+      "hostilityBy_party": "パーティで分ける",
+      "sizeSlipsPast": "サイズが 2 マス以上違う相手のマスは通り抜けられる（止まれない）",
+      "handTracesWay": "掴んで運んだときも、通り道の仕掛けを発動させる",
+      "squeezes": "大きなコマを、通れない隙間に押し込めるようにする（1 マスぶん余計に消費）",
+      "jumpCells": "跳躍の距離（マス。0 で移動力いっぱい）"
     },
     "skin": {
       "title": "スキン",
@@ -2619,7 +2725,10 @@
       "name_grassland": "草原",
       "name_coast": "海岸",
       "name_wasteland": "荒野",
-      "name_academy": "学園×青春"
+      "name_academy": "学園×青春",
+      "mat": "ダイスのマット",
+      "matColor": "マットの色",
+      "matHint": "チャットの枠でダイスが転がる面です。画像を選ぶと色の上に敷きます。マットはこの画面にだけ見え、ほかの人の画面は変わりません。"
     },
     "lobby": {
       "peerMenu": {
@@ -2761,7 +2870,8 @@
         "alarmMenuTitle": "アラームタイマ",
         "tabSettingTitle": "チャットタブ設定",
         "noTarget": "対象が未選択です",
-        "writingOthers": "他 {{count}} 人 入力中"
+        "writingOthers": "他 {{count}} 人 入力中",
+        "titleWithCount": "{{title}}（{{count}}）"
       },
       "input": {
         "you": "（あなた）",
@@ -2779,7 +2889,8 @@
         "textareaPlaceholderShort": "メッセージを入力",
         "sendToTicker": "ティッカー",
         "sendToTickerHint": "この発言を画面の外周にも流します",
-        "tools": "入力の設定"
+        "tools": "入力の設定",
+        "myDice": "マイダイス"
       },
       "tab": {
         "unnamedCharacter": "無名のキャラクター",
@@ -2876,7 +2987,9 @@
         "soundType_bubble": "バブル",
         "soundType_cyber": "サイバー",
         "soundType_notify1": "通知1",
-        "soundType_notify2": "通知2"
+        "soundType_notify2": "通知2",
+        "messageCount": "タイトルに発言数を出す",
+        "messageCountTooltip": "チャット窓のタイトルの横に、そのタブの発言数を出します。自分に見えている行だけを数えます"
       },
       "systemAvatar": {
         "title": "システムちゃん",
@@ -3256,7 +3369,7 @@
         "title": "機能塗り",
         "hint": "見た目ではなく卓のはたらきを塗ります。書き出す画像には入りません。",
         "role": "種類",
-        "role_moveBlock": "立入禁止",
+        "role_moveCost": "移動コスト",
         "role_terrain": "地形（壁）",
         "role_mask": "マップマスク",
         "terrainHeight": "壁の高さ",
@@ -3265,6 +3378,8 @@
         "terrainBlocksClimb": "登れない",
         "maskColor": "マスクの色",
         "maskOpacity": "マスクの濃さ",
+        "moveCostHint": "塗ったマスの通りにくさを決めます。通れないマスも、渡るのに移動力を余分に使うマスも、この 1 つで塗ります。",
+        "moveCostColor": "地面の色",
         "terrainMode": "見せ方",
         "terrainMode_both": "壁と床",
         "terrainMode_wall": "壁だけ",
@@ -3302,8 +3417,7 @@
         "triggerTargets_all": "全部のコマ",
         "triggerTargets_pc": "PC のコマ",
         "triggerTargets_npc": "NPC のコマ",
-        "triggerOnce": "一度きり",
-        "triggerOpen": "全員に見せる",
+        "triggerOpen": "見せる相手",
         "triggerColor": "色",
         "triggerEffect": "エフェクト",
         "triggerElementPlaceholder": "HP",
@@ -3311,7 +3425,54 @@
         "triggerAmountPlaceholder": "2d6",
         "triggerAmountHint": "数かダイス式。マイナスを書けば回復です（例: 5 / 2d6 / 1d6+2 / -3）",
         "triggerEffectNone": "出さない",
-        "triggerReveals": "発動したら見せる"
+        "triggerReveals": "発動したら見せる",
+        "moveCostCharge": "通りにくさ",
+        "moveCostBlocks": "通れない",
+        "moveCostStep": "+{{count}} マス",
+        "triggerSay": "出す文章",
+        "triggerSayPlaceholder": "足元の石が沈んだ",
+        "triggerSayHint": "発動したときにチャットへ出る 1 行。空欄なら「踏んだ」とだけ出ます",
+        "triggerSilent": "チャットを伏せる（GM だけが読める）",
+        "triggerAilment": "与える状態異常",
+        "triggerAilmentPlaceholder": "毒",
+        "triggerAilmentRounds": "状態異常のラウンド数",
+        "triggerCheck": "求める判定",
+        "triggerCheckPlaceholder": "敏捷",
+        "triggerCheckTarget": "目標値",
+        "triggerCheckHint": "チャットに判定を促す行が出ます。振るのは本人で、成否で量は変わりません",
+        "triggerSound": "効果音",
+        "triggerCutIn": "カットイン",
+        "triggerMediaNone": "鳴らさない",
+        "triggerWarps": "別のマスへ飛ばす",
+        "triggerWarpCol": "飛び先の列",
+        "triggerWarpRow": "飛び先の行",
+        "triggerWarpHint": "ここで移動が終わったコマを、指定のマスへ飛ばします。別のテーブルを選ぶと、部屋の全員の表示もそのテーブルへ移ります",
+        "triggerMoment_turnStart": "手番の開始時（そのマスにいたら）",
+        "triggerMoment_turnEnd": "手番の終了時（そのマスにいたら）",
+        "triggerRepeat": "何回起きるか",
+        "triggerRepeat_always": "何度でも",
+        "triggerRepeat_once": "一度きり（全体で 1 回）",
+        "triggerRepeat_oncePerPiece": "コマごとに 1 回",
+        "triggerRepeat_oncePerRound": "1 ラウンドに 1 回",
+        "role_hazard": "危険地帯",
+        "hazardHint": "見た目・通りにくさ・起きることを 1 回で置きます。置いたあとは 3 つ別々に直せます",
+        "hazardKind": "種類",
+        "hazardElement": "削るリソース",
+        "hazardKind_bog": "沼（足を取られる）",
+        "hazardKind_lava": "溶岩（居続けると焼ける）",
+        "hazardKind_fog": "濃霧（進みにくい）",
+        "hazardKind_ice": "氷（踏むと転ぶ）",
+        "hazardKind_briar": "茨（踏むと傷つく）",
+        "hazardKind_vent": "噴出口（居続けると焼ける）",
+        "triggerWarpTable": "飛ばす先のテーブル",
+        "triggerWarpHere": "（このテーブル）",
+        "triggerCheckRoll": "自分で振るダイス",
+        "triggerPassAmount": "成功したときの増減",
+        "triggerCheckRollHint": "「1d20+3」のように書くと、卓が代わりに振って目標値と比べます。空欄なら振るのは本人",
+        "moveCostHalves": "道（半分で進める）",
+        "moveCostHalvesHint": "1 マスを 0.5 消費で渡れます。下に何が塗ってあっても道が優先されるので、沼を貫く街道が作れます",
+        "triggerMoment_press": "押したとき（スイッチ）",
+        "triggerPressHint": "塗ったマスをクリックすると、下の動作が起きます。発言する人・押せる距離・回数・秘密の結果もここで決めます。"
       },
       "stampCategories": {
         "door": "扉",
@@ -3822,7 +3983,10 @@
         "density": "濃さを変える",
         "size": "広さを変える",
         "radialAppearance": "見た目",
-        "radialObject": "オブジェクト操作"
+        "radialObject": "オブジェクト操作",
+        "blocksSight": "視線を遮る",
+        "brightness": "明るさ",
+        "shownTo": "見せる相手"
       },
       "kind": {
         "fog": "濃霧",
@@ -3839,7 +4003,14 @@
         "lava": "溶岩",
         "blaze": "地面の炎上",
         "frost": "氷結"
-      }
+      },
+      "blocksSightLabel": "視線を遮る",
+      "brightnessLabel": "明るさ",
+      "brightness_none": "そのまま",
+      "brightness_dark": "暗闇",
+      "brightness_dim": "薄暗い",
+      "brightness_bright": "明るい",
+      "shownToLabel": "見せる相手"
     },
     "buffManager": {
       "title": "バフマネージャー",
@@ -3852,6 +4023,10 @@
       "operator": "操作",
       "modifierNote": "{{target}} を自動補正中",
       "builderTitle": "自動計算バフの記法を作る",
+      "builderStacks": "重ねがけ",
+      "builderStacksHint": "同名バフに足す（上書きしない）",
+      "builderExtends": "ラウンドも足す",
+      "builderExtendsHint": "残ラウンドに足す（長いほう勝ちにしない）",
       "copy": "コピー",
       "copied": "コピーしました",
       "buffCount": "{{n}} 件",
@@ -4058,12 +4233,184 @@
       "effect": "効果",
       "effectPlaceholder": "バフに添える一行（例: 毎ラウンド HP-1）",
       "iconImage": "画像",
-      "pickIconImage": "画像から選ぶ"
+      "pickIconImage": "画像から選ぶ",
+      "stat": "動かす項目",
+      "statPlaceholder": "移動",
+      "statHint": "シートの項目名を書くと、付いている間その値を動かし、外すと動かした分だけ戻します。空欄なら何も動かしません"
     },
     "seatDisplay": {
       "title": "この端末の表示",
       "widgets": {
         "label": "ウィジェット"
+      }
+    },
+    "compass": {
+      "anomaly": "磁場異常",
+      "face": {
+        "modern": "現代風",
+        "fantasy": "ファンタジー風",
+        "sf": "SF 風"
+      },
+      "point": {
+        "n": "北",
+        "ne": "北東",
+        "e": "東",
+        "se": "南東",
+        "s": "南",
+        "sw": "南西",
+        "w": "西",
+        "nw": "北西"
+      }
+    },
+    "menuEditor": {
+      "title": "メニューの編集",
+      "hint": "この端末だけの並びです。左端の取っ手をつかんで動かすと、順番が変わり、小窓にも出し入れできます。",
+      "drag": "つかんで動かす",
+      "moveInto": "移す先",
+      "group": "小窓",
+      "topLevel": "メニュー直下",
+      "unnamedGroup": "名前のない小窓",
+      "lost": "この版にない項目",
+      "add": "項目を足す",
+      "addGroup": "小窓を作る",
+      "newGroup": "新しい小窓",
+      "searchCommand": "名前で探す",
+      "allAdded": "足せる項目はもうありません",
+      "notFound": "見つかりません",
+      "remove": "外す",
+      "empty": "項目がありません",
+      "reset": "初期配置に戻す",
+      "resetConfirm": "このメニューを初期配置に戻します。よろしいですか？",
+      "resetAll": "すべてのメニューを初期配置に戻す",
+      "resetAllConfirm": "Fav メニューと GM／PL ツールを、すべて初期配置に戻します。よろしいですか？",
+      "surface": {
+        "fab": "Fav メニュー",
+        "gmToolbar": "GM ツール",
+        "plToolbar": "PL ツール"
+      },
+      "writeOut": "書き出す",
+      "readIn": "読み込む",
+      "readFailed": "この端末の並びとして読めないファイルです"
+    },
+    "boardSwitch": {
+      "panelTitle": "スイッチ - {{name}}",
+      "unlabeled": "スイッチ",
+      "masterOnly": "スイッチの中身は GM だけが見られます",
+      "label": "名前",
+      "labelPlaceholder": "盤面に出す名前（例: 宝箱を開ける）",
+      "speaker": "発言者",
+      "speakerOption": {
+        "presser": "押した人（選んでいるキャラ）",
+        "host": "この物の名前",
+        "system": "システム"
+      },
+      "tab": "タブ",
+      "tabOpen": "押した人が開いているタブ",
+      "guests": "見学者も押せる（タブで見学者が発言できるとき）",
+      "actionsHint": "押すと上から順に動きます。2 つ目からは、前の動作のあとの待ちを入れられます（最大 10 秒）。",
+      "kind": {
+        "say": "発言",
+        "sound": "効果音",
+        "effect": "エフェクト",
+        "cutIn": "カットイン",
+        "secret": "秘密の結果",
+        "reveal": "伏せた物を見せる",
+        "conceal": "伏せる",
+        "removeSelf": "押した物を消す",
+        "spawn": "コマを呼び出す",
+        "showTable": "テーブルを切り替える",
+        "carry": "押した人のコマを運ぶ",
+        "tableSetting": "テーブル設定を変える"
+      },
+      "delay": "待ち（秒）",
+      "moveUp": "上へ",
+      "moveDown": "下へ",
+      "removeAction": "この動作を消す",
+      "sayPlaceholder": "チャットに送る文。ダイス（2d6+3）や {HP} も書けます",
+      "unchosen": "（選んでください）",
+      "missing": "{{name}}（この部屋にありません）",
+      "unknownAction": "この版では扱えない動作（残しておきます）",
+      "noActions": "まだ何もしません。下のボタンで動作を足します。",
+      "try": "試しに押す",
+      "refused": {
+        "nothing": "何もしないスイッチです",
+        "watching": "見学中は押せません",
+        "cannotSpeak": "このタブでは発言できません",
+        "retired": "もう押せません",
+        "busy": "少し待ってから押してください",
+        "spent": "もう押せません（回数を使い切りました）",
+        "noPiece": "卓の上に動かしているキャラがいません",
+        "tooFar": "もっと近づかないと押せません",
+        "unseen": "見えていないので押せません"
+      },
+      "menu": {
+        "edit": "スイッチを設定…",
+        "try": "スイッチを試しに押す",
+        "remove": "スイッチを外す",
+        "reset": "押された記録を消す",
+        "conceal": "伏せる（スイッチで見せる）",
+        "concealed": "伏せた物を見せる"
+      },
+      "range": "押せる距離",
+      "rangeHint": "マス以内（0 はどこからでも）",
+      "needsSight": "見えているときだけ押せる",
+      "repeat": "回数",
+      "repeatOption": {
+        "always": "何度でも",
+        "once": "一度きり（全体で 1 回）",
+        "oncePerPiece": "キャラごとに 1 回",
+        "oncePerRound": "1 ラウンドに 1 回"
+      },
+      "reader": {
+        "presser": "押した人と GM だけが読める",
+        "master": "GM だけが読める"
+      },
+      "secretPlaceholder": "伏せて書く文。{HP} などの参照も使えます",
+      "pressHere": "クリックで押す",
+      "revealHint": "GM が伏せておいた物を、伏せたときの場所に戻して全員に見せます。",
+      "concealHint": "卓の上の物を、その場所のまま伏せます。伏せた地形は通れて、見通せます。",
+      "removeSelfHint": "ほかの動作を終えてから、スイッチの地形を卓から消します。塗りの場合は片付けて GM だけに見える状態にします。試し押しでは消えません。",
+      "unnamedThing": "名前なし",
+      "listed": "{{name}}（{{note}}）",
+      "groundPressed": "押された塗り",
+      "groundRetired": "片付けた塗り",
+      "thing": {
+        "terrain": "地形",
+        "table-mask": "マップマスク",
+        "character": "キャラクター",
+        "text-note": "共有メモ",
+        "dice-symbol": "ダイス",
+        "coin": "コイン",
+        "card-stack": "山札"
+      },
+      "spawnCount": "数",
+      "spawnPlace": {
+        "host": "スイッチのそばに置く",
+        "presser": "押した人のコマのそばに置く"
+      },
+      "spawnHint": "選んだキャラクターの複製を、近い空きマスから順に並べます。ひな形は墓場や伏せた場所に置いておけます。",
+      "where": {
+        "table": "卓上",
+        "graveyard": "墓場",
+        "concealed": "伏せ",
+        "other": "保管"
+      },
+      "showTableHint": "全員の見ているテーブルを選んだテーブルに切り替えます（場面転換）。",
+      "carryCol": "列",
+      "carryRow": "行",
+      "carryHere": "見ているテーブルのまま",
+      "carryHint": "押した人が選んでいるキャラのコマを、指定したマスへ運びます。別のテーブルを選ぶと全員の視点も移ります。",
+      "setting": {
+        "darkness": "暗闇",
+        "fog": "戦場の霧",
+        "image": "テーブル画像",
+        "bgm": "BGM",
+        "bgmStop": "先に BGM を止める"
+      },
+      "toggle": {
+        "keep": "そのまま",
+        "on": "オン",
+        "off": "オフ"
       }
     }
   },
@@ -4071,6 +4418,7 @@
     "fab": {
       "manual": "マニュアル",
       "menuOpen": "メニューを開く",
+      "menuHint": "メニューを開く（右クリックで編集・初期化）",
       "menuClose": "メニューを閉じる",
       "peerMenu": "接続",
       "chat": "チャット",
@@ -4084,6 +4432,7 @@
       "gameResources": "ゲームリソース",
       "media": "メディア",
       "clock": "時計",
+      "compass": "方位磁石",
       "connectionQuality": "通信品質",
       "miniPlayer": "ミニプレイヤー",
       "visualNovel": "ノベルモード",
@@ -4121,7 +4470,8 @@
       "display": "表示",
       "widgets": "ウィジェット",
       "foldToolbar": "ツールバーを畳む",
-      "unfoldToolbar": "ツールバーを開く"
+      "unfoldToolbar": "ツールバーを開く",
+      "buttonGuide": "ボタンの名前をすべて表示（? キー）"
     },
     "roomDataDefault": "ルームデータ"
   },
@@ -4180,6 +4530,7 @@
       "noChangeTarget": "変更項目が未選択です",
       "noTargetCharacter": "対象キャラクターが未選択です",
       "addBuffMessage": "バフを付与 {{buff}} > {{targets}}",
+      "stackBuffMessage": "バフを加算 {{buff}} > {{targets}}",
       "decBuffRoundMessage": "バフのRを減少 {{targets}}",
       "deleteZeroBuffMessage": "0R以下のバフを消去 {{targets}}",
       "changeValueMessage": "[{{name}}]変更[{{sign}}{{value}}]＞{{detail}}",
@@ -4299,6 +4650,7 @@
       "formula": "計算式",
       "imagePopupOriginal": "ポップアップで原寸表示",
       "pieceGauge": "コマにバーを表示",
+      "resourceSlider": "スライダー表示",
       "gaugeInverted": "マイナスリソース",
       "changeEffect": "増減でエフェクト",
       "changeSound": "増減で効果音",
@@ -4415,6 +4767,14 @@
       "transparency": "透過率",
       "ghost": "透明モード",
       "tabClose": "このパネルを閉じる"
+    },
+    "iconPicker": {
+      "open": "{{name}}（クリックでアイコンを選ぶ）",
+      "search": "アイコン名で探す",
+      "clear": "既定に戻す",
+      "none": "見つかりません",
+      "found": "{{count}} 件",
+      "hint": "アイコン名を入れると、この書体で描けるものから探します"
     },
     "portraitPicker": {
       "title": "立ち絵",

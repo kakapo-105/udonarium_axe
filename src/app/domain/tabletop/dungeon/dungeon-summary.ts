@@ -1,4 +1,5 @@
 import { DungeonLayout, DungeonRoomRoleValue } from '@axe/domain/tabletop/dungeon/dungeon-layout';
+import { TrapKind } from '@axe/domain/tabletop/trap-presets';
 
 export interface DungeonSummaryLabels {
   roleName(role: DungeonRoomRoleValue): string;
@@ -9,6 +10,8 @@ export interface DungeonSummaryLabels {
   torch: string;
   doors: string;
   hidden: string;
+  traps: string;
+  trapName(kind: TrapKind): string;
 }
 
 export interface DungeonSummaryInput {
@@ -56,6 +59,15 @@ export function buildDungeonSummary(input: DungeonSummaryInput): string {
       notes.join(' '),
     ];
     lines.push(cells.filter((cell) => cell.length > 0).join('  '));
+  }
+
+  // Set out at the end rather than under the rooms they lie in: a passage is nobody's room,
+  // and a master looking for what the party is about to walk into wants one list of it.
+  if ((layout.traps ?? []).length > 0) {
+    lines.push('', labels.traps);
+    for (const trap of layout.traps ?? []) {
+      lines.push(`(${trap.x}, ${trap.y})  ${labels.trapName(trap.kind)}`);
+    }
   }
 
   return lines.join('\n');

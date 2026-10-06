@@ -99,6 +99,38 @@ export class Transform {
   }
 
   /**
+   * The matrix a point of this element goes through to reach the page: every transform and
+   * perspective above it, and the element's own border box, as a CSS `matrix3d()` lists its numbers.
+   * A point's place on the page is its x and y over its w, as `localToGlobal` gives it.
+   */
+  sceneMatrix(out: Matrix3D = new Matrix3D()): Matrix3D {
+    const m = this.sceneTransform;
+    out.setData([
+      m.m11,
+      m.m12,
+      m.m13,
+      m.m14,
+      m.m21,
+      m.m22,
+      m.m23,
+      m.m24,
+      m.m31,
+      m.m32,
+      m.m33,
+      m.m34,
+      m.m41,
+      m.m42,
+      m.m43,
+      m.m44,
+    ]);
+    return out.appendPosition(
+      this.paddingLeft - this.marginLeft - this.borderLeft,
+      this.paddingTop - this.marginTop - this.borderTop,
+      0
+    );
+  }
+
+  /**
    * Converts a point in this element's coordinates into another element's, building a transform for
    * the other element and throwing it away afterwards.
    *

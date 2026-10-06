@@ -16,6 +16,15 @@ export interface CharacterImportResult {
   error: CharacterImportError | null;
   imageResolved: boolean;
   service: string;
+  /**
+   * Whether the sheet came in without the system it belongs to, which only its address carries.
+   *
+   * The warehouse's json names no system, and eight of its systems lay their powers out under the
+   * same key, so a pasted one cannot be told from another and is read as far as anything can be
+   * read without knowing. Its address says which system it is, and brings the skill table and the
+   * palette with it.
+   */
+  systemUnknown: boolean;
 }
 
 let jsonpCounter = 0;
@@ -46,20 +55,38 @@ export class CharacterImportService {
   async importFromText(text: string): Promise<CharacterImportResult> {
     const plan = detectImportFetchPlan(text);
     if (plan.kind === 'unsupported') {
-      return { character: null, error: 'unsupported', imageResolved: false, service: plan.service };
+      return {
+        character: null,
+        error: 'unsupported',
+        imageResolved: false,
+        service: plan.service,
+        systemUnknown: false,
+      };
     }
 
     let json: unknown;
     try {
       json = await this.fetchJson(plan, text);
     } catch {
-      return { character: null, error: 'fetch-failed', imageResolved: false, service: serviceOf(plan) };
+      return {
+        character: null,
+        error: 'fetch-failed',
+        imageResolved: false,
+        service: serviceOf(plan),
+        systemUnknown: false,
+      };
     }
 
     await loadLabelMaps();
     const imported = parseImportedCharacterJson(json, plan.kind === 'jsonp' ? plan.system : undefined);
     if (!imported) {
-      return { character: null, error: 'unrecognized', imageResolved: false, service: serviceOf(plan) };
+      return {
+        character: null,
+        error: 'unrecognized',
+        imageResolved: false,
+        service: serviceOf(plan),
+        systemUnknown: false,
+      };
     }
 
     try {
@@ -68,9 +95,15 @@ export class CharacterImportService {
       character.owner = PeerCursor.myCursor?.userId ?? '';
       if (PeerCursor.isMyselfGameMaster) character.disclosureMode = DisclosureMode.GameMaster;
       character.update();
-      return { character, error: null, imageResolved: imageIdentifier !== '', service: imported.sourceFormat };
+      return {
+        character,
+        error: null,
+        imageResolved: imageIdentifier !== '',
+        service: imported.sourceFormat,
+        systemUnknown: plan.kind === 'json' && imported.sourceFormat === 'appspot',
+      };
     } catch {
-      return { character: null, error: 'failed', imageResolved: false, service: serviceOf(plan) };
+      return { character: null, error: 'failed', imageResolved: false, service: serviceOf(plan), systemUnknown: false };
     }
   }
 

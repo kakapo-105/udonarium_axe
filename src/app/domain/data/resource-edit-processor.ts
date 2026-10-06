@@ -61,9 +61,12 @@ export class ResourceEditProcessor {
    * A `t` prefix aims a command at the message's target character instead of the speaker, and an `s` prefix
    * makes the report a secret. A `&&` command sweeps buffs off every piece on the table instead; see
    * {@link parseBuffRemovalCommand}. The work continues asynchronously and ends in a system message on the same
-   * chat tab.
+   * chat tab; the promise returned settles once it has.
    */
-  checkResourceEditCommand(originalMessage: ChatMessage, messageTargetContext: ChatMessageTargetContext[]) {
+  checkResourceEditCommand(
+    originalMessage: ChatMessage,
+    messageTargetContext: ChatMessageTargetContext[]
+  ): Promise<void> {
     const resourceByCharacter: ResourceByCharacter[] = [];
     const buffByCharacter: BuffByCharacter[] = [];
     const buffSweeps: string[] = [];
@@ -119,7 +122,7 @@ export class ResourceEditProcessor {
         }
       }
     }
-    this.resourceEditProcess(
+    return this.resourceEditProcess(
       sendFromObject,
       resourceByCharacter,
       buffByCharacter,

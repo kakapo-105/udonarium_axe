@@ -1,5 +1,6 @@
 import {
   characterSceneKey,
+  collectBrightAreas,
   collectLights,
   collectSegments,
   collectShadowCasters,
@@ -9,6 +10,7 @@ import {
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { GameTable } from '@axe/domain/tabletop/game-table';
 import { segmentBlocks } from '@axe/domain/tabletop/los/segments';
+import { TableAmbience } from '@axe/domain/tabletop/table-ambience';
 import { Terrain } from '@axe/domain/tabletop/terrain';
 import { LightSpec } from '@axe/domain/tabletop/vision-types';
 
@@ -83,6 +85,63 @@ describe('vision scene assembly', () => {
     const segments = collectSegments(table, 50, 500, 400);
     expect(segments.sight).toHaveLength(8);
     expect(segments.sight[4].heightPx).toBe(100);
+  });
+
+  describe('a bank of something hanging in the air', () => {
+    function bank(blocksSight: boolean): GameTable {
+      const table = makeTable();
+      const fog = TableAmbience.create('霧', 'fog', 3, 2);
+      fog.location = { name: 'table', x: 100, y: 100 };
+      fog.blocksSight = blocksSight;
+      table.appendChild(fog);
+      return table;
+    }
+
+    it('stands in the way of sight where nobody sees through it', () => {
+      const segments = collectSegments(bank(true), 50, 500, 400);
+
+      expect(segments.sight).toHaveLength(8);
+      expect(segments.sight[4].heightPx).toBe(100);
+      expect(segments.sight[4].basePx).toBe(0);
+    });
+
+    it('stands in the way of nothing where it is only a look', () => {
+      const segments = collectSegments(bank(false), 50, 500, 400);
+
+      expect(segments.sight).toHaveLength(4);
+    });
+
+    it('is no patch of brightness until it is told to be one', () => {
+      expect(collectBrightAreas(bank(false), 50)).toEqual([]);
+    });
+
+    it('holds the ground under it at the brightness it was given', () => {
+      const table = makeTable();
+      const shaft = TableAmbience.create('光', 'fog', 3, 2);
+      shaft.location = { name: 'table', x: 100, y: 100 };
+      shaft.brightness = 'bright';
+      table.appendChild(shaft);
+
+      expect(collectBrightAreas(table, 50)).toEqual([
+        { x: 100, y: 100, widthPx: 150, heightPx: 100, level: 1, snuffs: false },
+      ]);
+    });
+
+    it('puts the light out under it where it is a pool of darkness', () => {
+      const table = makeTable();
+      const pool = TableAmbience.create('闇', 'fog', 2, 2);
+      pool.location = { name: 'table', x: 0, y: 0 };
+      pool.brightness = 'dark';
+      table.appendChild(pool);
+
+      expect(collectBrightAreas(table, 50)[0]).toMatchObject({ level: 0, snuffs: true });
+    });
+
+    it('stops no light, being thick air rather than stone', () => {
+      const segments = collectSegments(bank(true), 50, 500, 400);
+
+      expect(segments.light).toEqual([]);
+    });
   });
 
   it('gives the edges a bottom as well, so an arch can be seen under', () => {

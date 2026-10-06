@@ -141,6 +141,7 @@ Comment: Noto Sans JP / Noto Sans KR (Noto Sans CJK 2.004 の地域別サブセ�
  リプレイ動画の字幕や章扉を、閲覧する端末のフォントによらず同じ字形で書き出すために使います。
  JP は JIS X 0208 の第 1・第 2 水準・かな・記号・ラテン文字、KR は KS X 1001 のハングル
  2,350 字・字母・記号・ラテン文字に字を絞り、woff2 に変換したものです。
+ 3D ダイスの数字 0〜9 は、この JP の Bold から字形の輪郭を取り出してプログラムに埋め込んだものです。
  配布元: https://github.com/notofonts/noto-cjk
 
 License: OFL-1.1

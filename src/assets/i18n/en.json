@@ -226,7 +226,8 @@
         "focus": "Focus on token",
         "gather": "Gather a party on this spot",
         "gatherOnTable": "{{name}} (the {{count}} on the table)",
-        "gatherWithAway": "{{name}} (bring in {{count}} more)"
+        "gatherWithAway": "{{name}} (bring in {{count}} more)",
+        "allies": "Stands with:"
       }
     },
     "hotbar": {
@@ -361,6 +362,7 @@
     "plTools": {
       "buffView": "Buff display (all)",
       "active": {
+        "title": "Character being moved",
         "openChatPalette": "Open the chat palette for {{name}}"
       },
       "range": {
@@ -456,7 +458,6 @@
         "stopSE": "Stop SE",
         "playBGM": "Play BGM",
         "stop": "Stop",
-        "addToPlaylist": "Add to playlist",
         "removeFromPlaylist": "Remove from playlist",
         "noAudioInCategory": "No audio files in this category",
         "playlistEmpty": "Add BGM to the playlist",
@@ -469,7 +470,24 @@
         "note2": "* BGM/SE plays for everyone in the room.",
         "note3": "* Music files are not included in save data (zip).",
         "tagAll": "All",
-        "clickToSelectTouch": "or tap here to choose"
+        "clickToSelectTouch": "or tap here to choose",
+        "paused": "Paused",
+        "seek": "Position",
+        "activePlaylist": "The playlist playing now",
+        "createPlaylist": "Make a new playlist",
+        "createPlaylistShort": "New",
+        "playlistName": "Playlist name",
+        "playPlaylist": "Play this playlist from the start",
+        "deletePlaylist": "Delete this playlist",
+        "deletePlaylistConfirm": "Delete the playlist \"{{name}}\"? Its tracks stay in the library.",
+        "playlistDefaultName": "Main",
+        "playlistUntitled": "Untitled",
+        "playlistNewName": "Playlist {{number}}",
+        "addToPlaylistNamed": "Add to \"{{name}}\"",
+        "removeFromPlaylistNamed": "Remove from \"{{name}}\"",
+        "moveToPlaylist": "Move to another playlist",
+        "copyToPlaylist": "Copy to another playlist",
+        "playlistsOfTrack": "Playlists"
       },
       "miniJukebox": {
         "stopped": "— Stopped —",
@@ -479,12 +497,16 @@
         "prev": "Previous track",
         "next": "Next track",
         "play": "Play",
-        "stop": "Stop",
         "repeatOne": "Repeat one",
-        "repeatAll": "Repeat all",
+        "repeatAll": "Repeat playlist",
         "repeatOff": "Repeat off",
         "playlist": "Playlist",
-        "playlistEmpty": "Playlist is empty"
+        "playlistEmpty": "Playlist is empty",
+        "pause": "Pause",
+        "shuffleOn": "Shuffle: on",
+        "shuffleOff": "Shuffle: off",
+        "prevPlaylist": "Previous playlist",
+        "nextPlaylist": "Next playlist"
       },
       "cutIn": {
         "panelTitle": "Cut-in list",
@@ -947,6 +969,35 @@
       "log": {
         "reveal": "{{name}}'s die reads {{face}}.",
         "revealNoName": "The die reads {{face}}."
+      },
+      "myDice": {
+        "title": "My Dice",
+        "hint": "Choose what your dice are made of and their colours.",
+        "rollAgain": "Roll again",
+        "material": "Material",
+        "material_resin": "Resin",
+        "material_marble": "Marble",
+        "material_metal": "Metal",
+        "material_glass": "Translucent",
+        "glassDrawnLightly": "This device draws lightly, so translucent dice are shown as resin here. Others still see them translucent.",
+        "body": "Dice colour",
+        "bodyFollowsRoll": "Match the colour of my chat line",
+        "ink": "Number colour",
+        "inkAuto": "Pick one that stands out from the dice",
+        "pickColor": "Pick a colour",
+        "seenByAll": "Everyone in the room sees your rolls in this look. It is kept in this browser.",
+        "picture": "Picture",
+        "choosePicture": "Choose a picture",
+        "changePicture": "Change the picture",
+        "removePicture": "Remove",
+        "fit_wrap": "Wrap round",
+        "fit_faces": "On every face",
+        "pictureMakesResin": "Dice wearing a picture are resin.",
+        "pictureHint": "Wrap round suits patterns such as stone or wood grain; on every face suits a logo or an emblem. The picture is sent to everyone in the room and kept when the room is saved.",
+        "trouble_notPicture": "That could not be read as a picture.",
+        "trouble_tooLarge": "Pictures over 8 MB cannot be used.",
+        "trouble_unstored": "The picture could not be kept in this browser.",
+        "trouble_notAllowed": "Guests cannot put a picture on their dice."
       }
     },
     "effect": {
@@ -1465,7 +1516,9 @@
         "showRoundLine": "Round controls",
         "showPartsHint": "What is put away closes up. This setting is for this device only",
         "displayItemsRich": "Display items (full)",
-        "displayItemsTable": "Display items (table)"
+        "displayItemsTable": "Display items (table)",
+        "foldsOnOpen": "Open with the folders folded up",
+        "foldsOnOpenHint": "Takes effect on the next inventory opened. Pieces in no folder are shown as before"
       }
     },
     "file": {
@@ -1523,7 +1576,8 @@
         "radialDisplay": "Display",
         "radialMove": "Move",
         "radialDisclosure": "Access & owner",
-        "radialObject": "Piece actions"
+        "radialObject": "Piece actions",
+        "moveMode": "Getting about"
       },
       "panel": {
         "sheet": "Character sheet",
@@ -1590,6 +1644,7 @@
         "failed": "Import failed.",
         "success": "Character piece created.",
         "successNoImage": "Character piece created (image could not be fetched; set it manually later).",
+        "systemUnknown": "Taken in. A warehouse sheet pasted as its address brings its skill table and palette too.",
         "sourceAppspot": "Character Sheet Vault (character-sheets.appspot.com): paste JSON or the character URL (auto-fetched)",
         "sourceYtsheet": "Yuto-sheet II (SW2.5): paste the character URL (auto-fetched), or its ?mode=json JSON",
         "unsupported": "Unsupported URL. Paste a CCFOLIA character JSON instead.",
@@ -1634,7 +1689,12 @@
             "charaxiv": "Imported via \"Copy for CCFOLIA\""
           }
         }
-      }
+      },
+      "moveMode_walk": "Walking",
+      "moveMode_climb": "Climbing",
+      "moveMode_swim": "Swimming",
+      "moveMode_crawl": "Crawling",
+      "moveMode_fly": "Flying"
     },
     "light": {
       "contextMenu": {
@@ -1954,6 +2014,8 @@
         "surfaceWestWall": "West wall",
         "createWithOptions": "Create a piece…",
         "tiledTextureOn": "Tile the texture",
+        "terrainToGlass": "Take the textures off and turn it to glass",
+        "terrainDressGlass": "Choose textures (stop being glass)",
         "tiledTextureOff": "Stretch the texture again",
         "doorOpen": "Open the door",
         "doorClose": "Close the door",
@@ -2042,6 +2104,8 @@
         "sectionDarkness": "Darkness (vision & lighting)",
         "darknessEnabled": "Enable darkness",
         "lightSnapToGrid": "Snap light to the grid",
+        "magneticAnomaly": "Magnetic anomaly (the compass wanders)",
+        "magneticAnomalyHint": "The compass widget's needle stops finding north. It holds for this table alone.",
         "darknessLevel": "Darkness",
         "globalIllumination": "Ambient light",
         "ambientColor": "Darkness color",
@@ -2226,7 +2290,8 @@
           "ground": "Ground",
           "standing": "Standing",
           "fires": "Fires",
-          "hidden": "hidden doors"
+          "hidden": "hidden doors",
+          "traps": "Traps"
         },
         "title": "Map generator",
         "gmOnly": "This tool is for the game master",
@@ -2258,7 +2323,8 @@
           "doubleDoors": "Double doors (%)",
           "muster": "Party at the way in",
           "musterNobody": "Nobody",
-          "fog": "Start with the fog of war drawn"
+          "fog": "Start with the fog of war drawn",
+          "traps": "Traps"
         },
         "actions": {
           "generate": "Generate",
@@ -2280,7 +2346,8 @@
           "corridorWidth": "Wider passages take a wider lattice, so fewer rooms fit on the board",
           "doorWidth": "A door wider than the way it bars has the stone beside the opening cut away. An opening wider than the door takes a row of them",
           "doubleDoors": "A pair is two leaves of half the width, parting in the middle. A door of four cells is two of two",
-          "muster": "Stands that party by the way in. No other piece is moved"
+          "muster": "Stands that party by the way in. No other piece is moved",
+          "traps": "Set about the rooms and passages, never in the first room nor under the stairs"
         },
         "entrance": {
           "stair": "Stairway down",
@@ -2317,6 +2384,14 @@
           "0": "Square",
           "1": "Hex (flat top)",
           "2": "Hex (pointy top)"
+        },
+        "trap": {
+          "pit": "Pit",
+          "dart": "Poison dart",
+          "blade": "Blade trap",
+          "alarm": "Trip wire",
+          "rune": "Rune of blasting",
+          "roll": "Dodge"
         }
       },
       "movePlan": {
@@ -2354,8 +2429,17 @@
         "took": "lost",
         "gave": "gained",
         "tookFrom": "[{{trigger}}] {{piece}} {{verb}} {{amount}} {{element}}",
-        "sprang": "[{{trigger}}] {{piece}} stepped on it"
-      }
+        "sprang": "[{{trigger}}] {{piece}} stepped on it",
+        "said": "[{{trigger}}] {{say}}",
+        "asks": "[{{trigger}}] {{piece}} rolls {{check}}",
+        "asksFor": "[{{trigger}}] {{piece}} rolls {{check}} against {{target}}",
+        "rolled": "[{{trigger}}] {{piece}} rolls {{rolled}} against {{target}} — {{outcome}}",
+        "made": "made it",
+        "missed": "missed"
+      },
+      "shownTo_master": "The master alone",
+      "shownTo_sight": "Once it is in sight",
+      "shownTo_room": "Everyone"
     },
     "roomSettings": {
       "title": "Room settings",
@@ -2388,6 +2472,15 @@
       "diagonalMove_double": "Always counted as two cells",
       "diagonalMoveHint": "Counting by turns is how D&D 3.5e and Pathfinder 1e read a corner: the first one costs a cell, the second two.",
       "piecesShareCells": "Let two pieces stand on one cell; off, a cell somebody is on is no place to stop",
+      "samePartyPassage": "Pieces of its own party",
+      "otherPartyPassage": "Pieces of another party",
+      "noPartyPassage": "Pieces in no party",
+      "piecePassage_block": "Cannot enter",
+      "piecePassage_pass": "Crosses, cannot stop",
+      "piecePassage_cost": "Crosses at a price, cannot stop",
+      "piecePassage_share": "Crosses and stops",
+      "piecePassageCost": "Extra cost to cross",
+      "piecePassageHint": "Parties are made up in the party panel, and a piece in none is counted as a piece in no party. Until these are set, the box above stands for all three.",
       "moveRangeElementNames": "Sheet fields",
       "moveRangeHint": "Names are comma separated and the first one the sheet has is used. The value is divided by what one cell stands for (0 divides by nothing), in cells as much as in a length: at 0.5, one cell on the sheet is two on the table. Feet and metres are converted where the sheet is written in the other one; a sheet written in cells on a table ruled in feet or metres is read as cells.",
       "cellDistance": "One cell stands for",
@@ -2418,6 +2511,12 @@
       "engagementCountsSizeHint": "Weigh a piece by the ground it covers (off, one apiece)",
       "zocHint": "A piece is an enemy where the NPC mark differs from the one being moved, and the cells around it get in the way. A piece you cannot see holds no ground.",
       "diceBotHint": "The dice bot everyone joining the room starts on",
+      "diceStage": "Rolling dice",
+      "diceStage_off": "Don't show",
+      "diceStage_frame": "In the chat line",
+      "diceStage_table": "On the table",
+      "diceStage_both": "Both",
+      "diceStageHint": "Chat rolls tumble in 3D and land on the numbers rolled. A secret roll shows on the roller's screen alone",
       "sectionControllerResources": "Values and resources on the remote",
       "controllerResourcesShowAll": "Show all",
       "controllerResourcesHideAll": "Hide all",
@@ -2504,7 +2603,14 @@
       "tickerEnabled": "Show edge ticker",
       "tickerSpeed": "Speed",
       "tickerSpeedUnit": "px/s",
-      "replayHint": "Read back a recorded session, or play it back with the table. Recordings stay on this device."
+      "replayHint": "Read back a recorded session, or play it back with the table. Recordings stay on this device.",
+      "hostilityBy": "How the sides are told apart",
+      "hostilityBy_npc": "By whom the master runs",
+      "hostilityBy_party": "By party",
+      "sizeSlipsPast": "Squeeze past a piece two cells or more apart in size (but not stop on it)",
+      "handTracesWay": "Spring the ground between the two ends when a hand moves a piece",
+      "squeezes": "Let an oversized piece squeeze through a gap too small for it, at a step apiece",
+      "jumpCells": "How far one leap carries, in cells (0 carries as far as the move has left)"
     },
     "skin": {
       "title": "Skin",
@@ -2619,7 +2725,10 @@
       "name_grassland": "Grassland",
       "name_coast": "Coast",
       "name_wasteland": "Wasteland",
-      "name_academy": "Academy days"
+      "name_academy": "Academy days",
+      "mat": "Dice mat",
+      "matColor": "Mat colour",
+      "matHint": "What the dice roll on in a chat frame. A picture is laid over the colour. Only this screen sees the mat; nobody else’s changes."
     },
     "lobby": {
       "peerMenu": {
@@ -2761,7 +2870,8 @@
         "alarmMenuTitle": "Alarm timer",
         "tabSettingTitle": "Chat tab settings",
         "noTarget": "No target selected",
-        "writingOthers": "{{count}} more typing"
+        "writingOthers": "{{count}} more typing",
+        "titleWithCount": "{{title}} ({{count}})"
       },
       "input": {
         "you": " (you)",
@@ -2779,7 +2889,8 @@
         "textareaPlaceholderShort": "Type a message",
         "sendToTicker": "Ticker",
         "sendToTickerHint": "Also run this line around the edge of the screen",
-        "tools": "Input settings"
+        "tools": "Input settings",
+        "myDice": "My Dice"
       },
       "tab": {
         "unnamedCharacter": "Unnamed character",
@@ -2876,7 +2987,9 @@
         "soundType_bubble": "Bubble",
         "soundType_cyber": "Cyber",
         "soundType_notify1": "Notification 1",
-        "soundType_notify2": "Notification 2"
+        "soundType_notify2": "Notification 2",
+        "messageCount": "Show the line count in the title",
+        "messageCountTooltip": "Puts the number of lines in the tab beside the chat window title. Only the lines you can see are counted"
       },
       "systemAvatar": {
         "title": "System-chan",
@@ -3256,7 +3369,7 @@
         "title": "Function paint",
         "hint": "Paints what a cell does rather than how it looks. It never reaches the exported image.",
         "role": "Kind",
-        "role_moveBlock": "No entry",
+        "role_moveCost": "Movement cost",
         "role_terrain": "Terrain (wall)",
         "role_mask": "Map mask",
         "terrainHeight": "Wall height",
@@ -3265,6 +3378,8 @@
         "terrainBlocksClimb": "Cannot be climbed",
         "maskColor": "Mask colour",
         "maskOpacity": "Mask strength",
+        "moveCostHint": "Sets how hard a cell is to cross. Cells nobody may enter and cells that merely cost extra are painted with this one brush.",
+        "moveCostColor": "Ground colour",
         "terrainMode": "Shows as",
         "terrainMode_both": "Wall and floor",
         "terrainMode_wall": "Wall only",
@@ -3302,8 +3417,7 @@
         "triggerTargets_all": "every piece",
         "triggerTargets_pc": "the players' pieces",
         "triggerTargets_npc": "the master's pieces",
-        "triggerOnce": "Only once",
-        "triggerOpen": "Show the room",
+        "triggerOpen": "Shown to",
         "triggerColor": "Colour",
         "triggerEffect": "Effect",
         "triggerElementPlaceholder": "HP",
@@ -3311,7 +3425,54 @@
         "triggerAmountPlaceholder": "2d6",
         "triggerAmountHint": "A number or dice. A negative gives back (5 / 2d6 / 1d6+2 / -3)",
         "triggerEffectNone": "none",
-        "triggerReveals": "Show once sprung"
+        "triggerReveals": "Show once sprung",
+        "moveCostCharge": "How hard to cross",
+        "moveCostBlocks": "Cannot enter",
+        "moveCostStep": "+{{count}} cells",
+        "triggerSay": "Line to write",
+        "triggerSayPlaceholder": "The flagstone sinks underfoot",
+        "triggerSayHint": "One line written in the room as it goes off. Left empty, it says only that the ground was stepped on",
+        "triggerSilent": "Keep the line back (only the master reads it)",
+        "triggerAilment": "State to leave it in",
+        "triggerAilmentPlaceholder": "Poisoned",
+        "triggerAilmentRounds": "Rounds it lasts",
+        "triggerCheck": "Roll to ask for",
+        "triggerCheckPlaceholder": "Dexterity",
+        "triggerCheckTarget": "Target",
+        "triggerCheckHint": "A line asking for the roll is written in the room. Whoever walked in throws it, and the amount does not change with the answer",
+        "triggerSound": "Sound",
+        "triggerCutIn": "Cut-in",
+        "triggerMediaNone": "None",
+        "triggerWarps": "Carry it to another cell",
+        "triggerWarpCol": "Column",
+        "triggerWarpRow": "Row",
+        "triggerWarpHint": "Carries a piece that ends its move here to the cell named. Picking another table takes the whole room to it",
+        "triggerMoment_turnStart": "As its turn begins, if it stands here",
+        "triggerMoment_turnEnd": "As its turn ends, if it stands here",
+        "triggerRepeat": "How often it goes off",
+        "triggerRepeat_always": "Every time",
+        "triggerRepeat_once": "Once, and no more",
+        "triggerRepeat_oncePerPiece": "Once a piece",
+        "triggerRepeat_oncePerRound": "Once a round",
+        "role_hazard": "Dangerous ground",
+        "hazardHint": "Lays the look, the going and what happens in one stroke. All three can be edited once they are down",
+        "hazardKind": "Kind",
+        "hazardElement": "Resource it takes from",
+        "hazardKind_bog": "Bog (heavy going)",
+        "hazardKind_lava": "Lava (burns those who stay)",
+        "hazardKind_fog": "Fog (slow going)",
+        "hazardKind_ice": "Ice (puts a piece off its feet)",
+        "hazardKind_briar": "Briars (cut whoever steps in)",
+        "hazardKind_vent": "Vent (burns those who stay)",
+        "triggerWarpTable": "Table it opens onto",
+        "triggerWarpHere": "(this table)",
+        "triggerCheckRoll": "Dice it throws itself",
+        "triggerPassAmount": "Taken on a success",
+        "triggerCheckRollHint": "Write something like 1d20+3 and the table throws it against the target. Empty leaves the roll to whoever walked in",
+        "moveCostHalves": "Road (half a step)",
+        "moveCostHalvesHint": "Crossed for half a cell. A road wins over whatever is painted under it, so a made road runs straight through a swamp",
+        "triggerMoment_press": "When pressed (switch)",
+        "triggerPressHint": "Clicking a painted cell runs the actions below. Set who speaks, the reach, the uses and any secret result here too."
       },
       "stampCategories": {
         "door": "Doors",
@@ -3822,7 +3983,10 @@
         "density": "Change density",
         "size": "Change size",
         "radialAppearance": "Appearance",
-        "radialObject": "Object actions"
+        "radialObject": "Object actions",
+        "blocksSight": "Blocks sight",
+        "brightness": "Brightness",
+        "shownTo": "Shown to"
       },
       "kind": {
         "fog": "Dense fog",
@@ -3839,7 +4003,14 @@
         "lava": "Lava",
         "blaze": "Burning ground",
         "frost": "Frost"
-      }
+      },
+      "blocksSightLabel": "Blocks sight",
+      "brightnessLabel": "Brightness",
+      "brightness_none": "Leave it alone",
+      "brightness_dark": "Darkness",
+      "brightness_dim": "Dim",
+      "brightness_bright": "Bright",
+      "shownToLabel": "Shown to"
     },
     "buffManager": {
       "title": "Buff manager",
@@ -3852,6 +4023,10 @@
       "operator": "Operator",
       "modifierNote": "Holding {{target}}",
       "builderTitle": "Build a calculated buff command",
+      "builderStacks": "Stack",
+      "builderStacksHint": "Add to a buff of the same name",
+      "builderExtends": "Lengthen too",
+      "builderExtendsHint": "Add the rounds to the ones left",
       "copy": "Copy",
       "copied": "Copied",
       "buffCount": "{{n}} buffs",
@@ -4058,12 +4233,184 @@
       "effect": "Effect",
       "effectPlaceholder": "A line to carry on the buff (e.g. HP-1 each round)",
       "iconImage": "Picture",
-      "pickIconImage": "Pick a picture"
+      "pickIconImage": "Pick a picture",
+      "stat": "Status it moves",
+      "statPlaceholder": "Speed",
+      "statHint": "Name a status on the sheet and the state moves it while it is worn, giving back exactly that much when it comes off. Empty moves nothing"
     },
     "seatDisplay": {
       "title": "Display on this device",
       "widgets": {
         "label": "Widgets"
+      }
+    },
+    "compass": {
+      "anomaly": "Anomaly",
+      "face": {
+        "modern": "Modern",
+        "fantasy": "Fantasy",
+        "sf": "Science fiction"
+      },
+      "point": {
+        "n": "N",
+        "ne": "NE",
+        "e": "E",
+        "se": "SE",
+        "s": "S",
+        "sw": "SW",
+        "w": "W",
+        "nw": "NW"
+      }
+    },
+    "menuEditor": {
+      "title": "Arrange the menus",
+      "hint": "This arrangement is kept on this screen alone. Take hold of the grip on the left to put an entry in order, or to carry it in and out of a small menu.",
+      "drag": "Take hold and move",
+      "moveInto": "Move to",
+      "group": "menu",
+      "topLevel": "On the menu itself",
+      "unnamedGroup": "Unnamed small menu",
+      "lost": "Not in this version",
+      "add": "Add an entry",
+      "addGroup": "Make a small menu",
+      "newGroup": "New small menu",
+      "searchCommand": "Search by name",
+      "allAdded": "Everything is already on this menu",
+      "notFound": "Nothing by that name",
+      "remove": "Take off",
+      "empty": "Nothing on this menu",
+      "reset": "Put it back the way it came",
+      "resetConfirm": "This puts the menu back the way it came. Go ahead?",
+      "resetAll": "Put every menu back the way it came",
+      "resetAllConfirm": "This puts the drawer and both toolbars back the way they came. Go ahead?",
+      "surface": {
+        "fab": "Fav menu",
+        "gmToolbar": "GM tools",
+        "plToolbar": "PL tools"
+      },
+      "writeOut": "Write out",
+      "readIn": "Read in",
+      "readFailed": "That file does not hold an arrangement of the menus"
+    },
+    "boardSwitch": {
+      "panelTitle": "Switch - {{name}}",
+      "unlabeled": "Switch",
+      "masterOnly": "Only the GM can see what a switch does",
+      "label": "Name",
+      "labelPlaceholder": "Name shown on the table (e.g. Open the chest)",
+      "speaker": "Speaker",
+      "speakerOption": {
+        "presser": "Whoever presses it (their selected character)",
+        "host": "This object's name",
+        "system": "System"
+      },
+      "tab": "Tab",
+      "tabOpen": "The tab the presser has open",
+      "guests": "Spectators can press it too (where the tab lets them speak)",
+      "actionsHint": "Pressing it runs these from the top. From the second one on, you can add a wait after the previous one (up to 10 seconds).",
+      "kind": {
+        "say": "Say",
+        "sound": "Sound",
+        "effect": "Effect",
+        "cutIn": "Cut-in",
+        "secret": "Secret result",
+        "reveal": "Reveal a hidden object",
+        "conceal": "Hide an object",
+        "removeSelf": "Remove what was pressed",
+        "spawn": "Call up pieces",
+        "showTable": "Switch the table",
+        "carry": "Carry the presser's piece",
+        "tableSetting": "Change table settings"
+      },
+      "delay": "Wait (s)",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "removeAction": "Remove this action",
+      "sayPlaceholder": "Text to send to chat. Dice (2d6+3) and {HP} work too",
+      "unchosen": "(choose one)",
+      "missing": "{{name}} (not in this room)",
+      "unknownAction": "An action this version cannot run (kept as is)",
+      "noActions": "It does nothing yet. Add actions with the buttons below.",
+      "try": "Try it",
+      "refused": {
+        "nothing": "This switch does nothing",
+        "watching": "Spectators cannot press it",
+        "cannotSpeak": "You cannot speak in this tab",
+        "retired": "It can no longer be pressed",
+        "busy": "Wait a moment before pressing again",
+        "spent": "It can no longer be pressed (no uses left)",
+        "noPiece": "You have no character on the table",
+        "tooFar": "Get closer to press it",
+        "unseen": "You cannot see it"
+      },
+      "menu": {
+        "edit": "Set up switch…",
+        "try": "Try the switch",
+        "remove": "Remove switch",
+        "reset": "Clear the record of presses",
+        "conceal": "Hide (to reveal with a switch)",
+        "concealed": "Reveal a hidden object"
+      },
+      "range": "Reach",
+      "rangeHint": "cells or closer (0 means from anywhere)",
+      "needsSight": "Only while it can be seen",
+      "repeat": "Uses",
+      "repeatOption": {
+        "always": "Any number of times",
+        "once": "Once (for everyone)",
+        "oncePerPiece": "Once per character",
+        "oncePerRound": "Once per round"
+      },
+      "reader": {
+        "presser": "Only the presser and the GM can read it",
+        "master": "Only the GM can read it"
+      },
+      "secretPlaceholder": "Text kept back from the room. {HP} and other references work too",
+      "pressHere": "Click to press",
+      "revealHint": "Puts an object the GM hid back where it was, for everyone to see.",
+      "concealHint": "Hides an object on the table where it stands. Hidden terrain can be walked and seen through.",
+      "removeSelfHint": "After everything else, removes the switch's terrain from the table. Painted ground is put away so only the GM sees it. Trying it out does not remove it.",
+      "unnamedThing": "Unnamed",
+      "listed": "{{name}} ({{note}})",
+      "groundPressed": "pressed ground",
+      "groundRetired": "ground put away",
+      "thing": {
+        "terrain": "Terrain",
+        "table-mask": "Map mask",
+        "character": "Character",
+        "text-note": "Shared note",
+        "dice-symbol": "Dice",
+        "coin": "Coin",
+        "card-stack": "Deck"
+      },
+      "spawnCount": "Count",
+      "spawnPlace": {
+        "host": "Next to the switch",
+        "presser": "Next to the presser's piece"
+      },
+      "spawnHint": "Places copies of the chosen character on the nearest free cells. Keep the original in the graveyard or hidden.",
+      "where": {
+        "table": "on the table",
+        "graveyard": "graveyard",
+        "concealed": "hidden",
+        "other": "stored"
+      },
+      "showTableHint": "Switches everyone's view to the chosen table (a scene change).",
+      "carryCol": "Column",
+      "carryRow": "Row",
+      "carryHere": "Stay on the current table",
+      "carryHint": "Moves the presser's selected character to the given cell. Choosing another table moves everyone's view too.",
+      "setting": {
+        "darkness": "Darkness",
+        "fog": "Fog of war",
+        "image": "Table image",
+        "bgm": "BGM",
+        "bgmStop": "Stop the BGM first"
+      },
+      "toggle": {
+        "keep": "Leave as is",
+        "on": "On",
+        "off": "Off"
       }
     }
   },
@@ -4071,6 +4418,7 @@
     "fab": {
       "manual": "Manual",
       "menuOpen": "Open menu",
+      "menuHint": "Open the menu (right click to arrange or put back)",
       "menuClose": "Close menu",
       "peerMenu": "Connection",
       "chat": "Chat",
@@ -4084,6 +4432,7 @@
       "gameResources": "Game resources",
       "media": "Media",
       "clock": "Clock",
+      "compass": "Compass",
       "connectionQuality": "Connection quality",
       "miniPlayer": "Mini player",
       "visualNovel": "Novel mode",
@@ -4121,7 +4470,8 @@
       "display": "Display",
       "widgets": "Widgets",
       "foldToolbar": "Fold the toolbar",
-      "unfoldToolbar": "Open the toolbar"
+      "unfoldToolbar": "Open the toolbar",
+      "buttonGuide": "Show every button's name (? key)"
     },
     "roomDataDefault": "Room data"
   },
@@ -4180,6 +4530,7 @@
       "noChangeTarget": "No target attribute selected",
       "noTargetCharacter": "No target character selected",
       "addBuffMessage": "Applied buff {{buff}} > {{targets}}",
+      "stackBuffMessage": "Stacked buff {{buff}} > {{targets}}",
       "decBuffRoundMessage": "Decreased buff R {{targets}}",
       "deleteZeroBuffMessage": "Cleared 0R buffs {{targets}}",
       "changeValueMessage": "[{{name}}] changed [{{sign}}{{value}}] > {{detail}}",
@@ -4299,6 +4650,7 @@
       "formula": "Formula",
       "imagePopupOriginal": "Show full size in popup",
       "pieceGauge": "Show a bar on the piece",
+      "resourceSlider": "Slider",
       "gaugeInverted": "Negative resource",
       "changeEffect": "Effect on change",
       "changeSound": "Sound on change",
@@ -4415,6 +4767,14 @@
       "transparency": "Transparency",
       "ghost": "Ghost mode",
       "tabClose": "Close this panel"
+    },
+    "iconPicker": {
+      "open": "{{name}} (click to choose a mark)",
+      "search": "Search by name",
+      "clear": "Put it back",
+      "none": "Nothing by that name",
+      "found": "{{count}} found",
+      "hint": "Type a name to search the marks this typeface can draw"
     },
     "portraitPicker": {
       "title": "Portraits",

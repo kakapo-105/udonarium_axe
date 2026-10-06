@@ -1,6 +1,7 @@
 import { DungeonPropId, TextureId, WallTextureId } from '@axe/domain/media/texture-catalog';
 import { FurnishingPlan } from '@axe/domain/tabletop/dungeon/room-furnishing';
 import { RoomShape } from '@axe/domain/tabletop/dungeon/room-shapes';
+import { HazardKind } from '@axe/domain/tabletop/hazard-presets';
 import { MapLighting } from '@axe/domain/tabletop/map-blocks';
 
 export const DUNGEON_ATMOSPHERE_IDS = [
@@ -48,6 +49,8 @@ export interface CaveShape {
   survive: number;
   tunnelWidth: number;
   hazardFloor?: TextureId;
+  /** What those pools are, where they are dangerous ground and not only a picture of it. */
+  hazardKind?: HazardKind;
   hazardPoolsPerRoom: number;
 }
 
@@ -211,6 +214,7 @@ export const DUNGEON_ATMOSPHERES: Record<DungeonAtmosphereId, DungeonAtmosphere>
       survive: 4,
       tunnelWidth: 2,
       hazardFloor: 'lava',
+      hazardKind: 'lava',
       hazardPoolsPerRoom: 0.34,
     },
   },

@@ -248,15 +248,15 @@ test.describe('キャラ取り込み (FAB のセーブ&ロード)', () => {
     await expect(menu).toBeHidden();
   });
 
-  test('見学には読込とキャラ取り込みを押させないこと', async ({ page }) => {
+  test('見学には読込とキャラ取り込みを出さず、保存だけを押させること', async ({ page }) => {
     await waitAppReady(page);
     const peerPanel = page.locator('ui-panel').filter({ hasText: '接続情報' });
     await peerPanel.getByRole('button', { name: /^\s*見学\s*$/ }).click();
 
     const menu = await openSaveLoad(page);
-    await expect(menu.getByTestId('save-load-load')).toBeDisabled();
-    await expect(menu.getByTestId('save-load-import-character')).toBeDisabled();
     await expect(menu.getByTestId('save-load-save')).toBeEnabled();
+    await expect(menu.getByTestId('save-load-load')).toHaveCount(0);
+    await expect(menu.getByTestId('save-load-import-character')).toHaveCount(0);
   });
 });
 

@@ -6,6 +6,7 @@ import {
   readBuffModifier,
   writeBuffModifier,
 } from '@axe/domain/character/buff-modifier';
+import { stackBuffEffect } from '@axe/domain/character/buff-stack';
 import { buffExpires, BuffTiming, buffTimingOf, BuffTurnActor, isBuffDueAt } from '@axe/domain/character/buff-timing';
 import { StatusAccessor } from '@axe/domain/character/status-accessor';
 import { DataElement, DataElementAttribute, DataElementType } from '@axe/domain/data/data-element';
@@ -71,6 +72,32 @@ export class BuffManager {
    * status, which leaves the buff a plain note.
    */
   applyModifier(data: DataElement, request: ParsedBuffModifierRequest): BuffModifier | null {
+    const moved = this.moveStatus(request);
+    if (moved == null) return null;
+    return this.writeModifier(data, request, moved);
+  }
+
+  /**
+   * Moves a status again on top of what the standing buff already moved, and remembers the two
+   * distances added together, so taking the buff away puts back everything it did in all.
+   *
+   * A buff standing on some other status has nothing in common with this one, so what it moved
+   * goes back before the new one is laid, which leaves this the same as applying it fresh.
+   */
+  stackModifier(data: DataElement, request: ParsedBuffModifierRequest): BuffModifier | null {
+    const standing = readBuffModifier(data);
+    if (!standing || standing.target !== request.target || standing.slot !== request.slot) {
+      this.revertModifier(data);
+      return this.applyModifier(data, request);
+    }
+
+    const moved = this.moveStatus(request);
+    if (moved == null) return null;
+    return this.writeModifier(data, request, standing.applied + moved);
+  }
+
+  /** Moves the status by what the request asks for and answers how far it actually went. */
+  private moveStatus(request: ParsedBuffModifierRequest): number | null {
     const status = this.status();
     if (!status) return null;
     const before = status.getValue(request.target, request.slot);
@@ -79,11 +106,15 @@ export class BuffManager {
     const wanted = request.operator === 'set' ? request.amount - before : request.amount;
     status.changeValue(request.target, request.slot, wanted);
     const after = status.getValue(request.target, request.slot);
+    return (after ?? before) - before;
+  }
+
+  private writeModifier(data: DataElement, request: ParsedBuffModifierRequest, applied: number): BuffModifier {
     const modifier: BuffModifier = {
       target: request.target,
       slot: request.slot,
       operator: request.operator,
-      applied: (after ?? before) - before,
+      applied,
     };
     writeBuffModifier(data, modifier);
     return modifier;
@@ -292,6 +323,54 @@ export class BuffManager {
       applyAppearance(created, appearance);
       container.appendChild(created);
     }
+  }
+
+  /**
+   * Puts a buff of that name on top of one already standing, adding the numbers the two notes
+   * carry together instead of starting the buff over.
+   *
+   * `攻撃+2` laid twice reads `攻撃+4`. Where the two notes do not say the same thing about the
+   * same number there is nothing to add up, and the new note is written as it stands. The rounds
+   * become whichever count is longer, so a short second helping never cuts a long one short, and
+   * a buff held until cleared is left held. A name no buff goes by yet is simply granted.
+   */
+  stackRound(name: string, info: string = '', round?: number, appearance: BuffAppearance = {}): void {
+    this.pileOn(name, info, round, appearance, (standing, asked) => Math.max(standing, asked));
+  }
+
+  /**
+   * The same second helping, but carrying the buff further as well: the rounds asked for are added
+   * to the ones standing rather than measured against them.
+   *
+   * Three rounds laid on a buff with two left leaves five. A buff held until cleared has no count
+   * to lengthen and is left alone, and an empty note lengthens a buff without touching what it
+   * says, which is how a spell is cast again to hold rather than to strengthen.
+   */
+  extendRound(name: string, info: string = '', round?: number, appearance: BuffAppearance = {}): void {
+    this.pileOn(name, info, round, appearance, (standing, asked) => standing + asked);
+  }
+
+  private pileOn(
+    name: string,
+    info: string,
+    round: number | undefined,
+    appearance: BuffAppearance,
+    settle: (standing: number, asked: number) => number
+  ): void {
+    const data = this.buffDataElement?.getFirstElementByName(name);
+    if (!data) {
+      this.addRound(name, info, round, appearance);
+      return;
+    }
+
+    const stacked = stackBuffEffect(`${data.currentValue ?? ''}`, info);
+    if (stacked !== null) data.currentValue = stacked;
+    else if (info.length > 0) data.currentValue = info;
+    applyAppearance(data, appearance);
+
+    if (round === undefined || !buffExpires(data)) return;
+    const standing = parseInt(String(data.value), 10);
+    data.value = Number.isFinite(standing) ? settle(standing, round) : round;
   }
 }
 

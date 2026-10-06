@@ -311,6 +311,19 @@ describe('SaveDataService', () => {
     });
   });
 
+  describe('the picture a roller put on their dice', () => {
+    it('bundles the picture a chat line’s dice wear, so the line throws them in it when the room is loaded', () => {
+      const service = TestBed.inject(SaveDataService);
+      const privateApi = service as unknown as SaveDataServicePrivateApi;
+      const picture = 'cd'.repeat(32);
+      ImageStorage.instance.add(ImageFile.createEmpty(picture));
+
+      const found = privateApi.searchImageFiles(`<chat diceImageIdentifier="${picture}">2d6</chat>`);
+
+      expect(found.map((image) => image.identifier)).toEqual([picture]);
+    });
+  });
+
   describe('the pictures a board carries inside its drawing', () => {
     it('bundles a sticker that no walk of the XML would have found', () => {
       const service = TestBed.inject(SaveDataService);

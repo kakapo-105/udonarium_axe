@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { GameObjectInventoryService } from '@axe/application/inventory/game-object-inventory.service';
+import { TriggerFireService } from '@axe/application/tabletop/trigger-fire.service';
 import { VisionService } from '@axe/application/tabletop/vision.service';
 import { TurnOrderService } from '@axe/application/turn/turn-order.service';
 import { ConfirmService } from '@axe/application/ui/confirm.service';
@@ -402,6 +403,42 @@ describe('TurnOrderService', () => {
       expect(turnState.round).toBe(1);
       expect(turnState.phase).toBe('roundStart');
       expect(sendSpy.mock.calls.map((call: unknown[]) => String(call[0]))).not.toContain('feature.turnOrder.roundEnd');
+    });
+  });
+
+  describe('the ground under whoever is up', () => {
+    let sprang: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      sprang = vi.spyOn(TestBed.inject(TriggerFireService), 'standingOn').mockReturnValue([]);
+    });
+
+    it('springs what the piece taking a turn is standing on', () => {
+      service.next();
+      service.next();
+
+      expect(sprang).toHaveBeenCalledWith(chars[0], 'turnStart');
+    });
+
+    it('springs what the piece leaving a turn is standing on before the next takes one', () => {
+      service.next();
+      service.next();
+      sprang.mockClear();
+
+      service.next();
+
+      expect(sprang.mock.calls.map((call: unknown[]) => call[1])).toEqual(['turnEnd', 'turnStart']);
+    });
+
+    it('keeps turning where the ground will not go off', () => {
+      sprang.mockImplementation(() => {
+        throw new Error('no table out');
+      });
+
+      service.next();
+      service.next();
+
+      expect(turnState.currentIdentifier).toBe(chars[0].identifier);
     });
   });
 

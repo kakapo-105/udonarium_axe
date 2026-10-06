@@ -21,6 +21,10 @@ describe('isIgnoredReplayEvent()', () => {
     expect(isIgnoredReplayEvent('CANCEL_TASK_abc')).toBe(true);
   });
 
+  it('throws away the cue to tumble the dice of a chat roll, which the line it points to already records', () => {
+    expect(isIgnoredReplayEvent('DICE_THROW')).toBe(true);
+  });
+
   it('throws away nothing worth recording', () => {
     expect(isIgnoredReplayEvent('UPDATE_GAME_OBJECT')).toBe(false);
     expect(isIgnoredReplayEvent('ROLL_DICE_SYMBOL')).toBe(false);

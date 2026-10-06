@@ -224,6 +224,7 @@ export default defineConfig({
             { text: '移動範囲', link: '/manual/move-range' },
             { text: '同行（パーティ）', link: '/manual/party' },
             { text: '地形', link: '/manual/terrain' },
+            { text: 'スイッチ', link: '/manual/switch' },
             { text: 'マップマスク', link: '/manual/map-mask' },
             { text: 'ホワイトボード', link: '/manual/white-board' },
           ],
@@ -281,6 +282,9 @@ export default defineConfig({
           text: 'リリースノート',
           items: [
             { text: '一覧', link: '/release-notes/' },
+            { text: 'v1.60.0', link: '/release-notes/v1.60.0' },
+            { text: 'v1.59.0', link: '/release-notes/v1.59.0' },
+            { text: 'v1.58.0', link: '/release-notes/v1.58.0' },
             { text: 'v1.57.1', link: '/release-notes/v1.57.1' },
             { text: 'v1.57.0', link: '/release-notes/v1.57.0' },
             { text: 'v1.56.0', link: '/release-notes/v1.56.0' },

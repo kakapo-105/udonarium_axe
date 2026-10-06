@@ -2,7 +2,7 @@ import { computed, inject, Injectable } from '@angular/core';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { GameCharacter } from '@axe/domain/character/game-character';
-import { nextPartyColor, Party } from '@axe/domain/party/party';
+import { nextPartyColor, Party, writeAllies } from '@axe/domain/party/party';
 import { membersOfParty, membersWithoutParty } from '@axe/domain/party/party-membership';
 
 @Injectable({ providedIn: 'root' })
@@ -73,7 +73,45 @@ export class PartyService {
   /** Deletes a party from the room, leaving its members without one first. */
   remove(party: Party): void {
     for (const character of this.membersOf(party.identifier)) this.assign(character, '');
+    for (const other of this.parties()) {
+      if (other.identifier === party.identifier) continue;
+      if (other.alliedWith.includes(party.identifier)) this.stand(other, party.identifier, false);
+    }
     party.destroy();
+  }
+
+  /** Whether two parties stand together, either of them saying so being enough. */
+  standsWith(party: Party, other: string): boolean {
+    if (other.length < 1 || other === party.identifier) return false;
+    if (party.alliedWith.includes(other)) return true;
+    const theirs = this.parties().find((held) => held.identifier === other);
+    return theirs?.alliedWith.includes(party.identifier) === true;
+  }
+
+  /**
+   * Puts a party in or out of another's company.
+   *
+   * Written to the one whose list was touched. Breaking it takes the answer out of both, since
+   * either side saying so is what makes an alliance and leaving the other half written would
+   * leave it standing.
+   */
+  stand(party: Party, other: string, together: boolean): void {
+    if (other.length < 1 || other === party.identifier) return;
+    this.write(party, together ? [...party.alliedWith, other] : party.alliedWith.filter((held) => held !== other));
+    if (together) return;
+    const theirs = this.parties().find((held) => held.identifier === other);
+    if (theirs)
+      this.write(
+        theirs,
+        theirs.alliedWith.filter((held) => held !== party.identifier)
+      );
+  }
+
+  private write(party: Party, allies: readonly string[]): void {
+    const written = writeAllies(allies);
+    if (party.allies === written) return;
+    party.allies = written;
+    this.objectChange.notifyChanged(party.identifier);
   }
 
   /** Puts a character in a party, or in none with an empty identifier. Nothing happens when it is already there. */

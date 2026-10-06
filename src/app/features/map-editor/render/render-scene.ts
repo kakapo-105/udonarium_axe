@@ -9,7 +9,7 @@ import {
   traceHexPath,
 } from '@axe/domain/tabletop/hex-geometry';
 import { catmullRomSegments } from '@axe/features/map-editor/model/curve-geometry';
-import { FUNCTION_ROLE_INK } from '@axe/features/map-editor/model/function-layer';
+import { functionInkOf } from '@axe/features/map-editor/model/function-layer';
 import { cellCenter, pointToCell } from '@axe/features/map-editor/model/grid-cells';
 import {
   FillStyle,
@@ -474,7 +474,7 @@ export function renderScene(
         const hex = isHexGrid(scene.gridType);
         const s = hex ? hexCircumradius(scene.cellPx) : 0;
         const startAngle = hex ? hexStartAngle(isFlatTopGrid(scene.gridType)) : 0;
-        ctx.fillStyle = FUNCTION_ROLE_INK[layer.role];
+        ctx.fillStyle = functionInkOf(layer.role, layer.spec);
         for (const key of Object.keys(layer.cells)) {
           const { col, row } = parseCellKey(key);
           if (hex) {

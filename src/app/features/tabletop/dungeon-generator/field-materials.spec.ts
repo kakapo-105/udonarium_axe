@@ -16,7 +16,7 @@ function block(sideId: string, topId: string): MapBlock {
 }
 
 function blocksOf(...list: MapBlock[]): MapBlocks {
-  return { blocks: list, paint: [], ambiences: [], torchRooms: [], torchSpots: [], lights: [] };
+  return { blocks: list, paint: [], ambiences: [], traps: [], torchRooms: [], torchSpots: [], lights: [] };
 }
 
 describe('withFieldMaterials', () => {

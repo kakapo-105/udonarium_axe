@@ -432,7 +432,7 @@
           />
         }
         <div
-          class="relative mt-1 w-max max-w-120 min-w-40 rounded-2xl border-2 border-solid border-amber-300/80 bg-white/95 px-6 py-3 text-center wrap-break-word text-gray-900 shadow-[0_0_28px_rgba(252,211,77,0.45)]"
+          class="relative mt-1 w-max max-w-120 min-w-40 rounded-2xl border-2 border-solid border-amber-300/80 bg-white/95 px-6 py-3 text-center wrap-break-word text-gray-900 shadow-[0_0_28px_rgba(252,211,77,0.45)] has-data-dice-wide:max-w-[min(55rem,calc(84vw+3rem),calc(72vh+3rem))]"
           [class]="bubbleTextSizeClass()"
         >
           <span class="flex items-center justify-center gap-1.5">
@@ -464,6 +464,11 @@
           }
           @if (!isTyping() && !isLatest()) {
             <span class="ml-1 inline-block animate-bounce text-gray-400">▼</span>
+          }
+          @if (system.kind === 'dice') {
+            <div class="text-left">
+              <dice-roll-stage [messageIdentifier]="message.identifier" layout="grid" />
+            </div>
           }
         </div>
       </div>

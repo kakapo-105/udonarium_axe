@@ -12,6 +12,7 @@ import {
   resolvePortraitIndex,
   stripPortraitCommand,
 } from '@axe/application/chat/chat-message-helpers';
+import { MyDiceService } from '@axe/application/dice/my-dice.service';
 import { encodeI18nMessage } from '@axe/application/i18n/i18n-message';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { emitDiceTableMessage, emitResourceEditMessage, emitSendMessage } from '@axe/core/event/domain-events';
@@ -29,6 +30,7 @@ import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { OUT_OF_STORY_TAG } from '@axe/domain/chat/constants';
 import { dieRollTag } from '@axe/domain/chat/die-roll-tag';
 import { DataElement, DataElementFieldType } from '@axe/domain/data/data-element';
+import { encodeDiceLook } from '@axe/domain/dice/dice-3d/dice-look';
 import { DiceBot } from '@axe/domain/dice/dice-bot';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import GameSystemClass from 'bcdice/lib/game_system';
@@ -41,6 +43,7 @@ export class ChatMessageService {
   private readonly rolePermission = inject(RolePermissionService);
   private readonly imageStorage = inject(ImageStorage);
   private readonly chatTabList = inject(ChatTabList);
+  private readonly myDice = inject(MyDiceService);
 
   private calibrationTimer: ReturnType<typeof setTimeout> | null = null;
   private timeOffset: number = Date.now();
@@ -240,8 +243,10 @@ export class ChatMessageService {
    *
    * Image references to the speaker's data are lifted out into attachments, a trailing portrait
    * command picks the portrait and is removed from the text, and a line sent under a dice system is
-   * tagged with it. A line not whispered to anyone also records who this reader last spoke as,
-   * which `sendSystemMessageAsLastSpeaker` follows.
+   * tagged with it. A line from a seat that chose how its dice look carries that look, for the dice
+   * bot's answer to throw them in; a guest's carries no picture, since a guest may not add to the
+   * room's images. A line not whispered to anyone also records who this reader last spoke as, which
+   * `sendSystemMessageAsLastSpeaker` follows.
    */
   sendMessage(
     chatTab: ChatTab,
@@ -292,6 +297,13 @@ export class ChatMessageService {
     if (bubbles?.light) chatMessage.messBubbleLight = bubbles.light;
     if (bubbles?.dark) chatMessage.messBubbleDark = bubbles.dark;
     if (vnEmote) chatMessage.vnEmote = vnEmote;
+    const look = this.myDice.look();
+    const diceLook = encodeDiceLook(look);
+    if (diceLook) chatMessage.diceLook = diceLook;
+    if (look.picture && this.rolePermission.canEditTabletop) {
+      chatMessage.diceImageIdentifier = look.picture;
+      void this.myDice.ensureShared();
+    }
 
     const portrait = this.applyPortraitCommand(chatMessage, text, sendFrom, imgIndex);
     this.setLastControlInfoToPeer(sendFrom, portrait.identifier, portrait.index, sendTo);
@@ -311,6 +323,40 @@ export class ChatMessageService {
       messageTargetContext: eventPlan.resourceEditTargetContext,
     });
 
+    return chat;
+  }
+
+  /**
+   * Speaks a line under a name of its own, belonging to no piece and no peer.
+   *
+   * This is how something on the table talks: a door or a chest saying what it is. Dice in the line
+   * are rolled for it, and the result comes back under the same name. It leaves alone who this
+   * reader last spoke as, since the reader did not say it, and nothing in the line reaches a
+   * piece's resources, since no piece is speaking.
+   */
+  sendAsNamed(
+    chatTab: ChatTab,
+    text: string,
+    gameSystem: GameSystemClass | null,
+    name: string,
+    color?: string
+  ): ChatMessage {
+    const dicebot = this.objectStore.get<DiceBot>('DiceBot')!;
+    const chatMessage: ChatMessageContext = {
+      from: Network.peerContext.userId,
+      name,
+      imageIdentifier: '',
+      timestamp: this.calcTimeStamp(chatTab),
+      tag: resolveChatMessageTag(gameSystem, text, dicebot),
+      text,
+      imagePos: -1,
+      messColor: resolveMessageColor(color, '#000000'),
+      sendFrom: '',
+      senderRole: PeerCursor.myRole,
+    };
+    const chat = chatTab.addMessage(chatMessage);
+    emitSendMessage({ messageIdentifier: chat.identifier, messageTarget: null });
+    emitDiceTableMessage({ messageIdentifier: chat.identifier });
     return chat;
   }
 

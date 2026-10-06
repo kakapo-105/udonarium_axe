@@ -11,9 +11,22 @@ import {
 } from '@axe/domain/tabletop/dungeon/dungeon-layout';
 import { mergeMaskToRects } from '@axe/domain/tabletop/dungeon/rect-merge';
 import { furnishedCells, FURNISHING_SHAPES } from '@axe/domain/tabletop/dungeon/room-furnishing';
-import { MapBlock, MapBlocks, MapLight, MapLighting, MapLightKind, MapPaint } from '@axe/domain/tabletop/map-blocks';
+import { HAZARD_PRESETS } from '@axe/domain/tabletop/hazard-presets';
+import {
+  MapAmbience,
+  MapBlock,
+  MapBlocks,
+  MapLight,
+  MapLighting,
+  MapLightKind,
+  MapPaint,
+} from '@axe/domain/tabletop/map-blocks';
+
+/** How thick the look over a pool of dangerous ground is laid. */
+const HAZARD_AMBIENCE_DENSITY = 0.5;
 
 export const MAX_MERGE_SPAN = 12;
+
 export interface DungeonBlockOptions {
   placeDoors: boolean;
   placeStairs: boolean;
@@ -210,6 +223,7 @@ export function layoutToBlocks(
 ): MapBlocks {
   const blocks: MapBlock[] = [];
   const paint: MapPaint[] = [];
+  const ambiences: MapAmbience[] = [];
   const span = options.mergeSpan ?? MAX_MERGE_SPAN;
 
   const rockMask = maskOfKind(layout, [DungeonCell.Rock]);
@@ -234,8 +248,15 @@ export function layoutToBlocks(
   }
 
   const hazardMask = maskOfKind(layout, [DungeonCell.Hazard]);
+  const hazardKind = atmosphere.cave?.hazardKind;
   for (const rect of mergeMaskToRects(hazardMask, layout.width, layout.height, span)) {
-    paint.push({ kind: 'hazard', rect });
+    paint.push({ kind: 'hazard', rect, hazard: hazardKind });
+    // The look goes over the patch rather than into the picture the table wears: a pool that
+    // shimmers is what tells a party the floor there is not floor.
+    if (hazardKind) {
+      const look = HAZARD_PRESETS[hazardKind].ambience;
+      ambiences.push({ rect, kind: look, density: HAZARD_AMBIENCE_DENSITY, name: look });
+    }
   }
 
   if (options.placeDoors) {
@@ -294,7 +315,8 @@ export function layoutToBlocks(
   return {
     blocks,
     paint,
-    ambiences: [],
+    ambiences,
+    traps: (layout.traps ?? []).map((trap) => ({ x: trap.x, y: trap.y, kind: trap.kind })),
     torchRooms: lights.map((light) => light.room),
     torchSpots: lights.map((light) => ({ x: light.x, y: light.y })),
     lights,

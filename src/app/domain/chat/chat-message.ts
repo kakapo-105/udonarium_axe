@@ -40,6 +40,8 @@ export interface ChatMessageContext {
   quoteOf?: string;
   vnEmote?: string;
   senderRole?: string;
+  diceLook?: string;
+  diceImageIdentifier?: string;
 }
 
 @SyncObject('chat')
@@ -78,6 +80,23 @@ export class ChatMessage extends ObjectNode implements ChatMessageContext {
   @SyncVar() messBubbleLight: string = '';
   @SyncVar() messBubbleDark: string = '';
   @SyncVar() sendFrom: string;
+  /**
+   * How the one who said it wants their dice to look, as `encodeDiceLook` writes it; read with
+   * `decodeDiceLook`. A dice bot's answer carries the look of the line it answers.
+   *
+   * Left without an initialiser, as `vnEmote` is: most lines say nothing of dice, and a line from
+   * before looks were offered reads back empty, which is the plain look.
+   */
+  @SyncVar() diceLook: string;
+  /**
+   * The picture the dice of the line wear, by the identifier the room's images know it by; read
+   * with the look as `decodeDiceLook(diceLook, diceImageIdentifier)`.
+   *
+   * Kept apart from the look, under a name ending in ImageIdentifier, so that saving the room keeps
+   * the picture as it keeps any other a line or a piece points at. Left without an initialiser, as
+   * `diceLook` is.
+   */
+  @SyncVar() diceImageIdentifier: string;
   @SyncVar() replyTo: string = '';
   @SyncVar() quoteOf: string = '';
   @SyncVar() fixd: boolean = false;

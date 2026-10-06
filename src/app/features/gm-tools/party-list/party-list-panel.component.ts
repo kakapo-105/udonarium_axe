@@ -67,6 +67,19 @@ export class PartyListPanelComponent {
     this.partyService.remove(party);
   }
 
+  /** The other parties in the room, which are the ones this one may stand with. */
+  protected others(party: Party): Party[] {
+    return this.parties().filter((held) => held.identifier !== party.identifier);
+  }
+
+  protected standsWith(party: Party, other: Party): boolean {
+    return this.partyService.standsWith(party, other.identifier);
+  }
+
+  protected stand(party: Party, other: Party, together: boolean): void {
+    this.partyService.stand(party, other.identifier, together);
+  }
+
   protected assign(character: GameCharacter, partyIdentifier: string): void {
     this.partyService.assign(character, partyIdentifier);
   }

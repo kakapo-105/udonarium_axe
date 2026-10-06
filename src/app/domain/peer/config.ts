@@ -8,6 +8,7 @@ import {
   readControllerResourcePick,
   writeControllerResourcePick,
 } from '@axe/domain/character/controller-resource-pick';
+import { asDiceStage, DiceStage } from '@axe/domain/dice/dice-3d/dice-stage';
 import { Jukebox } from '@axe/domain/media/jukebox';
 import { allowsDiagonal, asDiagonalMove, DiagonalMove } from '@axe/domain/tabletop/move/diagonal-move';
 import {
@@ -53,11 +54,20 @@ export class Config extends ObjectNode implements InnerXml {
   @SyncVar('_moveDiagonally') private _moveDiagonally: string = '';
   @SyncVar('_diagonalMove') private _diagonalMove: string = '';
   @SyncVar('_piecesShareCells') private _piecesShareCells: string = '';
+  @SyncVar('_samePartyPassage') private _samePartyPassage: string = '';
+  @SyncVar('_otherPartyPassage') private _otherPartyPassage: string = '';
+  @SyncVar('_noPartyPassage') private _noPartyPassage: string = '';
+  @SyncVar('_piecePassageCost') private _piecePassageCost: number = -1;
+  @SyncVar('_sizeSlipsPast') private _sizeSlipsPast: string = '';
+  @SyncVar('_squeezes') private _squeezes: string = '';
+  @SyncVar('_jumpCells') private _jumpCells: number = -1;
+  @SyncVar('_handTracesWay') private _handTracesWay: string = '';
   @SyncVar('_moveRangeAlways') private _moveRangeAlways: string = '';
   @SyncVar('_zocAlways') private _zocAlways: string = '';
   @SyncVar('_cellDistance') private _cellDistance: number = -1;
   @SyncVar('_cellDistanceUnit') private _cellDistanceUnit: string = '';
   @SyncVar('_zocMode') private _zocMode: string = '';
+  @SyncVar('_hostilityBy') private _hostilityBy: string = '';
   @SyncVar('_zocRange') private _zocRange: number = -1;
   @SyncVar('_zocExtraCost') private _zocExtraCost: number = -1;
   @SyncVar('_zocEngages') private _zocEngages: string = '';
@@ -66,6 +76,21 @@ export class Config extends ObjectNode implements InnerXml {
   @SyncVar('_engagementCountsSize') private _engagementCountsSize: string = '';
   @SyncVar('_facingMark') private _facingMark: string = '';
   @SyncVar('_pieceImageInCell') private _pieceImageInCell: string = '';
+  @SyncVar('_diceStage') private _diceStage: string = '';
+
+  /**
+   * Where the room shows the dice of a chat roll tumbling: in the frame of the line that gives the
+   * result, on the table, or nowhere.
+   *
+   * Nowhere unless the room chose otherwise, so a room saved before the setting was there, or sent
+   * by an older version that knows nothing of it, stays as it was.
+   */
+  get diceStage(): DiceStage {
+    return asDiceStage(this._diceStage);
+  }
+  set diceStage(stage: DiceStage) {
+    this._diceStage = stage === 'off' ? '' : stage;
+  }
 
   /** The game system the room rolls dice with by default; blank reads as the generic `DiceBot`. */
   get defaultDiceBot(): string {
@@ -238,6 +263,70 @@ export class Config extends ObjectNode implements InnerXml {
     this._piecesShareCells = writeRuleFlag(answer);
   }
 
+  /** What a piece does with the ground its own party holds, or null to leave it to the table. */
+  get samePartyPassage(): string | null {
+    return readRuleText(this._samePartyPassage);
+  }
+  set samePartyPassage(answer: string | null) {
+    this._samePartyPassage = writeRuleText(answer);
+  }
+
+  /** The same, for the ground some other party holds. */
+  get otherPartyPassage(): string | null {
+    return readRuleText(this._otherPartyPassage);
+  }
+  set otherPartyPassage(answer: string | null) {
+    this._otherPartyPassage = writeRuleText(answer);
+  }
+
+  /** The same, for the ground a piece in no party holds. */
+  get noPartyPassage(): string | null {
+    return readRuleText(this._noPartyPassage);
+  }
+  set noPartyPassage(answer: string | null) {
+    this._noPartyPassage = writeRuleText(answer);
+  }
+
+  /** What crossing somebody costs where the table charges for it, or null to leave it to the table. */
+  get piecePassageCost(): number | null {
+    return readRuleNumber(this._piecePassageCost);
+  }
+  set piecePassageCost(answer: number | null) {
+    this._piecePassageCost = writeRuleNumber(answer);
+  }
+
+  /** Whether a piece squeezes past somebody far enough from it in size, or null to leave it to the table. */
+  get sizeSlipsPast(): boolean | null {
+    return readRuleFlag(this._sizeSlipsPast);
+  }
+  set sizeSlipsPast(answer: boolean | null) {
+    this._sizeSlipsPast = writeRuleFlag(answer);
+  }
+
+  /** Whether a piece folds itself through a gap too small for it, or null for the table. */
+  get squeezes(): boolean | null {
+    return readRuleFlag(this._squeezes);
+  }
+  set squeezes(answer: boolean | null) {
+    this._squeezes = writeRuleFlag(answer);
+  }
+
+  /** How far one leap carries in cells, or null for the table. */
+  get jumpCells(): number | null {
+    return readRuleNumber(this._jumpCells);
+  }
+  set jumpCells(answer: number | null) {
+    this._jumpCells = writeRuleNumber(answer);
+  }
+
+  /** Whether ground between a piece's two ends goes off when a hand moves it, or null for the table. */
+  get handTracesWay(): boolean | null {
+    return readRuleFlag(this._handTracesWay);
+  }
+  set handTracesWay(answer: boolean | null) {
+    this._handTracesWay = writeRuleFlag(answer);
+  }
+
   /** Whether the selected piece's reach stays shown without picking it up, or null to leave it to the table. */
   get moveRangeAlways(): boolean | null {
     return readRuleFlag(this._moveRangeAlways);
@@ -276,6 +365,14 @@ export class Config extends ObjectNode implements InnerXml {
   }
   set zocMode(answer: string | null) {
     this._zocMode = writeRuleText(answer);
+  }
+
+  /** How the room tells its two sides apart, or null to leave it to the table. */
+  get hostilityBy(): string | null {
+    return readRuleText(this._hostilityBy);
+  }
+  set hostilityBy(answer: string | null) {
+    this._hostilityBy = writeRuleText(answer);
   }
 
   /** How many steps out from an enemy its held ground reaches, or null to leave it to the table. */
@@ -350,11 +447,20 @@ export class Config extends ObjectNode implements InnerXml {
       moveDiagonally: this.moveDiagonally,
       diagonalMove: this.diagonalMove,
       piecesShareCells: this.piecesShareCells,
+      samePartyPassage: this.samePartyPassage,
+      otherPartyPassage: this.otherPartyPassage,
+      noPartyPassage: this.noPartyPassage,
+      piecePassageCost: this.piecePassageCost,
+      sizeSlipsPast: this.sizeSlipsPast,
+      squeezes: this.squeezes,
+      jumpCells: this.jumpCells,
+      handTracesWay: this.handTracesWay,
       moveRangeAlways: this.moveRangeAlways,
       zocAlways: this.zocAlways,
       cellDistance: this.cellDistance,
       cellDistanceUnit: this.cellDistanceUnit,
       zocMode: this.zocMode,
+      hostilityBy: this.hostilityBy,
       zocRange: this.zocRange,
       zocExtraCost: this.zocExtraCost,
       zocEngages: this.zocEngages,

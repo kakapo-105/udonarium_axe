@@ -52,6 +52,34 @@ describe('ChatMessageComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  describe('the dice of a roll', () => {
+    function lineFrom(from: string, tag: string): void {
+      const message = new ChatMessage();
+      message.initialize();
+      message.from = from;
+      message.to = '';
+      message.name = 'テスト';
+      message.tag = tag;
+      message.imageIdentifier = '';
+      message.messColor = '#000000';
+      message.text = '1D20 → 17';
+      fixture.componentRef.setInput('chatMessage', message);
+      fixture.detectChanges();
+    }
+
+    it('have a stage under the dice bot’s answer, for the dice thrown for it', () => {
+      lineFrom('System-BCDice', 'system');
+
+      expect(fixture.nativeElement.querySelector('dice-roll-stage')).toBeTruthy();
+    });
+
+    it('have no stage under an ordinary line', () => {
+      lineFrom('test-user', '');
+
+      expect(fixture.nativeElement.querySelector('dice-roll-stage')).toBeNull();
+    });
+  });
+
   it('shows a picture attached to a line inside it', () => {
     const image = ImageStorage.instance.add('stamp-image.png');
     try {

@@ -2,6 +2,7 @@ import { seededRandom } from '@axe/core/util/seeded-random';
 import { FIELD_PROP_SHAPES, FieldAtmosphere, FieldPropId } from '@axe/domain/tabletop/field/field-atmosphere';
 import { makeValueNoise, ValueNoise, warpedFbm } from '@axe/domain/tabletop/field/field-noise';
 import { FieldBuilding, layTown } from '@axe/domain/tabletop/field/town-layout';
+import { HazardKind } from '@axe/domain/tabletop/hazard-presets';
 
 export interface FieldLayout {
   width: number;
@@ -31,6 +32,8 @@ export interface FieldPool {
   density: number;
   name: string;
   texture: string;
+  /** What it is to walk into, where it is dangerous ground and not only a picture of it. */
+  hazard?: HazardKind;
 }
 
 /**
@@ -217,6 +220,7 @@ function pourPools(
           density: plan.density,
           name: plan.kind,
           texture: plan.texture,
+          hazard: plan.hazard,
         });
       }
     }

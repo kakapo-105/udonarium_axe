@@ -13,39 +13,35 @@ import { ObjectChangeService } from '@axe/application/sync/object-change.service
 import { TabletopActionService } from '@axe/application/tabletop/tabletop-action.service';
 import { getRangeMenuItems } from '@axe/application/tabletop/tabletop-action-helpers';
 import { TurnOrderService } from '@axe/application/turn/turn-order.service';
-import { BuffViewPreferenceService } from '@axe/application/ui/buff-view-preference.service';
+import { ButtonGuideService } from '@axe/application/ui/button-guide.service';
+import { MenuLayoutService } from '@axe/application/ui/menu-layout.service';
 import { PanelService } from '@axe/application/ui/panel.service';
 import { PieceOverlayPreferenceService } from '@axe/application/ui/piece-overlay-preference.service';
 import { ToolbarFoldService } from '@axe/application/ui/toolbar-fold.service';
 import { ViewportService } from '@axe/application/ui/viewport.service';
 import { WidgetVisibilityService } from '@axe/application/ui/widget-visibility.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
-import { BUFF_VIEW_LABEL_KEYS, type BuffViewMode } from '@axe/domain/character/buff-view-mode';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
+import { MenuCommandService, MenuEntryView } from '@axe/features/menu/menu-command.service';
 import { ObjectPanelService } from '@axe/features/panels/object-panel.service';
 import { RoomPanelService } from '@axe/features/panels/room-panel.service';
 import { ActiveCharacterService } from '@axe/features/pl-tools/active-character.service';
 import { isOwnedByUser } from '@axe/features/pl-tools/owned-character-list/owned-characters';
+import { UiButtonGuideComponent } from '@axe/ui/components/button-guide/button-guide.component';
 import { UiIconButtonComponent } from '@axe/ui/components/icon-button/icon-button.component';
 import { DraggableDirective } from '@axe/ui/directives/draggable.directive';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { turnIndicatorSignal } from '@axe/ui/turn/turn-indicator.signal';
 import { TranslocoModule } from '@jsverse/transloco';
 
-const BUFF_VIEW_ICONS: Record<BuffViewMode, string> = {
-  icon: 'bubble_chart',
-  detail: 'format_list_bulleted',
-  count: 'tag',
-};
-
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-pl-toolbar',
   templateUrl: './pl-toolbar.component.html',
-  imports: [DraggableDirective, SafePipe, TranslocoModule, UiIconButtonComponent],
+  imports: [DraggableDirective, SafePipe, TranslocoModule, UiButtonGuideComponent, UiIconButtonComponent],
 })
 export class PlToolbarComponent {
   protected readonly isCompact = inject(ViewportService).isCompact;
@@ -57,14 +53,23 @@ export class PlToolbarComponent {
   private readonly turnOrder = inject(TurnOrderService);
   private readonly tabletopAction = inject(TabletopActionService);
   protected readonly active = inject(ActiveCharacterService);
-  private readonly buffViewPreference = inject(BuffViewPreferenceService);
   private readonly t = inject(TRANSLATE_FN);
 
-  protected readonly buffViewIcon = computed(() => BUFF_VIEW_ICONS[this.buffViewPreference.mode()]);
-  protected readonly buffViewLabelKey = computed(() => BUFF_VIEW_LABEL_KEYS[this.buffViewPreference.mode()]);
+  private readonly menuCommands = inject(MenuCommandService);
+  private readonly barLayout = inject(MenuLayoutService).layoutOf('plToolbar');
 
-  protected cycleBuffView(): void {
-    this.buffViewPreference.cycle();
+  /** The bar as this seat has it arranged, with what it is not offered left out. */
+  protected readonly entries = computed<MenuEntryView[]>(() => this.menuCommands.entriesOf(this.barLayout()));
+
+  /** What is written on an entry, with a word in front where the name alone would not say. */
+  protected entryLabel(entry: MenuEntryView): string {
+    if (entry.label) return entry.label;
+    const name = this.t(entry.labelKey);
+    return entry.prefixKey ? `${this.t(entry.prefixKey)}: ${name}` : name;
+  }
+
+  protected press(entry: MenuEntryView): void {
+    this.menuCommands.run(entry.command);
   }
 
   protected readonly rangeMenuItems = getRangeMenuItems();
@@ -77,6 +82,9 @@ export class PlToolbarComponent {
 
   /** Whether the bar is folded down to its title. */
   protected readonly folded = computed(() => this.folds.isFolded('pl'));
+
+  /** Whether the name of every button is written out beside the bar. */
+  protected readonly guide = inject(ButtonGuideService);
 
   /** Folds the bar down to its title, or opens it again; what was open in it closes with it. */
   protected toggleFold(): void {
@@ -161,6 +169,6 @@ export class PlToolbarComponent {
   }
 
   protected openOwnedCharacterList(): void {
-    this.roomPanels.open('ownedCharacters', { left: 100, top: 40 });
+    this.roomPanels.open('ownedCharacters');
   }
 }

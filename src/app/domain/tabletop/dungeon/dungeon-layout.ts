@@ -1,3 +1,5 @@
+import { TrapKind } from '@axe/domain/tabletop/trap-presets';
+
 /**
  * How many cells across a passage is cut.
  *
@@ -111,6 +113,11 @@ export interface DungeonFurnishing extends DungeonRect {
   stack?: FurnishingId[];
 }
 
+/** A trap set on one cell of the board, and what kind of trap it is. */
+export interface DungeonTrap extends DungeonPoint {
+  kind: TrapKind;
+}
+
 export interface DungeonLayout {
   width: number;
   height: number;
@@ -134,6 +141,8 @@ export interface DungeonLayout {
   keyRoomIndex: number;
   /** What stands in the rooms, where the place is furnished at all. */
   furnishings?: DungeonFurnishing[];
+  /** What is set on the floor to catch whoever walks on it, where the place is trapped at all. */
+  traps?: DungeonTrap[];
   seed: number;
 }
 

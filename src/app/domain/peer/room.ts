@@ -54,7 +54,11 @@ export class Room extends GameObject implements InnerXml {
       ...ObjectStore.instance.getObjects(Party),
       ...ObjectStore.instance.getObjects(GameCharacter),
       ...ObjectStore.instance.getObjects(RangeArea),
-      ...ObjectStore.instance.getObjects(LightSource),
+      // Only the lights that stand on no table. A light belongs to the table it is on, which has
+      // written it out already along with its walls; written again here it comes back as a
+      // second light standing in the first one's place. Asked the same way the table asks it,
+      // so a light nobody has put on one is still saved.
+      ...ObjectStore.instance.getObjects(LightSource).filter((obj) => !(obj.parent instanceof GameTable)),
       ...ObjectStore.instance.getObjects(TextNote),
       ...ObjectStore.instance.getObjects(CardStack),
       ...ObjectStore.instance.getObjects(Card).filter((obj) => {

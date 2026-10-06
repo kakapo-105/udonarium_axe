@@ -7,6 +7,7 @@ import {
   DestroyRef,
   ElementRef,
   inject,
+  signal,
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -22,6 +23,7 @@ import { turnCache } from '@axe/core/util/turn-cache';
 import { Card } from '@axe/domain/card/card'; //
 import { CardStack } from '@axe/domain/card/card-stack'; //
 import { GameCharacter } from '@axe/domain/character/game-character'; //
+import { ResourceSliderRange, resourceSliderRange, showsResourceSlider } from '@axe/domain/character/resource-slider';
 import {
   DataElement,
   DataElementAttribute,
@@ -87,8 +89,48 @@ export class OverviewPanelComponent {
   private readonly disclosureService = inject(DisclosureService);
   private readonly destroyRef = inject(DestroyRef);
 
-  private get canEdit(): boolean {
+  /** Whether this seat may edit the table, which moving a resource with its slider needs. */
+  protected get canEdit(): boolean {
     return this.rolePermission.canEditTabletop;
+  }
+
+  /** Where a resource's slider is being dragged to, by element, shown in its box before anything is written. */
+  private readonly sliderPreview = signal<ReadonlyMap<string, number>>(new Map());
+
+  /** Whether a resource is moved with a slider here as well as typed. */
+  hasResourceSlider(element: DataElement): boolean {
+    return showsResourceSlider(element);
+  }
+
+  /** The span a resource's slider runs over: from its minimum, 0 with none, to its maximum; null with nothing to slide over. */
+  resourceSliderSpan(element: DataElement): ResourceSliderRange | null {
+    return resourceSliderRange(String(element.effectiveMin ?? ''), String(element.value ?? ''));
+  }
+
+  /** What a resource's box shows as left: where its slider is being dragged to, or what the resource holds. */
+  shownCurrentValue(element: DataElement): number | string {
+    return this.sliderPreview().get(element.identifier) ?? element.currentValue;
+  }
+
+  /** Shows where a resource's slider is being dragged to, without writing it yet. */
+  previewSliderValue(element: DataElement, event: Event): void {
+    if (!this.canEdit) return;
+    const next = new Map(this.sliderPreview());
+    next.set(element.identifier, (event.target as HTMLInputElement).valueAsNumber);
+    this.sliderPreview.set(next);
+  }
+
+  /**
+   * Writes where a resource's slider was let go as what is left of it, once, so a drag across it is
+   * one change on the piece rather than one for every step. The maximum is left alone, and a seat
+   * that may not edit the table writes nothing.
+   */
+  commitSliderValue(element: DataElement, event: Event): void {
+    const next = new Map(this.sliderPreview());
+    next.delete(element.identifier);
+    this.sliderPreview.set(next);
+    if (!this.canEdit) return;
+    element.currentValue = (event.target as HTMLInputElement).valueAsNumber;
   }
 
   /**
@@ -424,13 +466,10 @@ export class OverviewPanelComponent {
     return getCellLabel(cell);
   }
 
-  /**
-   * The colour a field's current value is written in, or null for the default grey so the
-   * stylesheet decides.
-   */
+  /** The colour a field's current value is written in, or null to leave it to the stylesheet. */
   getPopupCurrentValueColor(element: DataElement): string | null {
-    const color = element.nowValueColor.trim().toLowerCase();
-    return color === '#444' ? null : color;
+    const color = element.nowValueColor.trim();
+    return color.length > 0 ? color : null;
   }
 
   /** Whether a check cell is ticked. */

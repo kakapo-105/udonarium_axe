@@ -58,3 +58,36 @@ test.describe('コイン', () => {
     await expect(renamed).toContainText('運命のコイン');
   });
 });
+
+test.describe('コイン（動きを止めた画面）', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('ui-lang', 'ja');
+      localStorage.setItem('ui-motion', 'off');
+    });
+    await waitAppReady(page);
+    await createCoin(page);
+  });
+
+  test('投げたコインが、出た面をすぐに見せること', async ({ page }) => {
+    const coin = page.locator('coin').first();
+    const shown = () =>
+      coin.evaluate((element) => {
+        const face = [...element.querySelectorAll<HTMLElement>('div')].find(
+          (div) => div.style.transform.startsWith('translateZ') && div.style.transform.includes('rotateY')
+        );
+        return face?.style.transform.includes('rotateY(180deg)') ? '裏' : '表';
+      });
+    const results = page.locator('chat-window').getByText(/コイン を投げました → (表|裏)/);
+
+    for (let thrown = 0; thrown < 12; thrown++) {
+      const menu = await openCoinMenu(page);
+      await menu.getByText('コインを投げる').click();
+      await expect(results).toHaveCount(thrown + 1, { timeout: 10000 });
+      const result = (await results.last().innerText()).match(/→ (表|裏)/)![1];
+
+      await expect.poll(shown, { timeout: 2000 }).toBe(result);
+      if (result === '裏') return;
+    }
+  });
+});

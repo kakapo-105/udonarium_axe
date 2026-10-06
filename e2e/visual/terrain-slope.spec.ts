@@ -25,11 +25,11 @@ test('a block slopes to one side as a ramp and to every side as a pyramid', asyn
   await terrain.dispatchEvent('contextmenu');
   await settle(page, 300);
   await page.locator('context-menu').getByText('地形設定を編集', { exact: true }).dispatchEvent('click');
-  await settleLazy(page);
   const sheet = page.locator('ui-panel').first();
+  await settleLazy(page, sheet.locator('button', { hasText: '床画像' }));
   for (const face of ['床画像', '壁画像']) {
     await sheet.locator('button', { hasText: face }).first().dispatchEvent('click');
-    await settleLazy(page);
+    await settleLazy(page, page.locator('modal img').nth(1));
     // The knight, which is opaque: the default avatar is a translucent ring and shows nothing.
     await page.locator('modal img').nth(1).dispatchEvent('click');
     await settle(page, 300);

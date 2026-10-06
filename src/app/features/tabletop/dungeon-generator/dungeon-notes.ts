@@ -32,6 +32,8 @@ export function describeDungeon(
       torch: t('feature.tabletop.dungeonGenerator.summary.torch'),
       doors: t('feature.tabletop.dungeonGenerator.summary.doors'),
       hidden: t('feature.tabletop.dungeonGenerator.summary.hidden'),
+      traps: t('feature.tabletop.dungeonGenerator.summary.traps'),
+      trapName: (kind) => t(`feature.tabletop.dungeonGenerator.trap.${kind}`),
     },
   });
 }

@@ -77,6 +77,29 @@ test.describe('地形 (terrain)', () => {
     await expect(menu.getByText('傾斜')).toBeVisible();
   });
 
+  test('透明にした地形を GM が天面から掴んで動かせること', async ({ page }) => {
+    await page
+      .locator('ui-panel')
+      .filter({ hasText: '接続情報' })
+      .getByRole('button', { name: /^\s*GM\s*$/ })
+      .click();
+    const terrain = page.locator('terrain').first();
+    await terrain.dispatchEvent('contextmenu');
+    await page.locator('context-menu').getByText('テクスチャを外して透明にする').click();
+    const top = terrain.getByTestId('terrain-glass-face').first();
+    await expect(top).toBeAttached();
+    const box = (await top.boundingBox())!;
+    const placed = () => terrain.evaluate((el) => (el.firstElementChild as HTMLElement).style.transform);
+    const before = await placed();
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 60, { steps: 10 });
+    await page.mouse.up();
+
+    await expect.poll(placed).not.toBe(before);
+  });
+
   test('「傾斜」サブメニューに「壁を非表示」項目が出ること', async ({ page }) => {
     await page.locator('terrain').first().dispatchEvent('contextmenu');
     await expect(page.locator('context-menu').locator('li').first()).toBeVisible({ timeout: 5000 });

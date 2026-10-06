@@ -162,6 +162,16 @@ export class InventoryFilterPanelComponent {
     return this.viewPreference.shows(part);
   }
 
+  /** Whether an inventory opens with its folders folded up, as this reader asked for. */
+  foldsOnOpen(): boolean {
+    return this.viewPreference.foldsOnOpen();
+  }
+
+  /** Says so, for the next inventory opened on this device. This one is already open. */
+  setFoldsOnOpen(folds: boolean): void {
+    this.viewPreference.setFoldsOnOpen(folds);
+  }
+
   /** Shows or puts away one of the strips above the list. The choice is kept in this browser. */
   setShown(part: InventoryChromePart, shown: boolean): void {
     this.viewPreference.setShown(part, shown);

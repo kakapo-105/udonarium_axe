@@ -1,7 +1,9 @@
 import {
   alarmPop$,
   alarmTimeUp$,
+  callDiceThrow,
   cardStackDecreased$,
+  diceThrow$,
   emitAlarmPop,
   emitAlarmTimeUp,
   emitCardStackDecreased,
@@ -20,6 +22,7 @@ import {
   startCutIn$,
   stopCutInByBgm$,
 } from '@axe/core/event/domain-events';
+import { localDispatch } from '@axe/core/network/network-messaging';
 
 describe('domain-events emit→subscribe wiring', () => {
   it('sends a message onto its channel', () => {
@@ -116,5 +119,26 @@ describe('domain-events emit→subscribe wiring', () => {
     unsub();
     emitSendMessage({ messageIdentifier: 'b', messageTarget: null });
     expect(count).toBe(1);
+  });
+
+  it('throws the dice of a roll on this device alone when asked to keep it here', () => {
+    const received: unknown[] = [];
+    const unsub = diceThrow$.subscribe((e) => received.push(e));
+    callDiceThrow({ messageIdentifier: 'answer-1', speakerIdentifier: 'goblin' }, 'here');
+    callDiceThrow({ messageIdentifier: 'answer-2' }, 'here');
+    unsub();
+    expect(received).toEqual([
+      { messageIdentifier: 'answer-1', speakerIdentifier: 'goblin' },
+      { messageIdentifier: 'answer-2', speakerIdentifier: '' },
+    ]);
+  });
+
+  it('passes over a dice throw that names no line', () => {
+    const received: unknown[] = [];
+    const unsub = diceThrow$.subscribe((e) => received.push(e));
+    localDispatch('DICE_THROW', { messageIdentifier: 42 });
+    localDispatch('DICE_THROW', null);
+    unsub();
+    expect(received).toEqual([]);
   });
 });

@@ -69,6 +69,18 @@ export const FAB_COLUMN_CLASSES =
   '[&>*]:break-inside-avoid [&>*]:[direction:ltr] [@media(max-height:760px)]:[column-count:2] [@media(max-height:760px)]:[direction:rtl]';
 
 /**
+ * The drawer while every name in it is written out.
+ *
+ * One column only, whatever the height of the window: a name is written level with its item, and in
+ * two columns the names of the inner one would be written over the outer. A window too short for the
+ * drawer's usual rows has them drawn lower instead, which is what the second column was making room for.
+ */
+export const FAB_GUIDE_DRAWER_CLASSES = '[@media(max-height:760px)]:w-14!';
+
+/** One item of the drawer while every name in it is written out; see {@link FAB_GUIDE_DRAWER_CLASSES}. */
+export const FAB_GUIDE_ROW_CLASSES = '[@media(max-height:760px)]:h-8!';
+
+/**
  * Where something opened from an item in the drawer is hung: beside the drawer, on the same side
  * the names of its items are written on, so it opens onto the screen rather than off it.
  */

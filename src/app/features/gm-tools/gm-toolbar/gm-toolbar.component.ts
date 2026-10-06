@@ -13,7 +13,10 @@ import { ObjectChangeService } from '@axe/application/sync/object-change.service
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { GUEST_PERSONA, VisionService } from '@axe/application/tabletop/vision.service';
 import { TurnOrderService } from '@axe/application/turn/turn-order.service';
+import { ButtonGuideService } from '@axe/application/ui/button-guide.service';
 import { ConfirmService } from '@axe/application/ui/confirm.service';
+import { MenuLayoutService } from '@axe/application/ui/menu-layout.service';
+import { NpcBarService } from '@axe/application/ui/npc-bar.service';
 import { PanelService } from '@axe/application/ui/panel.service';
 import { PieceOverlayPreferenceService } from '@axe/application/ui/piece-overlay-preference.service';
 import { ToolbarFoldService } from '@axe/application/ui/toolbar-fold.service';
@@ -21,11 +24,11 @@ import { ViewportService } from '@axe/application/ui/viewport.service';
 import { WidgetVisibilityService } from '@axe/application/ui/widget-visibility.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
-import { findOrphanedOwnership } from '@axe/domain/tabletop/ownership';
 import { NpcBarComponent } from '@axe/features/gm-tools/npc-bar/npc-bar.component';
-import { NpcBarService } from '@axe/features/gm-tools/npc-bar/npc-bar.service';
 import { NpcDragService } from '@axe/features/gm-tools/npc-bar/npc-drag.service';
+import { MenuCommandService, MenuEntryView } from '@axe/features/menu/menu-command.service';
 import { RoomPanelService } from '@axe/features/panels/room-panel.service';
+import { UiButtonGuideComponent } from '@axe/ui/components/button-guide/button-guide.component';
 import { UiIconButtonComponent } from '@axe/ui/components/icon-button/icon-button.component';
 import { DraggableDirective } from '@axe/ui/directives/draggable.directive';
 import { turnIndicatorSignal } from '@axe/ui/turn/turn-indicator.signal';
@@ -35,7 +38,7 @@ import { TranslocoModule } from '@jsverse/transloco';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-gm-toolbar',
   templateUrl: './gm-toolbar.component.html',
-  imports: [DraggableDirective, NpcBarComponent, TranslocoModule, UiIconButtonComponent],
+  imports: [DraggableDirective, NpcBarComponent, TranslocoModule, UiButtonGuideComponent, UiIconButtonComponent],
 })
 export class GmToolbarComponent {
   protected readonly isCompact = inject(ViewportService).isCompact;
@@ -64,6 +67,9 @@ export class GmToolbarComponent {
 
   /** Whether the bar is folded down to its title. */
   protected readonly folded = computed(() => this.folds.isFolded('gm'));
+
+  /** Whether the name of every button is written out beside the bar. */
+  protected readonly guide = inject(ButtonGuideService);
 
   /** Folds the bar down to its title, or opens it again; what was open in it closes with it. */
   protected toggleFold(): void {
@@ -145,37 +151,21 @@ export class GmToolbarComponent {
     });
   }
 
-  protected openObjectList(): void {
-    this.roomPanels.open('objectList', { left: 100, top: 40 });
+  private readonly menuCommands = inject(MenuCommandService);
+  private readonly barLayout = inject(MenuLayoutService).layoutOf('gmToolbar');
+
+  /** The bar as this seat has it arranged, with what it is not offered left out. */
+  protected readonly entries = computed<MenuEntryView[]>(() => this.menuCommands.entriesOf(this.barLayout()));
+
+  /** What is written on an entry, with a word in front where the name alone would not say. */
+  protected entryLabel(entry: MenuEntryView): string {
+    if (entry.label) return entry.label;
+    const name = this.t(entry.labelKey);
+    return entry.prefixKey ? `${this.t(entry.prefixKey)}: ${name}` : name;
   }
 
-  protected openPartyList(): void {
-    this.roomPanels.open('partyList', { left: 120, top: 60 });
-  }
-
-  protected toggleNpcBar(): void {
-    this.npcBar.toggle();
-  }
-
-  protected toggleDarkness(): void {
-    const table = this.tabletopService.currentTable;
-    table.darknessEnabled = !table.darknessEnabled;
-    table.update();
-    this.objectChange.notifyChanged(table.identifier);
-  }
-
-  protected toggleFog(): void {
-    const table = this.tabletopService.currentTable;
-    table.fogEnabled = !table.fogEnabled;
-    table.update();
-    this.objectChange.notifyChanged(table.identifier);
-  }
-
-  protected async releaseOrphanedOwnership(): Promise<void> {
-    const orphaned = findOrphanedOwnership(this.objectStore.getObjects());
-    if (orphaned.length === 0) return;
-    if (!(await this.confirm.ask(this.t('app.fab.releaseOwnershipConfirm', { count: orphaned.length })))) return;
-    for (const object of orphaned) object.owner = '';
+  protected press(entry: MenuEntryView): void {
+    this.menuCommands.run(entry.command);
   }
 
   protected togglePersona(): void {

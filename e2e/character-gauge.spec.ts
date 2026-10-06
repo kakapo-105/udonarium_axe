@@ -323,6 +323,21 @@ test.describe('コマの頭上表示', () => {
   test('リソースが減ると赤い数字が飛び出すこと', async ({ page }) => {
     const piece = newCharacterPiece(page);
     const sheet = await openSheet(page);
+    // The piece shakes and flashes for 420ms, which a slow browser can spend before the number
+    // below shows; the page notes both as they start, so neither is missed.
+    await piece.evaluate((element) => {
+      const note = () => {
+        if (element.querySelector('[data-testid="piece-body"].animate-hit-shake'))
+          element.setAttribute('data-shook', 'true');
+        if (element.querySelector('[data-testid="hit-flash"]')) element.setAttribute('data-flashed', 'true');
+      };
+      new MutationObserver(note).observe(element, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ['class'],
+      });
+    });
 
     const current = sheet.locator('input[name="data-current-value"]').first();
     await expect(current).toBeVisible({ timeout: 5000 });
@@ -331,10 +346,10 @@ test.describe('コマの頭上表示', () => {
 
     const change = piece.locator('[data-testid="resource-change"]').first();
     await expect(change).toBeVisible({ timeout: 5000 });
-    await expect(piece.locator('[data-testid="piece-body"]')).toHaveClass(/animate-hit-shake/);
+    await expect(piece).toHaveAttribute('data-shook', 'true');
     await expect(change).toHaveText('-50');
     await expect(change).toHaveAttribute('data-kind', 'damage');
-    await expect(piece.locator('[data-testid="hit-flash"]')).toBeAttached();
+    await expect(piece).toHaveAttribute('data-flashed', 'true');
 
     await expect(piece.locator('[data-testid="resource-change"]')).toHaveCount(0, { timeout: 5000 });
   });

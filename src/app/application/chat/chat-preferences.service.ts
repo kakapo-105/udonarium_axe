@@ -60,6 +60,8 @@ interface StoredChatPreferences {
   fontSize?: number;
   /** Whether the chat log says how novel mode was asked to stage a line. Off unless asked for. */
   showVnEmoteBadge?: boolean;
+  /** Whether a chat window's title says how many lines the tab holds. Off unless asked for. */
+  showMessageCount?: boolean;
   colors?: string[];
   display?: ChatDisplayPreferences;
   portrait?: ChatScopedSetting;
@@ -109,6 +111,15 @@ export class ChatPreferencesService {
    */
   readonly showVnEmoteBadge = computed(() => this.stored().showVnEmoteBadge === true);
 
+  /**
+   * Whether a chat window says beside its title how many lines the tab it is showing holds.
+   *
+   * Off by default: a number that climbs all session is one more thing moving on a screen that
+   * already has plenty. A table that counts its lines - a play-by-post, a log being checked
+   * against another - can ask for it, and it stays on this browser.
+   */
+  readonly showMessageCount = computed(() => this.stored().showMessageCount === true);
+
   constructor() {
     effect(() => {
       const v = this.autoFollowScroll();
@@ -132,6 +143,11 @@ export class ChatPreferencesService {
   /** Turns the novel-mode expression badge on lines on or off for this reader. */
   setShowVnEmoteBadge(v: boolean): void {
     this.patch({ showVnEmoteBadge: v });
+  }
+
+  /** Turns the line count beside a chat window's title on or off for this reader. */
+  setShowMessageCount(v: boolean): void {
+    this.patch({ showMessageCount: v });
   }
 
   /** Sets the chat text size, clamped to the allowed range; anything not a number falls back to the default. */
@@ -255,6 +271,7 @@ function readStored(): StoredChatPreferences {
     const stored: StoredChatPreferences = {};
     if (typeof source['fontSize'] === 'number') stored.fontSize = clampFontSize(source['fontSize']);
     if (source['showVnEmoteBadge'] === true) stored.showVnEmoteBadge = true;
+    if (source['showMessageCount'] === true) stored.showMessageCount = true;
     const colors = readColors(source['colors']);
     if (colors) stored.colors = colors;
     const display = readDisplay(source['display']);

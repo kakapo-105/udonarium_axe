@@ -26,6 +26,7 @@ import { GameTable, GridType } from '@axe/domain/tabletop/game-table';
 import { GameTableMask } from '@axe/domain/tabletop/game-table-mask';
 import { GameTableScratchMask } from '@axe/domain/tabletop/game-table-scratch-mask';
 import { TableBackgroundLayer } from '@axe/domain/tabletop/table-background-layer';
+import { moveCostsOn, TableMoveCost } from '@axe/domain/tabletop/table-move-cost';
 import { Terrain, TerrainViewState } from '@axe/domain/tabletop/terrain';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 import { waitFor } from '@axe/testing/wait-for';
@@ -94,6 +95,39 @@ describe('save and load round trip', () => {
       expect(Config.instance.roomRuleAnswers.zocMode).toBeNull();
       expect(Config.instance.roomRuleAnswers.cellDistance).toBeNull();
       expect(Config.instance.roomRuleAnswers.moveRangeEnabled).toBeNull();
+    });
+  });
+
+  describe('dear ground serialisation', () => {
+    it('registers dear ground with the object factory', () => {
+      const obj = ObjectFactory.instance.create('table-move-cost');
+      expect(obj).toBeTruthy();
+      expect(obj).toBeInstanceOf(TableMoveCost);
+      obj?.destroy();
+    });
+
+    it('carries a stretch of dear ground through a table saved and read back', () => {
+      const table = new GameTable();
+      table.initialize();
+      const area = new TableMoveCost();
+      area.col = 3;
+      area.row = 4;
+      area.width = 5;
+      area.height = 2;
+      area.extraCost = 2;
+      area.color = '#123456';
+      area.initialize();
+      table.appendChild(area);
+
+      const xml = serializer.toXml(table);
+      for (const object of ObjectStore.instance.getObjects()) ObjectStore.instance.remove(object);
+      serializer.parseXml(xml);
+
+      const read = moveCostsOn(ObjectStore.instance.getObjects<GameTable>(GameTable)[0]);
+      expect(read).toHaveLength(1);
+      expect(read[0].rect).toEqual({ col: 3, row: 4, width: 5, height: 2 });
+      expect(read[0].charge).toBe(2);
+      expect(read[0].color).toBe('#123456');
     });
   });
 

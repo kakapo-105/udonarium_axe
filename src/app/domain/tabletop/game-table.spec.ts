@@ -68,6 +68,12 @@ describe('GameTable', () => {
       expect(table.name).toBe('テーブル');
     });
 
+    it('lets a compass find north, a table saved before the field was asked about included', () => {
+      const table = new GameTable();
+      table.initialize();
+      expect(table.magneticAnomaly).toBe(false);
+    });
+
     it('starts twenty cells wide', () => {
       const table = new GameTable();
       table.initialize();

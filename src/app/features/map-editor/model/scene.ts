@@ -173,6 +173,16 @@ export interface MapScene {
   gridVisible: boolean;
   layers: MapLayer[];
   guides?: SceneGuideLine[];
+  /**
+   * The roles this scene has held a layer for, kept after the layer itself is gone.
+   *
+   * A scene with no layer of a role says nothing about that role, and a table keeps whatever it
+   * already had. That is the right answer for somebody who only ever drew a floor and the wrong
+   * one for somebody who deleted their trap layer and meant it: both hand over a scene with no
+   * trap layer in it. What tells the two apart is whether the scene ever had one, which is
+   * written down here as the layers come and go.
+   */
+  paintedRoles?: MapFunctionRole[];
 }
 
 /** A line laid across the scene to line things up against, kept with the scene it was laid on. */
@@ -180,6 +190,20 @@ export interface SceneGuideLine {
   id: string;
   axis: 'x' | 'y';
   at: number;
+}
+
+/**
+ * Writes down the roles the scene holds a layer for, keeping the ones already written.
+ *
+ * Called with the scene as it stands before a step is taken, so that the step that takes a
+ * layer away is the step that records the role it spoke for.
+ */
+export function rememberPaintedRoles(scene: MapScene): void {
+  const spoken = new Set<MapFunctionRole>(scene.paintedRoles ?? []);
+  for (const layer of scene.layers) {
+    if (layer.kind === 'function') spoken.add(layer.role);
+  }
+  if (spoken.size > 0) scene.paintedRoles = [...spoken];
 }
 
 /** A fresh random identifier for a layer or for an item on one. */

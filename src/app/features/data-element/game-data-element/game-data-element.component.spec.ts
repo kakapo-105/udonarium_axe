@@ -1398,4 +1398,107 @@ describe('GameDataElementComponent', () => {
       expect(note.getAttribute(DataElementAttribute.CHANGE_SOUND_SET)).toBe('');
     });
   });
+
+  describe('the slider over what is left of a resource', () => {
+    function resourceField(attributes: Record<string, string> = {}): DataElement {
+      const field = DataElement.create('HP', 20, {
+        [DataElementAttribute.ROLE]: DataElementRole.FIELD,
+        type: DataElementType.NUMBER_RESOURCE,
+        ...attributes,
+      });
+      field.currentValue = 12;
+      return field;
+    }
+
+    function show(field: DataElement, options: { isEdit?: boolean; isValueLocked?: boolean } = {}): void {
+      fixture.componentRef.setInput('isEdit', options.isEdit ?? false);
+      fixture.componentRef.setInput('isValueLocked', options.isValueLocked ?? false);
+      fixture.componentRef.setInput('gameDataElement', field);
+      fixture.detectChanges();
+    }
+
+    const slider = () =>
+      fixture.nativeElement.querySelector('[data-testid="resource-slider"]') as HTMLInputElement | null;
+
+    function drag(to: number, letGo: boolean): void {
+      const input = slider()!;
+      input.value = String(to);
+      input.dispatchEvent(new Event('input'));
+      if (letGo) input.dispatchEvent(new Event('change'));
+      fixture.detectChanges();
+    }
+
+    it('is drawn under the values of a resource set to have one, from 0 up to its maximum', () => {
+      show(resourceField({ [DataElementAttribute.RESOURCE_SLIDER]: 'true' }));
+
+      expect(slider()).not.toBeNull();
+      expect(slider()!.min).toBe('0');
+      expect(slider()!.max).toBe('20');
+      expect(slider()!.value).toBe('12');
+    });
+
+    it('is not drawn for a resource not set to have one', () => {
+      show(resourceField());
+
+      expect(slider()).toBeNull();
+    });
+
+    it('runs down to the lowest point the resource is set to fall to', () => {
+      show(resourceField({ [DataElementAttribute.RESOURCE_SLIDER]: 'true', [DataElementAttribute.MIN_BASE]: '-5' }));
+
+      expect(slider()!.min).toBe('-5');
+    });
+
+    it('shows where it is being dragged in the box beside it and writes nothing yet', () => {
+      vi.useFakeTimers();
+      try {
+        const field = resourceField({ [DataElementAttribute.RESOURCE_SLIDER]: 'true' });
+        show(field);
+
+        drag(5, false);
+        vi.advanceTimersByTime(200);
+
+        expect(component.currentValue).toBe(5);
+        expect(Number(field.currentValue)).toBe(12);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('writes where it is let go as what is left, and leaves the maximum alone', () => {
+      vi.useFakeTimers();
+      try {
+        const field = resourceField({ [DataElementAttribute.RESOURCE_SLIDER]: 'true' });
+        show(field);
+
+        drag(5, true);
+        vi.advanceTimersByTime(200);
+
+        expect(Number(field.currentValue)).toBe(5);
+        expect(Number(field.value)).toBe(20);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('cannot be moved while the values are locked', () => {
+      show(resourceField({ [DataElementAttribute.RESOURCE_SLIDER]: 'true' }), { isValueLocked: true });
+
+      expect(slider()!.disabled).toBe(true);
+    });
+
+    it('is turned on and off among the field options', () => {
+      const field = resourceField();
+      show(field, { isEdit: true });
+      component.toggleFieldOptions();
+      fixture.detectChanges();
+      const option = fixture.nativeElement.querySelector('input[name="data-resource-slider"]') as HTMLInputElement;
+
+      option.click();
+      expect(field.getAttribute(DataElementAttribute.RESOURCE_SLIDER)).toBe('true');
+
+      option.click();
+      expect(field.getAttribute(DataElementAttribute.RESOURCE_SLIDER)).toBe('');
+    });
+  });
 });

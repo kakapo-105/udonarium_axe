@@ -50,9 +50,14 @@ test.describe('チャットメッセージの編集', () => {
     return rows.last();
   }
 
-  /** 編集アイコンは既定で opacity-0 なので force で押す。 */
-  const startEdit = (row: Locator) =>
-    row.locator('i.material-icons', { hasText: 'edit' }).first().click({ force: true });
+  /**
+   * 編集アイコンは行にポインタを乗せると見える。force で押すと押せる状態かを確かめないので、
+   * Firefox ではアイコンでなく下の要素に当たることがある。乗せてから普通に押す。
+   */
+  async function startEdit(row: Locator) {
+    await row.hover();
+    await row.locator('i.material-icons', { hasText: 'edit' }).first().click();
+  }
 
   test('自分の送信メッセージは edit アイコンからその場で編集できること', async ({ page }) => {
     await waitAppReady(page);

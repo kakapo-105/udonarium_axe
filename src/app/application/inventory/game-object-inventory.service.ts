@@ -14,6 +14,7 @@ import { isResourceElement } from '@axe/domain/character/resource-catalog';
 import { DataElement } from '@axe/domain/data/data-element';
 import { DataSummarySetting, SortOrder } from '@axe/domain/data/data-summary-setting';
 import { tagLeafNames } from '@axe/domain/data/summary-tag-list';
+import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 
 type ObjectIdentifier = string;
 type LocationName = string;
@@ -297,6 +298,7 @@ export class GameObjectInventoryService {
   private isAnyLocation(location: string): boolean {
     if (isHandLocation(location)) return true;
     if (location === 'table' || location === Network.peerId || location === 'graveyard') return true;
+    if (location === CONCEALED_LOCATION) return true;
     for (const conn of Network.peerContexts) {
       if (conn.isOpen && location === conn.peerId) {
         return true;

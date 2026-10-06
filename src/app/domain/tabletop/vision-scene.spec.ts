@@ -13,6 +13,8 @@ import {
   floorRadii,
   isLit,
   isPointVisible,
+  isPointVisibleFrom,
+  isSnuffed,
   lightAxis,
   lightFloorPool,
   lightLevelAt,
@@ -21,6 +23,7 @@ import {
   objectLightLevel,
   type OverlayVision,
   sameOverlayPlan,
+  type SceneBrightness,
   type SceneLight,
   type SceneViewer,
   type SceneVisionSource,
@@ -240,6 +243,78 @@ describe('vision-scene', () => {
     it('the global light acts as a floor under everything', () => {
       const s = scene({ globalIllumination: 0.3 });
       expect(lightLevelAt(s, 999, 999)).toBeCloseTo(0.3);
+    });
+
+    describe('a patch of the board held at a brightness of its own', () => {
+      const patch = (over: Partial<SceneBrightness> = {}): SceneBrightness => ({
+        x: 100,
+        y: 100,
+        widthPx: 100,
+        heightPx: 100,
+        level: 0,
+        snuffs: false,
+        ...over,
+      });
+
+      it('lights the ground under it and leaves the ground beside it alone', () => {
+        const s = scene({ brightAreas: [patch({ level: 1 })] });
+
+        expect(lightLevelAt(s, 150, 150)).toBe(1);
+        expect(lightLevelAt(s, 250, 150)).toBe(0);
+      });
+
+      it('never darkens what a lamp already lights, brightening being a floor and not a ceiling', () => {
+        const s = scene({
+          lights: [light({ x: 150, y: 150, brightPx: 100, dimPx: 200 })],
+          brightAreas: [patch({ level: 0.5 })],
+        });
+
+        expect(lightLevelAt(s, 150, 150)).toBe(1);
+      });
+
+      it('puts out the light under it where it darkens, lamp or no lamp', () => {
+        const s = scene({
+          lights: [light({ x: 150, y: 150, brightPx: 100, dimPx: 200 })],
+          brightAreas: [patch({ level: 0, snuffs: true })],
+        });
+
+        expect(lightLevelAt(s, 150, 150)).toBe(0);
+        expect(lightLevelAt(s, 300, 150)).toBe(0.5);
+      });
+
+      it('stays dark under a shaft of daylight laid over it, the dark having the last word', () => {
+        const s = scene({
+          brightAreas: [patch({ level: 1 }), patch({ level: 0, snuffs: true })],
+        });
+
+        expect(lightLevelAt(s, 150, 150)).toBe(0);
+      });
+    });
+  });
+
+  describe('isSnuffed', () => {
+    const dark: SceneBrightness = { x: 100, y: 100, widthPx: 100, heightPx: 100, level: 0, snuffs: true };
+
+    it('holds over the ground the dark was laid on and nowhere else', () => {
+      const s = scene({ brightAreas: [dark] });
+
+      expect(isSnuffed(s, 150, 150)).toBe(true);
+      expect(isSnuffed(s, 250, 150)).toBe(false);
+    });
+
+    it('holds for nothing on a table nobody has laid any dark on', () => {
+      expect(isSnuffed(scene(), 150, 150)).toBe(false);
+    });
+  });
+
+  describe('a piece standing in a pool of darkness', () => {
+    const dark: SceneBrightness = { x: 100, y: 100, widthPx: 100, heightPx: 100, level: 0, snuffs: true };
+
+    it('is out of sight though the table has no dark on it at all', () => {
+      const s = scene({ darknessEnabled: false, brightAreas: [dark] });
+
+      expect(isPointVisibleFrom(s, 150, 150, [])).toBe(false);
+      expect(isPointVisibleFrom(s, 250, 150, [])).toBe(true);
     });
   });
 

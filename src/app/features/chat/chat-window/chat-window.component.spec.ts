@@ -1,9 +1,11 @@
 import { ChangeDetectorRef } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
+import { ChatPreferencesService } from '@axe/application/chat/chat-preferences.service';
 import { ChatSpeakerService } from '@axe/application/chat/chat-speaker.service';
 import { ChatTickerSelectionService } from '@axe/application/chat/chat-ticker-selection.service';
 import { ObjectChangeService, ObjectDeleteEvent } from '@axe/application/sync/object-change.service';
+import { PanelService } from '@axe/application/ui/panel.service';
 import { EventChannel } from '@axe/core/event/event-channel';
 import { childrenChanged$, objectChanged$ } from '@axe/core/sync/object-event-extension';
 import { GameCharacter } from '@axe/domain/character/game-character';
@@ -133,6 +135,8 @@ describe('ChatWindowComponent', () => {
       fixture.detectChanges();
     });
 
+    // A tab left standing here is a tab the tests after it are answered for, and the one that
+    // walks the strip counts what it finds.
     afterEach(() => {
       tab.destroy();
     });
@@ -179,6 +183,74 @@ describe('ChatWindowComponent', () => {
       expect(words).toContain('one');
       expect(words).toContain('two');
       expect(words).not.toContain('three');
+    });
+  });
+
+  describe('saying how many lines the tab holds', () => {
+    const made: ChatTab[] = [];
+
+    // Cleared here rather than at the end of each test: a test that fails leaves its tabs
+    // behind otherwise, and the tests after it are answered for a room they never made.
+    afterEach(() => {
+      for (const tab of made.splice(0)) tab.destroy();
+      TestBed.inject(ChatPreferencesService).setShowMessageCount(false);
+    });
+
+    /** A tab with a few lines in it, as the window would find on opening. */
+    function tabWith(lines: number): ChatTab {
+      const tab = ChatTabList.instance.addChatTab('雑談');
+      for (let line = 0; line < lines; line++) {
+        tab.addMessage({ from: 'p1', text: `${line}` });
+      }
+      made.push(tab);
+      return tab;
+    }
+
+    function titleOf(): string {
+      return TestBed.inject(PanelService).title;
+    }
+
+    it('says nothing about the count until the reader asks', () => {
+      const tab = tabWith(3);
+      fixture.detectChanges();
+      component.chatTabidentifier = tab.identifier;
+
+      expect(titleOf()).not.toContain('3');
+    });
+
+    it('carries the count beside the title once asked', () => {
+      const tab = tabWith(3);
+      TestBed.inject(ChatPreferencesService).setShowMessageCount(true);
+      fixture.detectChanges();
+      component.chatTabidentifier = tab.identifier;
+      TestBed.tick();
+
+      expect(titleOf()).toContain('3');
+    });
+
+    it('counts again as a line arrives', () => {
+      const tab = tabWith(1);
+      TestBed.inject(ChatPreferencesService).setShowMessageCount(true);
+      fixture.detectChanges();
+      component.chatTabidentifier = tab.identifier;
+      TestBed.tick();
+
+      tab.addMessage({ from: 'p1', text: 'もう一言' });
+      TestBed.tick();
+
+      expect(titleOf()).toContain('2');
+    });
+
+    it('counts the tab it is showing rather than every tab in the room', () => {
+      const shown = tabWith(2);
+      tabWith(5);
+      TestBed.inject(ChatPreferencesService).setShowMessageCount(true);
+      fixture.detectChanges();
+      component.chatTabidentifier = shown.identifier;
+      TestBed.tick();
+
+      expect(titleOf()).toContain('2');
+      expect(titleOf()).not.toContain('5');
     });
   });
 

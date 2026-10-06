@@ -91,6 +91,30 @@ describe('RoomSettingsPanelComponent', () => {
     expect(component.defaultDiceBot).not.toBe('Cthulhu7th');
   });
 
+  it('lets the master choose where the room has its rolls tumble, and shows a player only what was chosen', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const select: HTMLSelectElement = fixture.nativeElement.querySelector('[data-testid="dice-stage"]');
+    expect(select.value).toBe('off');
+    expect([...select.options].map((option) => option.value)).toEqual(['off', 'frame', 'table', 'both']);
+    expect(select.disabled).toBe(false);
+
+    select.value = 'frame';
+    select.dispatchEvent(new Event('change'));
+    expect(Config.instance.diceStage).toBe('frame');
+
+    PeerCursor.myCursor.role = PeerRole.Player;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    component.diceStage = 'off';
+    // A model-bound control takes its disabled state a turn after the binding changes.
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(Config.instance.diceStage).toBe('frame');
+    expect(select.disabled).toBe(true);
+  });
+
   it('writes nothing for a reader who may not edit the table', () => {
     PeerCursor.myCursor.role = PeerRole.Guest;
     table.zocMode = 'stop';
@@ -229,6 +253,36 @@ describe('RoomSettingsPanelComponent', () => {
       component.zocMode = 'cost';
       expect(component.showsZocOptions).toBe(true);
       expect(component.showsZocExtraCost).toBe(true);
+    });
+
+    it('follows the older answer about sharing cells until a side is set', () => {
+      table.piecesShareCells = false;
+
+      for (const side of component.piecePassageSides) expect(component.piecePassage(side)).toBe('block');
+    });
+
+    it('takes over one side at a time, leaving the others where they were', () => {
+      component.setPiecePassage('samePartyPassage', 'pass');
+
+      expect(Config.instance.samePartyPassage).toBe('pass');
+      expect(component.piecePassage('samePartyPassage')).toBe('pass');
+      expect(component.piecePassage('otherPartyPassage')).toBe('share');
+    });
+
+    it('asks what crossing costs only where a side is charged for it', () => {
+      expect(component.showsPiecePassageCost).toBe(false);
+
+      component.setPiecePassage('samePartyPassage', 'pass');
+      expect(component.showsPiecePassageCost).toBe(false);
+
+      component.setPiecePassage('samePartyPassage', 'cost');
+      expect(component.showsPiecePassageCost).toBe(true);
+    });
+
+    it('takes a crossing price that is not a whole count as none at all', () => {
+      component.piecePassageCost = Number.NaN;
+
+      expect(component.piecePassageCost).toBe(0);
     });
 
     it('reads a table carrying something it does not know as holding no ground', () => {

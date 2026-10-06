@@ -27,6 +27,7 @@ import {
   MapLayer,
   MapScene,
   newId,
+  rememberPaintedRoles,
   ShapeItem,
   ShapeKind,
   ShapeLayer,
@@ -179,6 +180,9 @@ export class MapEditorState {
 
   /** Makes a change to the scene, redraws it and records it as one undoable step. */
   applyCommitted(fn: (scene: MapScene) => void): void {
+    // Written down before the change rather than after it: the step that takes a function
+    // layer away is the step that has to remember what that layer spoke for.
+    rememberPaintedRoles(this.scene);
     fn(this.scene);
     this.bump();
     this.endGesture();

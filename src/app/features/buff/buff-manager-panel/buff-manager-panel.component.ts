@@ -398,6 +398,11 @@ export class BuffManagerPanelComponent {
   readonly builderRounds = signal('3');
   readonly builderTiming = signal<BuffTiming>('roundEnd');
   readonly builderTrigger = signal('');
+  readonly builderStacks = signal(false);
+  readonly builderExtends = signal(false);
+
+  /** Whether a second helping would mean anything: holding a status at a value twice still holds it there. */
+  readonly builderCanStack = computed(() => this.builderOperator() !== '=');
 
   readonly builderCommand = computed(() => {
     const parts = [
@@ -411,7 +416,9 @@ export class BuffManagerPanelComponent {
     const trigger = this.builderTrigger().trim();
     if (timing !== 'roundEnd' || trigger.length > 0) parts.push(timing);
     if (trigger.length > 0) parts.push(trigger);
-    return `&!${parts.join('/')}`;
+    const stacks = this.builderStacks() && this.builderCanStack();
+    const mark = stacks ? (this.builderExtends() ? '++' : '+') : '';
+    return `&${mark}!${parts.join('/')}`;
   });
 
   readonly builderPreview = computed(() => {

@@ -119,11 +119,11 @@ function sameCoverScope(a: CoverScope, b: CoverScope): boolean {
     sameCells(a.explored, b.explored)
   );
 }
-const RELEVANT_ALIASES = new Set(['character', 'light-source', 'terrain', 'game-table']);
+const RELEVANT_ALIASES = new Set(['character', 'light-source', 'terrain', 'table-ambience', 'game-table']);
 /** How many table cells one bucket of the sight index spans. */
 const SIGHT_INDEX_BUCKET_CELLS = 2;
 /** What the walls of a place are cut from. A piece walking past moves none of it. */
-const STANDING_ALIASES = new Set(['terrain', 'game-table']);
+const STANDING_ALIASES = new Set(['terrain', 'table-ambience', 'game-table']);
 /** How many answers to keep, set well above what a single repaint asks for. */
 const MEMO_LIMIT = 8192;
 const EMPTY_SILHOUETTES: WallSilhouette[] = [];

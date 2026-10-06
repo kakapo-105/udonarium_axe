@@ -6,7 +6,13 @@ const SAN_PATTERN = /^[SsＳｓ][AaＡａ][NnＮn]$/i;
 const SANITY_PATTERN = /^正気度$/i;
 const SAN_WARNING_THRESHOLD = 0.8;
 const SAN_WARNING_COLOR = '#D22';
-const DEFAULT_VALUE_COLOR = '#444';
+/**
+ * What a value with nothing to say about its colour answers.
+ *
+ * Nothing at all, rather than a colour. A grey written here would be written over whatever the
+ * reader's theme had chosen, and a dark theme would be handed a dark grey on a dark panel.
+ */
+const NO_VALUE_COLOR = '';
 
 export const DataElementType = {
   NUMBER_RESOURCE: 'numberResource',
@@ -75,6 +81,7 @@ export const DataElementAttribute = {
   JUDGE_MODE: 'cs-judge-mode',
   PIECE_GAUGE: 'cs-piece-gauge',
   GAUGE_INVERTED: 'cs-gauge-inverted',
+  RESOURCE_SLIDER: 'cs-resource-slider',
   CHANGE_EFFECT: 'cs-change-effect',
   CHANGE_SOUND: 'cs-change-sound',
   CHANGE_SOUND_SET: 'cs-change-sound-set',
@@ -547,10 +554,11 @@ export class DataElement extends ObjectNode {
   }
 
   /**
-   * Text colour for a resource's current value on a sheet.
+   * Text colour for a resource's current value on a sheet, or nothing where it has none.
    *
-   * A sanity resource (named SAN or 正気度) turns red once it has fallen to 80% of its maximum or lower; every
-   * other element uses the default colour.
+   * A sanity resource (named SAN or 正気度) turns red once it has fallen to 80% of its maximum or
+   * lower. Everything else answers with nothing at all, which leaves the colour to the reader's
+   * theme: a value written in one colour for everybody would be the wrong one for half of them.
    */
   get nowValueColor(): string {
     if (SAN_PATTERN.test(this.name) || SANITY_PATTERN.test(this.name)) {
@@ -562,6 +570,6 @@ export class DataElement extends ObjectNode {
         }
       }
     }
-    return DEFAULT_VALUE_COLOR;
+    return NO_VALUE_COLOR;
   }
 }

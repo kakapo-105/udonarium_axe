@@ -99,6 +99,13 @@ export interface DiceRolledEvent {
   resultMessageIdentifier: string;
 }
 
+export interface DiceThrowEvent {
+  /** The dice bot's answer whose dice are thrown. */
+  messageIdentifier: string;
+  /** The piece that said the line the answer answers, which the dice are thrown before on the table; blank for none. */
+  speakerIdentifier?: string;
+}
+
 export interface DiceBotUnreachableEvent {
   /** The line that went unrolled. */
   messageIdentifier: string;
@@ -118,6 +125,7 @@ export const soundEffect$ = new EventChannel<string>();
 
 export const effectCast$ = new EventChannel<EffectCastEvent>();
 export const diceRolled$ = new EventChannel<DiceRolledEvent>();
+export const diceThrow$ = new EventChannel<DiceThrowEvent>();
 export const diceBotCatalog$ = new EventChannel<void>();
 export const diceBotUnreachable$ = new EventChannel<DiceBotUnreachableEvent>();
 export const resourceChange$ = new EventChannel<ResourceChangeEvent>();
@@ -267,6 +275,17 @@ export function callShuffleCardStack(identifier: string) {
   networkSend('SHUFFLE_CARD_STACK', { identifier });
 }
 
+/**
+ * Has the dice of a roll just answered thrown on every device, this one included, or on this
+ * device alone for a roll nobody else may see yet.
+ *
+ * Nothing about the throw is kept: a room loaded later, or a replay, never throws it again.
+ */
+export function callDiceThrow(event: DiceThrowEvent, here: 'everywhere' | 'here') {
+  if (here === 'here') localDispatch('DICE_THROW', event);
+  else networkSend('DICE_THROW', event);
+}
+
 /** Plays a stored sound on every device, this one included, by its audio identifier. */
 export function callSoundEffect(identifier: string) {
   networkSend('SOUND_EFFECT', identifier);
@@ -343,6 +362,13 @@ networkMessage$.subscribe((msg) => {
     case 'RESOURCE_CHANGE':
       resourceChange$.emit(msg.data as ResourceChangeEvent);
       break;
+    case 'DICE_THROW': {
+      const data = msg.data as Partial<DiceThrowEvent> | null;
+      if (typeof data?.messageIdentifier !== 'string') break;
+      const speaker = typeof data.speakerIdentifier === 'string' ? data.speakerIdentifier : '';
+      diceThrow$.emit({ messageIdentifier: data.messageIdentifier, speakerIdentifier: speaker });
+      break;
+    }
   }
 });
 

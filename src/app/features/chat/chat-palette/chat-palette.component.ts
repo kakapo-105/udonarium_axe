@@ -35,6 +35,7 @@ import { PaletteHeadingNode, paletteHeadingTree, PaletteRow, paletteRowsOf } fro
 import { DataElement } from '@axe/domain/data/data-element';
 import { emptyHotbarSlotDraft } from '@axe/domain/hotbar/hotbar-draft';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { ChatComposeService } from '@axe/features/chat/chat-compose.service';
 import { ChatInputComponent } from '@axe/features/chat/chat-input/chat-input.component';
 import { editsTextInPlace } from '@axe/features/chat/chat-input/chat-input-helpers';
 import { ChatPaletteRegistryService } from '@axe/features/chat/chat-palette/chat-palette-registry.service';
@@ -55,6 +56,8 @@ import { TranslocoModule } from '@jsverse/transloco';
     '(keydown.control.arrowright)': 'switchTabByKey($event, 1)',
   },
   imports: [FormsModule, ChatInputComponent, ChatTabStripComponent, GameDataElementComponent, TranslocoModule],
+  // One of these to a palette, so its input answers what was asked of it and nobody else's.
+  providers: [ChatComposeService],
 })
 export class ChatPaletteComponent {
   protected readonly isCompact = inject(ViewportService).isCompact;

@@ -13,7 +13,7 @@ import { ViewportService } from '@axe/application/ui/viewport.service';
 import { Network } from '@axe/core/index';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { StatusAilmentCatalog } from '@axe/domain/character/status-ailment-catalog';
-import { DataElement } from '@axe/domain/data/data-element';
+import { DataElement, DataElementType } from '@axe/domain/data/data-element';
 import { DataSummarySetting } from '@axe/domain/data/data-summary-setting';
 import { Party } from '@axe/domain/party/party';
 import { Config } from '@axe/domain/peer/config';
@@ -349,6 +349,65 @@ describe('GameObjectInventoryComponent', () => {
 
       component.toggleFolder('第1話');
       expect(component.isFolderCollapsed('第1話')).toBe(false);
+    });
+
+    describe('opening with the folders folded up, where this reader asked for that', () => {
+      /** A second inventory, opened after the reader has said how they want one opened. */
+      function opened(): GameObjectInventoryComponent {
+        const second = TestBed.createComponent(GameObjectInventoryComponent);
+        second.detectChanges();
+        return second.componentInstance;
+      }
+
+      it('opens a room of folders folded up', () => {
+        const goblin = putInShared('ゴブリン');
+        goblin.folderName = '第1話';
+        TestBed.inject(InventoryViewPreferenceService).setFoldsOnOpen(true);
+
+        const panel = opened();
+        panel.selectTab.set('common');
+        TestBed.tick();
+
+        expect(panel.isFolderCollapsed('第1話')).toBe(true);
+      });
+
+      it('leaves the pieces in no folder where they were', () => {
+        const goblin = putInShared('ゴブリン');
+        goblin.folderName = '第1話';
+        putInShared('村長');
+        TestBed.inject(InventoryViewPreferenceService).setFoldsOnOpen(true);
+
+        const panel = opened();
+        panel.selectTab.set('common');
+        TestBed.tick();
+
+        expect(panel.isFolderCollapsed('')).toBe(false);
+      });
+
+      it('opens them as it always has where nobody asked', () => {
+        const goblin = putInShared('ゴブリン');
+        goblin.folderName = '第1話';
+
+        const panel = opened();
+        panel.selectTab.set('common');
+        TestBed.tick();
+
+        expect(panel.isFolderCollapsed('第1話')).toBe(false);
+      });
+
+      it('leaves a folder the reader opens afterwards open', () => {
+        const goblin = putInShared('ゴブリン');
+        goblin.folderName = '第1話';
+        TestBed.inject(InventoryViewPreferenceService).setFoldsOnOpen(true);
+        const panel = opened();
+        panel.selectTab.set('common');
+        TestBed.tick();
+
+        panel.toggleFolder('第1話');
+        TestBed.tick();
+
+        expect(panel.isFolderCollapsed('第1話')).toBe(false);
+      });
     });
 
     it('opens every folder while a search is on, without forgetting what was folded', () => {
@@ -884,6 +943,32 @@ describe('GameObjectInventoryComponent', () => {
 
         expect(component.inventoryTable().columns.map((column) => column.name)).toEqual(['HP', 'MP']);
         expect(tableRows()).toHaveLength(2);
+      });
+
+      it('writes a resource in the colour the theme chose, not one of its own', () => {
+        putOnTable('ゴブリン');
+        TestBed.inject(GameObjectInventoryService).tableDataTag = 'HP';
+        component.setViewMode('table');
+        fixture.detectChanges();
+
+        const value = tableRows()[0].querySelector('input[name="table-current-value"]') as HTMLElement;
+        expect(value).toBeTruthy();
+        // Nothing written on the element itself: a colour written here would be written over the
+        // theme's, and a dark theme would be handed a grey meant for a pale one.
+        expect(value.style.color).toBe('');
+      });
+
+      it('still writes a sanity that has fallen in its warning colour', () => {
+        const haunted = putOnTable('探索者');
+        haunted.detailDataElement!.appendChild(
+          DataElement.create('SAN', 100, { type: DataElementType.NUMBER_RESOURCE, currentValue: 40 })
+        );
+        TestBed.inject(GameObjectInventoryService).tableDataTag = 'SAN';
+        component.setViewMode('table');
+        fixture.detectChanges();
+
+        const value = tableRows()[0].querySelector('input[name="table-current-value"]') as HTMLElement;
+        expect(value.style.color).not.toBe('');
       });
 
       it('gives the heading and every row the same columns', () => {

@@ -55,6 +55,7 @@ import {
   MIN_CORRIDOR_WIDTH,
 } from '@axe/domain/tabletop/dungeon/dungeon-layout';
 import { musterCells } from '@axe/domain/tabletop/dungeon/entrance-muster';
+import { MAX_DUNGEON_TRAPS } from '@axe/domain/tabletop/dungeon/trap-placing';
 import {
   clampFieldDensity,
   clampFieldSize,
@@ -125,6 +126,7 @@ export class DungeonGeneratorComponent {
   protected readonly maxCorridorWidth = MAX_CORRIDOR_WIDTH;
   protected readonly minDoorWidth = MIN_DOOR_WIDTH;
   protected readonly maxDoorWidth = MAX_DOOR_WIDTH;
+  protected readonly maxTraps = MAX_DUNGEON_TRAPS;
   protected readonly minDoubleDoors = MIN_DOUBLE_DOOR_PERCENT;
   protected readonly maxDoubleDoors = MAX_DOUBLE_DOOR_PERCENT;
 
@@ -134,6 +136,7 @@ export class DungeonGeneratorComponent {
   protected readonly fieldSize = signal(40);
   protected readonly fieldDensity = signal(50);
   protected readonly roomCount = signal(8);
+  protected readonly trapCount = signal(0);
   protected readonly seed = signal(Math.floor(Math.random() * SEED_LIMIT));
   protected readonly tableName = signal('');
   protected readonly placeDoors = signal(true);
@@ -225,6 +228,7 @@ export class DungeonGeneratorComponent {
         corridorWidth: this.corridorWidth(),
         doorWidth: this.doorWidth(),
         doubleDoorPercent: this.doubleDoors(),
+        trapCount: this.trapCount(),
         gridType: this.gridType(),
       },
       { placeDoors: this.placeDoors(), placeStairs: this.placeStairs(), sheerWalls: this.sheerWalls() }

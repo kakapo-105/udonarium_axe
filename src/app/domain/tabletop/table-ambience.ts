@@ -1,5 +1,6 @@
 import { SyncObject, SyncVar } from '@axe/core/sync/decorator';
 import { DataElement } from '@axe/domain/data/data-element';
+import { AmbienceBrightness, ambienceBrightnessOf } from '@axe/domain/effect/ambience/ambience-brightness';
 import {
   ambienceColorOf,
   ambienceDensityOf,
@@ -7,6 +8,7 @@ import {
   ambienceKindOf,
   DEFAULT_AMBIENCE_DENSITY,
 } from '@axe/domain/effect/ambience/ambience-kind';
+import { asShownTo, ShownTo } from '@axe/domain/tabletop/shown-to';
 import { TabletopObject } from '@axe/domain/tabletop/tabletop-object';
 
 /**
@@ -21,6 +23,29 @@ export class TableAmbience extends TabletopObject {
   @SyncVar() ambienceColor: string = '';
   @SyncVar() ambienceDensity: number = DEFAULT_AMBIENCE_DENSITY;
   @SyncVar() isLock: boolean = false;
+  /**
+   * Who it is drawn for, as one of SHOWN_TO. Empty shows it to the room, as it always was.
+   *
+   * A bank of fog the party has not come upon yet is a bank of fog they should not be looking
+   * at, and a master laying one ahead of them has until now had to lay it as they arrived.
+   */
+  @SyncVar() shownTo: string = '';
+  /**
+   * Whether nobody sees through it.
+   *
+   * A bank of fog that only looks like fog hides nothing: an eye reads straight through it and
+   * the party sees the far side of it as clearly as the near. Set, its outline stands in the
+   * way of sight the way a wall does, so a piece on one side of it cannot see one on the
+   * other, and a piece inside it is not seen from outside at all.
+   */
+  @SyncVar() blocksSight: boolean = false;
+  /**
+   * How bright the ground under it is, as one of AMBIENCE_BRIGHTNESS. Empty leaves it alone.
+   *
+   * A patch of the board lit, dimmed or put out whatever the rest of the table is lit by: the
+   * pool of magical darkness over a doorway, the shaft of daylight down a stairwell.
+   */
+  @SyncVar() brightness: string = '';
 
   /** How many grid cells wide the area is, kept in its common data. */
   get width(): number {
@@ -36,6 +61,16 @@ export class TableAmbience extends TabletopObject {
   }
   set height(height: number) {
     this.setCommonValue('height', height);
+  }
+
+  /** Who it is drawn for, with anything unknown - an empty answer included - shown to the room. */
+  get shows(): ShownTo {
+    return asShownTo(this.shownTo, 'room');
+  }
+
+  /** How bright the ground under it is, with anything unknown leaving the light as it was. */
+  get shade(): AmbienceBrightness {
+    return ambienceBrightnessOf(this.brightness);
   }
 
   /** The kind of effect, with an unknown stored kind read as swamp. */

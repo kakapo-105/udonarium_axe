@@ -13,7 +13,13 @@ import {
   DEFAULT_CELL_DISTANCE_UNIT,
   DEFAULT_MOVE_RANGE_ELEMENT_NAMES,
 } from '@axe/domain/tabletop/move/move-cells';
-import { DEFAULT_ZOC_EXTRA_COST, DEFAULT_ZOC_MODE, DEFAULT_ZOC_RANGE } from '@axe/domain/tabletop/move/zone-of-control';
+import { DEFAULT_PIECE_PASSAGE_COST } from '@axe/domain/tabletop/move/piece-passage';
+import {
+  DEFAULT_HOSTILITY_BY,
+  DEFAULT_ZOC_EXTRA_COST,
+  DEFAULT_ZOC_MODE,
+  DEFAULT_ZOC_RANGE,
+} from '@axe/domain/tabletop/move/zone-of-control';
 import { MultiAngleMotionMode } from '@axe/domain/tabletop/multi-angle';
 import { MultiAngleFontScale } from '@axe/domain/tabletop/multi-angle-font-scale';
 import { DEFAULT_CELL_MM } from '@axe/domain/tabletop/physical-scale';
@@ -91,6 +97,13 @@ export class GameTable extends ObjectNode {
   @SyncVar() facingMark: TableFacingMark = DEFAULT_TABLE_FACING_MARK;
   /** How wide one square is meant to measure on the glass, for a screen laid flat under miniatures. */
   @SyncVar() cellMm: number = DEFAULT_CELL_MM;
+  /**
+   * Whether the needle of a compass wanders on this table rather than finding north.
+   *
+   * A table of its own, since a lodestone cavern is one room of a dungeon rather than a rule of
+   * the room: a party that walks out of it should get their bearings back.
+   */
+  @SyncVar() magneticAnomaly: boolean = false;
   @SyncVar() wallHeight: number = 10;
   @SyncVar() northWallImageIdentifier: string = 'imageIdentifier';
   @SyncVar() eastWallImageIdentifier: string = 'imageIdentifier';
@@ -116,6 +129,25 @@ export class GameTable extends ObjectNode {
   @SyncVar() moveDiagonally: boolean = true;
   /** Whether two pieces may stand on one cell. Left off, a piece walks past rather than onto. */
   @SyncVar() piecesShareCells: boolean = true;
+  /**
+   * What the ground a piece of one's own party holds does to a piece walking into it, as one of
+   * PIECE_PASSAGE_MODES. Empty leaves it to whatever piecesShareCells says.
+   */
+  @SyncVar() samePartyPassage: string = '';
+  /** The same, for the ground some other party holds. */
+  @SyncVar() otherPartyPassage: string = '';
+  /** The same, for the ground a piece in no party holds. */
+  @SyncVar() noPartyPassage: string = '';
+  /** What crossing somebody costs on top of the one step, where the table charges for it. */
+  @SyncVar() piecePassageCost: number = DEFAULT_PIECE_PASSAGE_COST;
+  /** Whether a piece squeezes past somebody two cells or more apart from it in size. */
+  @SyncVar() sizeSlipsPast: boolean = false;
+  /** Whether a piece too big for a gap folds itself through it at a price. */
+  @SyncVar() squeezes: boolean = false;
+  /** How far one leap carries, in cells. Nought carries as far as the move has left. */
+  @SyncVar() jumpCells: number = 0;
+  /** Whether the ground between a piece's two ends goes off when a hand moves it. */
+  @SyncVar() handTracesWay: boolean = false;
   /** Whether the piece a reader has picked keeps showing its reach, not only while carried. */
   @SyncVar() moveRangeAlways: boolean = false;
   /** Whether the ground held against the piece a reader has picked keeps showing. */
@@ -125,6 +157,8 @@ export class GameTable extends ObjectNode {
 
   /** What the ground around an enemy does to a piece walking into it. One of ZOC_MODES. */
   @SyncVar() zocMode: string = DEFAULT_ZOC_MODE;
+  /** How the table tells its two sides apart, as one of HOSTILITY_BY. */
+  @SyncVar() hostilityBy: string = DEFAULT_HOSTILITY_BY;
   /** How many cells out from an enemy that ground reaches. */
   @SyncVar() zocRange: number = DEFAULT_ZOC_RANGE;
   /** What entering it costs on top of the one step, where the table charges for it. */

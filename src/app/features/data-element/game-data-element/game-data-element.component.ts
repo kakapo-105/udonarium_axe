@@ -23,6 +23,7 @@ import {
   ResourceSoundSet,
   soundSetOnChange,
 } from '@axe/domain/character/resource-feedback';
+import { ResourceSliderRange, resourceSliderRange, showsResourceSlider } from '@axe/domain/character/resource-slider';
 import {
   DataElement,
   DataElementAttribute,
@@ -1119,6 +1120,38 @@ export class GameDataElementComponent {
     event?.stopPropagation();
     if (!this.canShowPieceGauge()) return;
     this.toggleFlag(DataElementAttribute.PIECE_GAUGE);
+  }
+
+  /** Whether this resource is moved with a slider as well as typed, here and in the popup over its piece. */
+  hasResourceSlider(): boolean {
+    const element = this.gameDataElement();
+    this.objectChange.versionOf(element.identifier)();
+    return showsResourceSlider(element);
+  }
+
+  /** Moves this resource with a slider as well, or stops. Does nothing for an element that is not a numeric resource. */
+  toggleResourceSlider(): void {
+    if (!this.canShowPieceGauge()) return;
+    this.toggleFlag(DataElementAttribute.RESOURCE_SLIDER);
+  }
+
+  /** The span the slider runs over, the same the current value may be typed within; null with nothing to slide over. */
+  resourceSliderSpan(): ResourceSliderRange | null {
+    return resourceSliderRange(this.currentValueMinAttr(), this.currentValueMaxAttr());
+  }
+
+  /** Shows where the slider is being dragged to in the box beside it, before anything is written. */
+  previewSliderValue(event: Event): void {
+    if (this.isValueLocked()) return;
+    this._currentValue.set((event.target as HTMLInputElement).valueAsNumber);
+  }
+
+  /**
+   * Writes where the slider was let go as what is left of the resource, once, so a drag across it
+   * is one change on the piece rather than one for every step. The maximum is left alone.
+   */
+  commitSliderValue(event: Event): void {
+    this.currentValue = (event.target as HTMLInputElement).valueAsNumber;
   }
 
   /**

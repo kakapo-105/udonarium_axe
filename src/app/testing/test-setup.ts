@@ -7,18 +7,20 @@ import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from '@ang
 import { Logger, LogLevel } from '@axe/core/logging/logger';
 import { resetPeerContextProvider } from '@axe/core/network/peer-context-source';
 import { ObjectStore } from '@axe/core/sync/object-store';
+import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { basename, join, resolve } from 'path';
 
 Logger.setLevel(LogLevel.NONE);
 
+import { COMPASS_FACE_STORAGE_KEY } from '@axe/application/ui/compass-face.service';
 import { LOCAL_MODE_STORAGE_KEY } from '@axe/application/ui/local-mode-preference.service';
 import { PIECE_OVERLAY_STORAGE_KEY } from '@axe/application/ui/piece-overlay-preference.service';
 import { TABLETOP_DISPLAY_STORAGE_KEY } from '@axe/application/ui/tabletop-display-preference.service';
 import { TOOLBAR_FOLD_STORAGE_KEY } from '@axe/application/ui/toolbar-fold.service';
-import { WIDGET_VISIBILITY_STORAGE_KEY } from '@axe/application/ui/widget-visibility.service';
 import { VIEW_MODE_STORAGE_KEY } from '@axe/application/ui/view-mode-preference.service';
+import { WIDGET_VISIBILITY_STORAGE_KEY } from '@axe/application/ui/widget-visibility.service';
 
 const srcAppDir = resolve(process.cwd(), 'src/app');
 const fileMap = new Map<string, string>();
@@ -300,6 +302,25 @@ function applyConfigureTestingModuleWrapper(): void {
   TestBed.configureTestingModule = wrapped as typeof TestBed.configureTestingModule;
 }
 
+// vi.waitFor gives up after a second unless it is told otherwise. A step that takes a moment on its
+// own can take longer than that while every spec runs at once on a busy machine, and the wait then
+// fails with what it saw first. A wait that names no time is given ten seconds, well inside a
+// test's own thirty; one that names its time keeps it.
+const WAIT_FOR_MS = 10_000;
+
+function applyWaitForDefault(): void {
+  if ((vi.waitFor as unknown as Record<string, unknown>)[WRAPPER_SENTINEL]) return;
+  const waitFor = vi.waitFor;
+  const wrapped = ((callback, options) =>
+    waitFor(
+      callback,
+      typeof options === 'number' ? options : { timeout: WAIT_FOR_MS, ...options }
+    )) as typeof vi.waitFor;
+  (wrapped as unknown as Record<string, unknown>)[WRAPPER_SENTINEL] = true;
+  vi.waitFor = wrapped;
+}
+applyWaitForDefault();
+
 // Vitest runs setup once per test file; swallow the "already initialized" throw on re-entry.
 try {
   TestBed.initTestEnvironment(BrowserDynamicTestingModule, platformBrowserDynamicTesting());
@@ -315,6 +336,10 @@ function emptyObjectStore(): void {
   const store = ObjectStore.instance;
   for (const object of store.getObjects()) store.delete(object, false);
   store.clearDeleteHistory();
+  // The tab list is held by its own module as well as by the store, and its tabs are its children
+  // rather than entries of the store. Emptying the store alone leaves that one holding every tab
+  // any spec ever added, and it hands them back the moment the next one reads it.
+  ChatTabList.forget();
 }
 
 // The cursor of whoever is reading is a static as well, and it decides what a role is allowed to
@@ -336,6 +361,7 @@ function forgetSeatPreferences(): void {
   localStorage.removeItem(WIDGET_VISIBILITY_STORAGE_KEY);
   localStorage.removeItem(TOOLBAR_FOLD_STORAGE_KEY);
   localStorage.removeItem(PIECE_OVERLAY_STORAGE_KEY);
+  localStorage.removeItem(COMPASS_FACE_STORAGE_KEY);
 }
 
 beforeAll(async () => {

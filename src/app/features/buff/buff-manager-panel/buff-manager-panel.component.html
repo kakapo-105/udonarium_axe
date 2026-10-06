@@ -431,6 +431,33 @@
             <option [value]="option.value">{{ option.label }}</option>
           }
         </select>
+
+        @if (builderCanStack()) {
+          <label class="text-ui-muted text-[11px]">{{ 'feature.buffManager.builderStacks' | transloco }}</label>
+          <label class="text-ui-text flex min-w-0 cursor-pointer items-center gap-1 text-[11px]">
+            <input
+              type="checkbox"
+              class="cursor-pointer"
+              [ngModel]="builderStacks()"
+              (ngModelChange)="builderStacks.set($event)"
+              name="builderStacks"
+            />
+            <span class="text-ui-dim truncate">{{ 'feature.buffManager.builderStacksHint' | transloco }}</span>
+          </label>
+        }
+        @if (builderCanStack() && builderStacks()) {
+          <label class="text-ui-muted text-[11px]">{{ 'feature.buffManager.builderExtends' | transloco }}</label>
+          <label class="text-ui-text flex min-w-0 cursor-pointer items-center gap-1 text-[11px]">
+            <input
+              type="checkbox"
+              class="cursor-pointer"
+              [ngModel]="builderExtends()"
+              (ngModelChange)="builderExtends.set($event)"
+              name="builderExtends"
+            />
+            <span class="text-ui-dim truncate">{{ 'feature.buffManager.builderExtendsHint' | transloco }}</span>
+          </label>
+        }
       </div>
 
       <div class="mt-2 flex items-center gap-2">

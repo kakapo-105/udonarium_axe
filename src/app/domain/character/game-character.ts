@@ -83,6 +83,14 @@ export class GameCharacter extends OwnedTabletopObject {
   @SyncVar() hideFromRoster: boolean = false;
   @SyncVar() syncDummyCounter: number = 0;
 
+  /**
+   * How the piece is getting about, as one of MOVE_MODES. Empty walks.
+   *
+   * Held on the piece rather than asked each time it is moved: a dragon in the air stays in
+   * the air until somebody says otherwise, and a reach worked out for it has to know.
+   */
+  @SyncVar() moveMode: string = '';
+
   @SyncVar() visionType: string = VisionType.NORMAL;
   @SyncVar() visionRange: number = 0;
   @SyncVar() castsShadow: boolean = true;

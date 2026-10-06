@@ -124,13 +124,21 @@ export class RoomPanelService {
             ),
           option: { width: 450, height: 600 },
         };
+      case 'menuEditor':
+        return {
+          load: () =>
+            import('@axe/features/menu/menu-editor-panel/menu-editor-panel.component').then(
+              (m) => m.MenuEditorPanelComponent
+            ),
+          option: { width: 620, height: 560 },
+        };
       case 'objectList':
         return {
           load: () =>
             import('@axe/features/gm-object-list/game-object-list-panel.component').then(
               (m) => m.GameObjectListPanelComponent
             ),
-          option: { width: 460, height: 620 },
+          option: { width: 460, height: 620, left: 100, top: 40 },
         };
       case 'fileStorage':
         return {
@@ -170,7 +178,7 @@ export class RoomPanelService {
             import('@axe/features/pl-tools/owned-character-list/owned-character-list-panel.component').then(
               (m) => m.OwnedCharacterListPanelComponent
             ),
-          option: { width: 420, height: 560 },
+          option: { width: 420, height: 560, left: 100, top: 40 },
         };
       case 'partyList':
         return {
@@ -178,7 +186,7 @@ export class RoomPanelService {
             import('@axe/features/gm-tools/party-list/party-list-panel.component').then(
               (m) => m.PartyListPanelComponent
             ),
-          option: { width: 460, height: 620 },
+          option: { width: 460, height: 620, left: 120, top: 60 },
         };
       case 'buffManager':
         return {
@@ -233,6 +241,14 @@ export class RoomPanelService {
               (m) => m.ReplayWorkspaceComponent
             ),
           option: { width: 1180, height: 760, minWidth: 720, minHeight: 480 },
+        };
+      case 'myDice':
+        return {
+          load: () =>
+            import('@axe/features/dice/my-dice-setting/my-dice-setting.component').then(
+              (m) => m.MyDiceSettingComponent
+            ),
+          option: { width: 440, height: 560, single: 'my-dice' },
         };
       case 'diceTableSetting':
         return {

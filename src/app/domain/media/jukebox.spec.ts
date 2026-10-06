@@ -5,6 +5,7 @@ import { AudioPlayer, VolumeType } from '@axe/core/storage/audio-player';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { AudioTag } from '@axe/domain/media/audio-tag';
 import { Jukebox } from '@axe/domain/media/jukebox';
+import { Playlist } from '@axe/domain/media/playlist';
 import { Config } from '@axe/domain/peer/config';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -551,6 +552,416 @@ describe('Jukebox', () => {
       jukebox.apply(ctx2);
 
       expect(stopSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('playing through playlists', () => {
+    function makePlaylist(identifier: string, entries: string[]): Playlist {
+      const playlist = new Playlist(identifier);
+      playlist.entries = entries;
+      playlist.initialize();
+      return playlist;
+    }
+
+    function addReady(...identifiers: string[]): void {
+      for (const identifier of identifiers) AudioStorage.instance.add(makeReadyAudio(identifier));
+    }
+
+    function endTrack(jukebox: Jukebox): void {
+      (jukebox as unknown as { onTrackNaturallyEnded(): void }).onTrackNaturallyEnded();
+    }
+
+    function makeJukebox(): Jukebox {
+      const jukebox = new Jukebox();
+      jukebox.initialize();
+      return jukebox;
+    }
+
+    beforeEach(() => {
+      stubAudioPlayerPlay();
+      stubAudioPlayerStop();
+      vi.spyOn(AudioPlayer.prototype, 'seekTo').mockImplementation(() => {});
+    });
+
+    describe('the playlist the room plays through', () => {
+      it('is the room’s first while none is chosen', () => {
+        const first = makePlaylist(Playlist.DEFAULT_IDENTIFIER, []);
+
+        expect(makeJukebox().playlist).toBe(first);
+      });
+
+      it('is the one chosen', () => {
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, []);
+        const battle = makePlaylist('battle', []);
+        const jukebox = makeJukebox();
+
+        jukebox.playlistIdentifier = 'battle';
+
+        expect(jukebox.playlist).toBe(battle);
+      });
+
+      it('is the room’s first again once the chosen one is gone', () => {
+        const first = makePlaylist(Playlist.DEFAULT_IDENTIFIER, []);
+        const jukebox = makeJukebox();
+
+        jukebox.playlistIdentifier = 'deleted';
+
+        expect(jukebox.playlist).toBe(first);
+      });
+
+      it('is the room’s first, unshuffled, for a jukebox an older version sent without either', () => {
+        const first = makePlaylist(Playlist.DEFAULT_IDENTIFIER, ['a']);
+        const jukebox = makeJukebox();
+        jukebox.apply(jukebox.toContext());
+
+        const context = jukebox.toContext();
+        context.syncData = { audioIdentifier: '', isPlaying: false, repeatMode: 'all', startTime: 0 };
+        jukebox.apply(context);
+
+        expect(jukebox.playlist).toBe(first);
+        expect(jukebox.shuffles).toBe(false);
+        expect(jukebox.playOrder).toEqual(['a']);
+      });
+    });
+
+    describe('moving on at the end of a track', () => {
+      it('follows the chosen playlist rather than the room’s first', () => {
+        addReady('a', 'b', 'x', 'y');
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, ['a', 'b']);
+        makePlaylist('battle', ['x', 'y']);
+        const jukebox = makeJukebox();
+        jukebox.repeatMode = 'all';
+        jukebox.playlistIdentifier = 'battle';
+        jukebox.play('x');
+
+        endTrack(jukebox);
+
+        expect(jukebox.audioIdentifier).toBe('y');
+      });
+
+      it('stops after the last track without repeat', () => {
+        addReady('a', 'b');
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, ['a', 'b']);
+        const jukebox = makeJukebox();
+        jukebox.repeatMode = 'none';
+        jukebox.play('b');
+
+        endTrack(jukebox);
+
+        expect(jukebox.isPlaying).toBe(false);
+        expect(jukebox.audioIdentifier).toBe('');
+      });
+
+      it('goes round to the first track on repeat', () => {
+        addReady('a', 'b');
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, ['a', 'b']);
+        const jukebox = makeJukebox();
+        jukebox.repeatMode = 'all';
+        jukebox.play('b');
+
+        endTrack(jukebox);
+
+        expect(jukebox.audioIdentifier).toBe('a');
+        expect(jukebox.isPlaying).toBe(true);
+      });
+
+      it('follows the shuffled order while shuffled', () => {
+        const tracks = ['a', 'b', 'c', 'd', 'e', 'f'];
+        addReady(...tracks);
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, tracks);
+        const jukebox = makeJukebox();
+        jukebox.repeatMode = 'all';
+        jukebox.play('a');
+        jukebox.setShuffled(true);
+        const order = jukebox.playOrder;
+
+        endTrack(jukebox);
+
+        expect(order[0]).toBe('a');
+        expect(jukebox.audioIdentifier).toBe(order[1]);
+      });
+
+      it('plays every track once before the shuffled order goes round', () => {
+        const tracks = ['a', 'b', 'c', 'd', 'e', 'f'];
+        addReady(...tracks);
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, tracks);
+        const jukebox = makeJukebox();
+        jukebox.repeatMode = 'none';
+        jukebox.play('c');
+        jukebox.setShuffled(true);
+
+        const heard = [jukebox.audioIdentifier];
+        for (let i = 0; i < tracks.length; i++) {
+          endTrack(jukebox);
+          if (jukebox.audioIdentifier) heard.push(jukebox.audioIdentifier);
+        }
+
+        expect([...heard].sort()).toEqual(tracks);
+        expect(jukebox.isPlaying).toBe(false);
+      });
+
+      it('mixes the next time round afresh, without the track just heard coming first', () => {
+        const tracks = ['a', 'b', 'c', 'd', 'e', 'f'];
+        addReady(...tracks);
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, tracks);
+        const jukebox = makeJukebox();
+        jukebox.repeatMode = 'all';
+        jukebox.play('a');
+        jukebox.setShuffled(true);
+        const firstRound = jukebox.playOrder;
+        const seed = jukebox.shuffleSeed;
+        jukebox.play(firstRound[firstRound.length - 1]);
+
+        endTrack(jukebox);
+
+        expect(jukebox.shuffleSeed).not.toBe(seed);
+        expect(jukebox.audioIdentifier).not.toBe(firstRound[firstRound.length - 1]);
+        expect(jukebox.playOrder[0]).toBe(jukebox.audioIdentifier);
+      });
+
+      it('comes to the same next track and mix on every peer that hears the same track end', () => {
+        const tracks = ['a', 'b', 'c', 'd', 'e', 'f'];
+        addReady(...tracks);
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, tracks);
+        const here = makeJukebox();
+        here.repeatMode = 'all';
+        here.play('a');
+        here.setShuffled(true);
+        here.play(here.playOrder[tracks.length - 1]);
+        const there = new Jukebox(here.identifier);
+        there.apply(here.toContext());
+
+        endTrack(here);
+        endTrack(there);
+
+        expect(there.audioIdentifier).toBe(here.audioIdentifier);
+        expect(there.shuffleSeed).toBe(here.shuffleSeed);
+        expect(there.playOrder).toEqual(here.playOrder);
+      });
+    });
+
+    describe('pausing', () => {
+      it('keeps the track and where it was', () => {
+        addReady('a');
+        const jukebox = makeJukebox();
+        jukebox.play('a');
+        vi.spyOn(AudioPlayer.prototype, 'currentTime', 'get').mockReturnValue(42);
+
+        jukebox.pause();
+
+        expect(jukebox.isPlaying).toBe(false);
+        expect(jukebox.isPaused).toBe(true);
+        expect(jukebox.audioIdentifier).toBe('a');
+        expect(jukebox.startTime).toBe(42);
+        expect(jukebox.position).toBe(42);
+      });
+
+      it('goes on from where it was', () => {
+        addReady('a');
+        const jukebox = makeJukebox();
+        jukebox.play('a');
+        vi.spyOn(AudioPlayer.prototype, 'currentTime', 'get').mockReturnValue(42);
+        jukebox.pause();
+        const seekSpy = vi.mocked(AudioPlayer.prototype.seekTo);
+
+        jukebox.resume();
+
+        expect(jukebox.isPlaying).toBe(true);
+        expect(seekSpy).toHaveBeenLastCalledWith(42);
+      });
+
+      it('starts the next track from the top, wherever the last one was left', () => {
+        addReady('a', 'b');
+        const jukebox = makeJukebox();
+        jukebox.play('a');
+        jukebox.seek(80);
+
+        jukebox.play('b');
+
+        expect(jukebox.startTime).toBe(0);
+      });
+
+      it('goes on from the same point at another peer', () => {
+        addReady('a');
+        const jukebox = makeJukebox();
+        jukebox.apply(jukebox.toContext());
+        const paused = jukebox.toContext();
+        paused.syncData = { ...paused.syncData, audioIdentifier: 'a', isPlaying: false, startTime: 42 };
+        jukebox.apply(paused);
+        const seekSpy = vi.mocked(AudioPlayer.prototype.seekTo);
+        seekSpy.mockClear();
+
+        const resumed = jukebox.toContext();
+        resumed.syncData = { ...resumed.syncData, isPlaying: true };
+        jukebox.apply(resumed);
+
+        expect(seekSpy).toHaveBeenCalledWith(42);
+      });
+
+      it('starts a track another peer changed to from the top, whatever the last position', () => {
+        addReady('a', 'b');
+        const jukebox = makeJukebox();
+        jukebox.apply(jukebox.toContext());
+        const paused = jukebox.toContext();
+        paused.syncData = { ...paused.syncData, audioIdentifier: 'a', isPlaying: false, startTime: 42 };
+        jukebox.apply(paused);
+        const seekSpy = vi.mocked(AudioPlayer.prototype.seekTo);
+        seekSpy.mockClear();
+
+        const changed = jukebox.toContext();
+        changed.syncData = { ...changed.syncData, audioIdentifier: 'b', isPlaying: true };
+        jukebox.apply(changed);
+
+        expect(seekSpy).not.toHaveBeenCalled();
+      });
+
+      it('does nothing while nothing plays', () => {
+        const jukebox = makeJukebox();
+
+        jukebox.pause();
+
+        expect(jukebox.isPaused).toBe(false);
+      });
+    });
+
+    describe('skipping', () => {
+      it('plays the next track this peer can play, passing one it cannot', () => {
+        addReady('a', 'c');
+        AudioStorage.instance.add(makeAudioFile({ identifier: 'b' }));
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, ['a', 'b', 'c']);
+        const jukebox = makeJukebox();
+        jukebox.play('a');
+
+        jukebox.playNext();
+
+        expect(jukebox.audioIdentifier).toBe('c');
+      });
+
+      it('goes round from the last track whatever the repeat', () => {
+        addReady('a', 'b');
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, ['a', 'b']);
+        const jukebox = makeJukebox();
+        jukebox.repeatMode = 'none';
+        jukebox.play('b');
+
+        jukebox.playNext();
+
+        expect(jukebox.audioIdentifier).toBe('a');
+      });
+
+      it('starts with the first track when nothing is held', () => {
+        addReady('a', 'b');
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, ['a', 'b']);
+        const jukebox = makeJukebox();
+
+        jukebox.playNext();
+
+        expect(jukebox.audioIdentifier).toBe('a');
+      });
+
+      it('starts the track again when it is a few seconds in', () => {
+        addReady('a', 'b');
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, ['a', 'b']);
+        const jukebox = makeJukebox();
+        jukebox.play('b');
+        vi.spyOn(AudioPlayer.prototype, 'currentTime', 'get').mockReturnValue(10);
+
+        jukebox.playPrevious();
+
+        expect(jukebox.audioIdentifier).toBe('b');
+        expect(AudioPlayer.prototype.seekTo).toHaveBeenLastCalledWith(0);
+      });
+
+      it('starts the track again from the top at the other peers too, though it began there', () => {
+        addReady('a');
+        const jukebox = makeJukebox();
+        jukebox.apply(jukebox.toContext());
+        const playing = jukebox.toContext();
+        playing.syncData = { ...playing.syncData, audioIdentifier: 'a', isPlaying: true, startTime: 0 };
+        jukebox.apply(playing);
+        vi.spyOn(AudioPlayer.prototype, 'currentTime', 'get').mockReturnValue(10);
+        const seekSpy = vi.mocked(AudioPlayer.prototype.seekTo);
+        seekSpy.mockClear();
+
+        const restarted = jukebox.toContext();
+        restarted.syncData = { ...restarted.syncData, startTime: 0, seekCount: (jukebox.seekCount ?? 0) + 1 };
+        jukebox.apply(restarted);
+
+        expect(seekSpy).toHaveBeenCalledWith(0);
+      });
+
+      it('takes no seek from an older version that sends no count', () => {
+        addReady('a');
+        const jukebox = makeJukebox();
+        jukebox.apply(jukebox.toContext());
+        const playing = jukebox.toContext();
+        playing.syncData = { ...playing.syncData, audioIdentifier: 'a', isPlaying: true, startTime: 0, seekCount: 3 };
+        jukebox.apply(playing);
+        vi.spyOn(AudioPlayer.prototype, 'currentTime', 'get').mockReturnValue(10);
+        const seekSpy = vi.mocked(AudioPlayer.prototype.seekTo);
+        seekSpy.mockClear();
+
+        const older = jukebox.toContext();
+        const { seekCount: _dropped, ...withoutCount } = older.syncData as Record<string, unknown>;
+        older.syncData = withoutCount;
+        jukebox.apply(older);
+
+        expect(seekSpy).not.toHaveBeenCalled();
+      });
+
+      it('plays the track before near the start', () => {
+        addReady('a', 'b');
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, ['a', 'b']);
+        const jukebox = makeJukebox();
+        jukebox.play('b');
+        vi.spyOn(AudioPlayer.prototype, 'currentTime', 'get').mockReturnValue(1);
+
+        jukebox.playPrevious();
+
+        expect(jukebox.audioIdentifier).toBe('a');
+      });
+    });
+
+    describe('starting a playlist', () => {
+      it('chooses it and plays its first track', () => {
+        addReady('a', 'x', 'y');
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, ['a']);
+        const battle = makePlaylist('battle', ['x', 'y']);
+        const jukebox = makeJukebox();
+        jukebox.play('a');
+
+        jukebox.playPlaylist(battle);
+
+        expect(jukebox.playlistIdentifier).toBe('battle');
+        expect(jukebox.audioIdentifier).toBe('x');
+      });
+
+      it('only chooses an empty one, and the music goes on', () => {
+        addReady('a');
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, ['a']);
+        const empty = makePlaylist('empty', []);
+        const jukebox = makeJukebox();
+        jukebox.play('a');
+
+        jukebox.playPlaylist(empty);
+
+        expect(jukebox.playlistIdentifier).toBe('empty');
+        expect(jukebox.audioIdentifier).toBe('a');
+        expect(jukebox.isPlaying).toBe(true);
+      });
+
+      it('plays a track picked from a playlist and goes on through that playlist', () => {
+        addReady('a', 'x', 'y');
+        makePlaylist(Playlist.DEFAULT_IDENTIFIER, ['a']);
+        const battle = makePlaylist('battle', ['x', 'y']);
+        const jukebox = makeJukebox();
+        jukebox.repeatMode = 'all';
+
+        jukebox.playFromPlaylist(battle, 'x');
+        endTrack(jukebox);
+
+        expect(jukebox.audioIdentifier).toBe('y');
+      });
     });
   });
 });

@@ -241,6 +241,9 @@ test.describe('チャットログのスクロール枠', () => {
   });
 
   test('ログを遡ると最新メッセージへ移動するボタンが出ること', async ({ page }) => {
+    // Sixty lines are sent one at a time, about a third of a second each in WebKit, which with
+    // the page's own start can run past the default thirty seconds.
+    test.setTimeout(90_000);
     const textarea = page.locator('textarea.chat-input');
     const send = page.locator('chat-input').getByRole('button', { name: '送信' });
     for (let i = 0; i < 60; i++) {

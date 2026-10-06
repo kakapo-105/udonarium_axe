@@ -564,7 +564,7 @@ export class DiceBot extends GameObject {
       return;
     }
 
-    this.resourceProcessor.checkResourceEditCommand(
+    void this.resourceProcessor.checkResourceEditCommand(
       chatMessage,
       (data.messageTargetContext as ChatMessageTargetContext[] | null) ?? []
     );
@@ -595,6 +595,8 @@ export class DiceBot extends GameObject {
       name: isSecret ? `<Secret-BCDice：${originalMessage.name}>` : `<BCDice：${originalMessage.name}>`,
       text: multiTargetOption ? `${result}${multiTargetOption}` : result,
       ...answerColorsOf(originalMessage),
+      diceLook: originalMessage.diceLook,
+      diceImageIdentifier: originalMessage.diceImageIdentifier,
     };
 
     if (originalMessage.to != null && 0 < originalMessage.to.length) {

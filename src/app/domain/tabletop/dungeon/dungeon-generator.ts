@@ -17,6 +17,7 @@ import { clampCorridorWidth, DungeonLayout } from '@axe/domain/tabletop/dungeon/
 import { furnishRooms } from '@axe/domain/tabletop/dungeon/room-furnishing';
 import { assignRoomRoles } from '@axe/domain/tabletop/dungeon/room-roles';
 import { fitBoardTo, generateRoomsAndMazes } from '@axe/domain/tabletop/dungeon/rooms-and-mazes';
+import { clampTrapCount, placeTraps } from '@axe/domain/tabletop/dungeon/trap-placing';
 import { openTunnelMouth } from '@axe/domain/tabletop/dungeon/tunnel-mouth';
 import { GridType } from '@axe/domain/tabletop/game-table';
 import { isHexGrid } from '@axe/domain/tabletop/hex-geometry';
@@ -45,6 +46,8 @@ export interface DungeonRequest {
   doorWidth?: DoorWidths;
   /** How many doors in a hundred are hung as a pair. Left out, half of those that can be. */
   doubleDoorPercent?: number;
+  /** How many traps are set about the place. Left out, none: a dungeon is trapped on request. */
+  trapCount?: number;
 }
 
 /** How wide a passage may be cut, at its narrowest and at its widest. */
@@ -177,6 +180,10 @@ export function generateDungeon(request: DungeonRequest): DungeonLayout {
     const stackable = !isHexGrid(request.gridType ?? GridType.SQUARE);
     layout.furnishings = furnishRooms(layout, atmosphere.furnishings, rng, { stackable });
   }
+  // Set last of all, and only where any were asked for, so that a place with none comes out of
+  // its seed exactly as it always has - and so that a trap is never set under the furniture.
+  const traps = clampTrapCount(request.trapCount);
+  if (traps > 0) layout.traps = placeTraps(layout, traps, rng);
   return layout;
 }
 
