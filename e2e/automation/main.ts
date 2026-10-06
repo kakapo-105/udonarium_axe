@@ -23,6 +23,10 @@ peer.isOpen = true;
 Object.defineProperty(Network, 'peerId', { get: () => peer.peerId });
 Object.defineProperty(Network, 'peerContext', { get: () => peer });
 Object.defineProperty(Network, 'isOpen', { get: () => true });
+// The fixture is the whole network. A real connection attempt cannot reach its server here, and once
+// its retries run out it reports the network closed, which stops automation mid-test.
+Network.instance.openStandby = () => {};
+Network.instance.open = () => {};
 const channel = new BroadcastChannel('automation-e2e-sync');
 let connected = false;
 const queued: EventContext[] = [];
