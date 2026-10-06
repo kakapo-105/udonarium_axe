@@ -121,7 +121,8 @@ describe('MenuCommandService', () => {
       const open = vi.spyOn(window, 'open').mockImplementation(() => null);
 
       expect(commands.run(commandOf('manual'))).toBe('done');
-      expect(open).toHaveBeenCalledWith(expect.stringMatching(/\/docs\/$/), '_blank', 'noopener');
+      // Absolute where the page has an address, as written where it has none; both end at docs/.
+      expect(open).toHaveBeenCalledWith(expect.stringMatching(/docs\/$/), '_blank', 'noopener');
     });
 
     it('puts the guide away once anything else is pressed', () => {

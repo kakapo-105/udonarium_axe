@@ -14,4 +14,9 @@ describe('the way to the user guide', () => {
     );
     expect(manualUrl('http://localhost:4200/')).toBe('http://localhost:4200/docs/');
   });
+
+  it('hands the place back as written where the page has no address to read it from', () => {
+    expect(manualUrl('about:blank')).toBe(MANUAL_HREF);
+    expect(manualUrl('')).toBe(MANUAL_HREF);
+  });
 });
