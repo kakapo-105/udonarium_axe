@@ -223,7 +223,8 @@ test('refuses piece sources that are not allowed, and passes on what a source co
       );
       const missing = await create({ sourceUrl: 'http://rules:8765/api/ccfolia?name=ドレイク' });
       assert.equal(missing.structuredContent.error.code, 'INVALID_ARGUMENT');
-      assert.match(missing.structuredContent.error.message, /ドレイク\(竜形態\)/);
+      assert.match(missing.structuredContent.error.message, /ドレイク\(竜形態\) \(Lv7\)/);
+      assert.doesNotMatch(missing.structuredContent.error.message, /object Object/);
       assert.equal(count, 0);
     },
     {
@@ -233,7 +234,10 @@ test('refuses piece sources that are not allowed, and passes on what a source co
         status: 404,
         text: JSON.stringify({
           error: '魔物が1体に決まりませんでした',
-          candidates: ['ドレイク(竜形態)', 'ドレイク(人間形態)'],
+          candidates: [
+            { id: '魔物/ドレイク(人間形態)', kind: '魔物', name: 'ドレイク(人間形態)', level: 6 },
+            { id: '魔物/ドレイク(竜形態)', kind: '魔物', name: 'ドレイク(竜形態)', level: 7 },
+          ],
         }),
       }),
     }

@@ -22,6 +22,14 @@ export function pieceSourceOrigins(value: string | undefined): string[] {
   });
 }
 
+/** A candidate the source offers, by name: a plain string, or a record carrying its name (and level). */
+function candidateName(candidate: unknown): string {
+  if (!candidate || typeof candidate !== 'object') return String(candidate);
+  const record = candidate as Record<string, unknown>;
+  const name = String(record['name'] ?? record['id'] ?? '?');
+  return typeof record['level'] === 'number' ? `${name} (Lv${record['level']})` : name;
+}
+
 export const fetchText: FetchText = async (url) => {
   const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   const text = await response.text();
@@ -67,7 +75,7 @@ export async function fetchPieceSheets(
   const record = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
   if (!answer.ok || typeof record['error'] === 'string') {
     const candidates = Array.isArray(record['candidates'])
-      ? ` Candidates: ${record['candidates'].slice(0, 10).map(String).join(', ')}`
+      ? ` Candidates: ${record['candidates'].slice(0, 10).map(candidateName).join(', ')}`
       : '';
     return failure(
       'INVALID_ARGUMENT',
