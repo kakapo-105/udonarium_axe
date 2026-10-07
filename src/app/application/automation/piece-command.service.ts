@@ -1,5 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { fail } from '@axe/application/automation/automation-contract';
+import { AutomationPolicyService } from '@axe/application/automation/automation-policy.service';
 import { CharacterImportService } from '@axe/application/character/character-import.service';
 import { ConcealmentService } from '@axe/application/tabletop/concealment.service';
 import { calcSHA256Async } from '@axe/core/storage/file-reader-util';
@@ -65,6 +66,7 @@ export class PieceCommandService {
   private readonly concealment = inject(ConcealmentService);
   private readonly serializer = inject(ObjectSerializer);
   private readonly imageStorage = inject(ImageStorage);
+  private readonly policy = inject(AutomationPolicyService);
 
   /**
    * Where each of `sizes` would stand: in a row from the anchor, one after another, each as wide as
@@ -209,9 +211,8 @@ export class PieceCommandService {
    */
   own(identifier: string, places: readonly string[] = ['table', CONCEALED_LOCATION]): OwnedThing {
     const piece = this.store.get(identifier);
-    const me = PeerCursor.myCursor?.userId;
     const owned = piece instanceof GameCharacter || piece instanceof TextNote;
-    if (!owned || !places.includes(piece.location.name) || !me || piece.owner !== me)
+    if (!owned || !places.includes(piece.location.name) || !this.policy.isMine(piece.owner))
       fail('NOT_FOUND', 'None of your own pieces there has that identifier.');
     return piece;
   }

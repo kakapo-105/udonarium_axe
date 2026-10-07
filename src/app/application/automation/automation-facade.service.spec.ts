@@ -905,6 +905,22 @@ describe('AutomationFacadeService', () => {
       });
     });
 
+    it('treats what nobody owns as its own when offline, where there is no user id to own it by', async () => {
+      PeerCursor.myCursor.userId = '';
+      facade.health();
+      policy.enable();
+      grant();
+      const [made] = created(await call('character_create', { pieces: [goblin()], x: 0, y: 0, disclosure: 'gm' }));
+      const someones = GameCharacter.create('PC', 1, '');
+      someones.owner = 'someone';
+      someones.location = { name: 'table', x: 100, y: 100 };
+
+      expect((await call('piece_disclose', { identifier: made.identifier, disclosure: 'all' })).ok).toBe(true);
+      expect((await call('piece_remove', { identifiers: [made.identifier] })).ok).toBe(true);
+      expect(store.get<GameCharacter>(made.identifier)!.location.name).toBe('graveyard');
+      error(await call('piece_remove', { identifiers: [someones.identifier] }), 'NOT_FOUND');
+    });
+
     it('clears away its own pieces to the graveyard, and never a player’s', async () => {
       grant();
       const [made] = created(await call('character_create', { pieces: [goblin()], x: 0, y: 0 }));
