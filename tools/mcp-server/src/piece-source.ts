@@ -59,30 +59,25 @@ export const fetchText: FetchText = async (url) => {
   return { ok: response.ok, status: response.status, text };
 };
 
+type SourceAnswer = { ok: true; url: URL; body: unknown; record: Record<string, unknown>; warnings: string[] };
+
 /**
- * Fetches the sheets to build pieces from, so that they reach the browser without passing through
- * the model.
- *
- * The answer may be a list of sheets, one sheet in the clipboard form (`{"kind":"character",...}`)
- * or an object carrying them in `pieces`, as the rulebook search server's `/api/ccfolia` and
- * `/api/udonarium` give them; its `warnings` are passed on, and its `images`, each SHA-256 with where
- * the picture is kept, are gathered for {@link fetchPieceImages}. A picture kept anywhere but an
- * allowed source is left out. An `error` with `candidates` in a failed answer is passed on too, so
- * a name that matched several monsters can be asked again.
+ * Fetches JSON from an allowed source. An `error` with `candidates` in a failed answer is passed on,
+ * so a name that matched several things can be asked again; `warnings` are gathered.
  */
-export async function fetchPieceSheets(
+async function fetchSourceJson(
   source: string,
   origins: readonly string[],
-  fetchImpl: FetchText = fetchText
-): Promise<PieceSheets | FacadeResult> {
+  fetchImpl: FetchText
+): Promise<SourceAnswer | FacadeResult> {
   let url: URL;
   try {
     url = new URL(source);
   } catch {
-    return failure('INVALID_ARGUMENT', 'sourceUrl is not a URL.');
+    return failure('INVALID_ARGUMENT', 'The source URL is not a URL.');
   }
   if (!origins.includes(url.origin))
-    return failure('FORBIDDEN', 'sourceUrl is not on an allowed piece source (set UDONARIUM_PIECE_SOURCES).');
+    return failure('FORBIDDEN', 'The source URL is not on an allowed piece source (set UDONARIUM_PIECE_SOURCES).');
   let answer: { ok: boolean; status: number; text: string };
   try {
     answer = await fetchImpl(url);
@@ -106,6 +101,58 @@ export async function fetchPieceSheets(
       `${String(record['error'] ?? `HTTP ${answer.status}`).slice(0, 200)}.${candidates}`
     );
   }
+  const warnings = Array.isArray(record['warnings'])
+    ? record['warnings'].slice(0, 20).map((w) => String(w).slice(0, 300))
+    : [];
+  return { ok: true, url, body, record, warnings };
+}
+
+/**
+ * The pictures an answer names in `images`, each SHA-256 with where it is kept, relative to the answer.
+ * A picture kept anywhere but an allowed source is left out with a warning.
+ */
+function imageRefsOf(answer: SourceAnswer, origins: readonly string[]): ImageRef[] | FacadeResult {
+  const images: ImageRef[] = [];
+  const named =
+    answer.record['images'] && typeof answer.record['images'] === 'object'
+      ? (answer.record['images'] as Record<string, unknown>)
+      : {};
+  for (const [identifier, where] of Object.entries(named)) {
+    if (!IMAGE_IDENTIFIER.test(identifier) || typeof where !== 'string') continue;
+    let at: URL;
+    try {
+      at = new URL(where, answer.url);
+    } catch {
+      continue;
+    }
+    if (!origins.includes(at.origin)) {
+      answer.warnings.push(`A picture kept outside the allowed sources was left out: ${at.origin}`);
+      continue;
+    }
+    images.push({ identifier, url: at });
+  }
+  if (images.length > MAX_IMAGES)
+    return failure('INVALID_ARGUMENT', `The piece source must name at most ${MAX_IMAGES} pictures.`);
+  return images;
+}
+
+/**
+ * Fetches the sheets to build pieces from, so that they reach the browser without passing through
+ * the model.
+ *
+ * The answer may be a list of sheets, one sheet in the clipboard form (`{"kind":"character",...}`)
+ * or an object carrying them in `pieces`, as the rulebook search server's `/api/ccfolia` and
+ * `/api/udonarium` give them; its `warnings` are passed on, and its `images` are gathered for
+ * {@link fetchPieceImages}.
+ */
+export async function fetchPieceSheets(
+  source: string,
+  origins: readonly string[],
+  fetchImpl: FetchText = fetchText
+): Promise<PieceSheets | FacadeResult> {
+  const answer = await fetchSourceJson(source, origins, fetchImpl);
+  if (!('body' in answer)) return answer;
+  const { body, record } = answer;
   const pieces = Array.isArray(body)
     ? body
     : Array.isArray(record['pieces'])
@@ -115,29 +162,58 @@ export async function fetchPieceSheets(
         : null;
   if (!pieces || pieces.length < 1 || pieces.length > MAX_PIECES)
     return failure('INVALID_ARGUMENT', `The piece source must give 1 to ${MAX_PIECES} pieces.`);
-  const warnings = Array.isArray(record['warnings'])
-    ? record['warnings'].slice(0, 20).map((w) => String(w).slice(0, 300))
-    : [];
-  const images: ImageRef[] = [];
-  const named =
-    record['images'] && typeof record['images'] === 'object' ? (record['images'] as Record<string, unknown>) : {};
-  for (const [identifier, where] of Object.entries(named)) {
-    if (!IMAGE_IDENTIFIER.test(identifier) || typeof where !== 'string') continue;
-    let at: URL;
-    try {
-      at = new URL(where, url);
-    } catch {
-      continue;
-    }
-    if (!origins.includes(at.origin)) {
-      warnings.push(`A picture kept outside the allowed sources was left out: ${at.origin}`);
-      continue;
-    }
-    images.push({ identifier, url: at });
-  }
-  if (images.length > MAX_IMAGES)
-    return failure('INVALID_ARGUMENT', `The piece source must name at most ${MAX_IMAGES} pictures.`);
-  return { ok: true, pieces, images, warnings };
+  const images = imageRefsOf(answer, origins);
+  if (!Array.isArray(images)) return images;
+  return { ok: true, pieces, images, warnings: answer.warnings };
+}
+
+/** A board template: a table's size, the picture it wears, and what the model needs to use it. */
+export type BoardTemplate = {
+  ok: true;
+  table: { name: string; width: number; height: number; grid: boolean; flat: boolean; background: string };
+  /** Passed to the model as they are: the rule, how to use the board, where its areas lie and its scale. */
+  notes: Record<string, unknown>;
+  images: ImageRef[];
+  warnings: string[];
+};
+
+/**
+ * Fetches a board template, such as the rulebook search server's `/api/boards/basic`: the size of
+ * the table in cells, the picture it wears and where its areas lie.
+ */
+export async function fetchBoardTemplate(
+  source: string,
+  origins: readonly string[],
+  fetchImpl: FetchText = fetchText
+): Promise<BoardTemplate | FacadeResult> {
+  const answer = await fetchSourceJson(source, origins, fetchImpl);
+  if (!('body' in answer)) return answer;
+  const { record } = answer;
+  const whole = (key: string) =>
+    typeof record[key] === 'number' && Number.isInteger(record[key]) && (record[key] as number) >= 1
+      ? (record[key] as number)
+      : null;
+  const width = whole('width');
+  const height = whole('height');
+  if (!width || !height) return failure('INVALID_ARGUMENT', 'The board template gives no width and height.');
+  const images = imageRefsOf(answer, origins);
+  if (!Array.isArray(images)) return images;
+  const notes: Record<string, unknown> = {};
+  for (const key of ['rule', 'guide', 'areas', 'origin', 'metersPerCell']) if (key in record) notes[key] = record[key];
+  return {
+    ok: true,
+    table: {
+      name: String(record['name'] ?? 'Board').slice(0, 256),
+      width,
+      height,
+      grid: record['grid'] === true,
+      flat: record['flat'] === true,
+      background: typeof record['background'] === 'string' ? record['background'] : '',
+    },
+    notes,
+    images,
+    warnings: answer.warnings,
+  };
 }
 
 /**

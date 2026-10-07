@@ -1,9 +1,11 @@
 import { inject, Injectable } from '@angular/core';
 import { fail } from '@axe/application/automation/automation-contract';
+import { AutomationImage, AutomationImageService } from '@axe/application/automation/automation-image.service';
 import { MAP_GENERATOR, MapRequest } from '@axe/application/automation/map-generator';
 import { CutInService } from '@axe/application/media/cut-in.service';
 import { TableBgmService } from '@axe/application/media/table-bgm.service';
 import { emitSelectGameTable } from '@axe/core/event/domain-events';
+import { ImageFile } from '@axe/core/storage/image-file';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
@@ -14,6 +16,21 @@ import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealmen
 import { GameTable } from '@axe/domain/tabletop/game-table';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { TextNote } from '@axe/domain/tabletop/text-note';
+
+const BOARD_GRID_SIZE = 50;
+
+/** A plain table from a board template, with the picture it wears. */
+export interface BoardRequest {
+  name: string;
+  /** Size in cells. */
+  width: number;
+  height: number;
+  /** The picture's identifier, which `images` brings unless the room has it already; empty for none. */
+  background: string;
+  images: readonly AutomationImage[];
+  grid: boolean;
+  flat: boolean;
+}
 
 export interface NoteRequest {
   title: string;
@@ -44,6 +61,7 @@ export class RoomPrepCommandService {
   private readonly generator = inject(MAP_GENERATOR);
   private readonly tableBgm = inject(TableBgmService);
   private readonly cutIns = inject(CutInService);
+  private readonly images = inject(AutomationImageService);
 
   /** Every table in the room, with which one is in view. */
   list() {
@@ -57,6 +75,35 @@ export class RoomPrepCommandService {
         gridSize: table.gridSize,
         viewing: table.identifier === viewing,
       })),
+    };
+  }
+
+  /**
+   * Builds a plain table from a board template: its size in cells and the picture its surface wears,
+   * such as the areas of a battlefield drawn with their names. The picture is checked against its
+   * identifier and added before the table is made, so the room has it when the table arrives.
+   */
+  async createBoard(request: BoardRequest, guard: () => void) {
+    const pictures = await this.images.check(request.images);
+    guard();
+    await this.images.add(pictures);
+    guard();
+    const table = new GameTable();
+    table.name = request.name;
+    table.width = request.width;
+    table.height = request.height;
+    table.gridSize = BOARD_GRID_SIZE;
+    table.imageIdentifier = request.background || ImageFile.Empty.identifier;
+    table.gridShow = request.grid;
+    // A board read from above, with its areas lettered on it, reads best laid flat.
+    table.mode2d = request.flat;
+    table.initialize();
+    return {
+      identifier: table.identifier,
+      name: table.name.slice(0, 256),
+      width: table.width,
+      height: table.height,
+      unit: 'grid',
     };
   }
 

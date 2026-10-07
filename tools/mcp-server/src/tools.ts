@@ -4,7 +4,14 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import { type FacadeResult, failure } from '#mcp/facade-client.js';
-import { type FetchBytes, fetchPieceImages, fetchPieceSheets, type FetchText, MAX_PIECES } from '#mcp/piece-source.js';
+import {
+  fetchBoardTemplate,
+  type FetchBytes,
+  fetchPieceImages,
+  fetchPieceSheets,
+  type FetchText,
+  MAX_PIECES,
+} from '#mcp/piece-source.js';
 import { mapResult } from '#mcp/result-mapper.js';
 
 export interface SessionInvoker {
@@ -278,11 +285,14 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
     {
       name: 'table_create',
       read: false,
-      description: `Build a new table from a generated map, as the map generator panel does at its defaults, and return the master's notes on it: the way in, each room's number, part and rectangle in cells (x, y, w, h from the top-left), and the traps. kind dungeon takes atmosphere ${DUNGEON_ATMOSPHERES.join(' / ')}, roomCount (3-20, default 8) and trapCount (0-30). kind field takes atmosphere ${FIELD_ATMOSPHERES.join(' / ')}, size (cells across, default 40; three deep for every four across) and density (0-100). The same seed rolls the same map; left out, a random one is used and returned. fog starts the table under the fog of war. The table is not put in view; use table_select. Takes up to two minutes. Game master only; requires the prepare_room browser grant.`,
+      description: `Build a new table. kind board builds a battlefield from a board template given by templateUrl on an allowed piece source (such as the rulebook server's /api/boards/basic, /advanced or /expert for Sword World 2.5's basic, advanced and expert combat): the table wears the template's picture, and the template's rule, guide, areas (rectangles in cells) and scale come back to say where pieces stand; name, width and height may override the template's. kind dungeon or field builds a table from a generated map, as the map generator panel does at its defaults, and returns the master's notes on it: the way in, each room's number, part and rectangle in cells (x, y, w, h from the top-left), and the traps. kind dungeon takes atmosphere ${DUNGEON_ATMOSPHERES.join(' / ')}, roomCount (3-20, default 8) and trapCount (0-30). kind field takes atmosphere ${FIELD_ATMOSPHERES.join(' / ')}, size (cells across, default 40; three deep for every four across) and density (0-100). The same seed rolls the same map; left out, a random one is used and returned. fog starts the table under the fog of war. The table is not put in view; use table_select. Takes up to two minutes. Game master only; requires the prepare_room browser grant.`,
       shape: {
         ...retry,
-        kind: z.enum(['dungeon', 'field']),
-        atmosphere: z.enum([...DUNGEON_ATMOSPHERES, ...FIELD_ATMOSPHERES] as [string, ...string[]]),
+        kind: z.enum(['dungeon', 'field', 'board']),
+        atmosphere: z.enum([...DUNGEON_ATMOSPHERES, ...FIELD_ATMOSPHERES] as [string, ...string[]]).optional(),
+        templateUrl: z.string().min(1).max(2048).optional(),
+        width: z.number().int().min(1).max(200).optional(),
+        height: z.number().int().min(1).max(200).optional(),
         seed: z
           .number()
           .int()
@@ -356,6 +366,29 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
         const { requestId, sessionId, ...given } = input as Record<string, unknown>;
         let args = given;
         let warnings: string[] = [];
+        let notes: Record<string, unknown> = {};
+        if (tool.name === 'table_create' && given['kind'] === 'board') {
+          const { templateUrl, ...rest } = given;
+          if (typeof templateUrl !== 'string')
+            return mapResult(failure('INVALID_ARGUMENT', 'A board needs a templateUrl.'));
+          const template = await fetchBoardTemplate(templateUrl, options.pieceSources ?? [], options.fetchText);
+          if (!('table' in template)) return mapResult(template);
+          const pictures = await fetchPieceImages(template.images, options.fetchBytes);
+          warnings = [...template.warnings, ...pictures.warnings];
+          notes = template.notes;
+          args = {
+            kind: 'board',
+            name: rest['name'] ?? template.table.name,
+            width: rest['width'] ?? template.table.width,
+            height: rest['height'] ?? template.table.height,
+            background: template.table.background,
+            grid: template.table.grid,
+            flat: template.table.flat,
+            images: pictures.images,
+          };
+        } else if (tool.name === 'table_create' && given['templateUrl'] !== undefined) {
+          return mapResult(failure('INVALID_ARGUMENT', 'templateUrl is for kind board.'));
+        }
         if (tool.name === 'character_create') {
           const { sourceUrl, ...rest } = given;
           if ((sourceUrl === undefined) === (rest['pieces'] === undefined))
@@ -377,8 +410,16 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
           typeof sessionId === 'string' ? sessionId : undefined,
           timeoutFor(tool.name, args)
         );
-        if (result.ok && warnings.length > 0 && result.data && typeof result.data === 'object')
-          return mapResult({ ok: true, data: { ...result.data, sourceWarnings: warnings } });
+        if (
+          result.ok &&
+          result.data &&
+          typeof result.data === 'object' &&
+          (warnings.length > 0 || Object.keys(notes).length > 0)
+        )
+          return mapResult({
+            ok: true,
+            data: { ...result.data, ...notes, ...(warnings.length > 0 ? { sourceWarnings: warnings } : {}) },
+          });
         return mapResult(result);
       }
     );

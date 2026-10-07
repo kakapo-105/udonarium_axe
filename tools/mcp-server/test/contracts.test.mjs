@@ -297,3 +297,65 @@ test('fetches the pictures a source names and hands them to the browser in base6
     }
   );
 });
+test('builds a board from a template, handing the browser its picture and the model its areas', async () => {
+  const hash = 'd'.repeat(64);
+  let received;
+  await connected(
+    async (command, args) => {
+      received = [command, args];
+      return { ok: true, data: { identifier: 'table', name: args.name, width: args.width, height: args.height } };
+    },
+    async (client) => {
+      const result = await client.callTool({
+        name: 'table_create',
+        arguments: {
+          sessionId: 'session',
+          kind: 'board',
+          templateUrl: 'http://rules:8765/api/boards/basic',
+          height: 16,
+        },
+      });
+      assert.equal(received[0], 'table_create');
+      assert.deepEqual(received[1], {
+        kind: 'board',
+        name: '基本戦闘',
+        width: 32,
+        height: 16,
+        background: hash,
+        grid: false,
+        flat: true,
+        images: [{ identifier: hash, type: 'image/png', data: Buffer.from([7]).toString('base64') }],
+      });
+      const data = result.structuredContent.data;
+      assert.equal(data.rule, '基本戦闘 (ルールブックDX p.71)');
+      assert.deepEqual(data.areas[0], { name: '自軍後方エリア', x: 1, y: 2, w: 8, h: 11 });
+      assert.match(data.guide, /3つのエリア/);
+      const missing = await client.callTool({
+        name: 'table_create',
+        arguments: { sessionId: 'session', kind: 'board' },
+      });
+      assert.equal(missing.structuredContent.error.code, 'INVALID_ARGUMENT');
+    },
+    {
+      pieceSources: pieceSourceOrigins('http://rules:8765'),
+      fetchText: async () => ({
+        ok: true,
+        status: 200,
+        text: JSON.stringify({
+          id: 'basic',
+          name: '基本戦闘',
+          rule: '基本戦闘 (ルールブックDX p.71)',
+          width: 32,
+          height: 14,
+          grid: false,
+          flat: true,
+          background: hash,
+          images: { [hash]: `/api/images/${hash}.png` },
+          areas: [{ name: '自軍後方エリア', x: 1, y: 2, w: 8, h: 11 }],
+          guide: '戦場は3つのエリアだけ',
+        }),
+      }),
+      fetchBytes: async () => ({ ok: true, status: 200, type: 'image/png', bytes: new Uint8Array([7]) }),
+    }
+  );
+});

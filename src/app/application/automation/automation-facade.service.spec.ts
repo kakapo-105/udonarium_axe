@@ -1016,6 +1016,34 @@ describe('AutomationFacadeService', () => {
       error(await call('note_create', { title: '大きすぎる', text: '', x: 18, y: 0, width: 5 }), 'INVALID_ARGUMENT');
     });
 
+    it('builds a plain table from a board template, wearing its picture and laid flat', async () => {
+      beGameMaster();
+      const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 9]);
+      const identifier = await calcSHA256Async(bytes.buffer);
+      // A test DOM cannot decode a picture to make its thumbnail, so the storage itself is left out.
+      const added = vi.spyOn(ImageStorage.instance, 'addAsync').mockResolvedValue(null as never);
+
+      const result = await call('table_create', {
+        kind: 'board',
+        name: '基本戦闘',
+        width: 30,
+        height: 12,
+        background: identifier,
+        flat: true,
+        images: [{ identifier, type: 'image/png', data: btoa(String.fromCharCode(...bytes)) }],
+      });
+
+      expect(result).toMatchObject({ ok: true, data: { name: '基本戦闘', width: 30, height: 12 } });
+      const board = store.get<GameTable>((result as { data: { identifier: string } }).data.identifier)!;
+      expect(board.imageIdentifier).toBe(identifier);
+      expect(board.mode2d).toBe(true);
+      expect((added.mock.calls[0][0] as File).name).toBe(`${identifier}.png`);
+      error(
+        await call('table_create', { kind: 'board', name: '大きすぎる', width: 999, height: 10 }),
+        'INVALID_ARGUMENT'
+      );
+    });
+
     it('says plainly when this build cannot generate maps', async () => {
       beGameMaster();
       error(await call('table_create', { kind: 'dungeon', atmosphere: 'crypt' }), 'NOT_READY');
