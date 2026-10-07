@@ -47,7 +47,8 @@ export class BrowserSession {
       await this.browser.close();
       throw new Error('Browser startup was cancelled.');
     }
-    const context = await this.browser.newContext({ acceptDownloads: false });
+    // No fixed viewport: the page follows the window, so a person checking on it can make it larger.
+    const context = await this.browser.newContext({ acceptDownloads: false, viewport: null });
     const page = await context.newPage();
     this.page = page;
     context.on('page', (opened) => {
