@@ -213,6 +213,27 @@ test('a GM puts out a piece of this tool’s own, wearing a picture the players 
   expect(JSON.stringify(await invoke(player, 'scene_list'))).toContain('トロール');
 });
 
+test('a browser started with the gm preset is the game master with every grant, until a person stops it', async ({
+  page,
+}) => {
+  await page.goto('/?automation=1&automationPreset=gm&seat=a');
+  await expect(page.locator('textarea.chat-input')).toBeVisible({ timeout: 20000 });
+  await page.evaluate(() => window.__automationTest.seed());
+
+  await expect
+    .poll(() => page.evaluate(() => window.udonariumAxeAutomation?.health()), { timeout: 10000 })
+    .toMatchObject({ ready: true });
+  const session = (await invoke(page, 'session_get')) as { data: { role: string; scopes: string[] } };
+  expect(session.data.role).toBe('gm');
+  expect(session.data.scopes).toEqual(
+    expect.arrayContaining(['create_piece', 'prepare_room', 'move_piece', 'edit_resource'])
+  );
+
+  await page.getByTestId('automation-stop').click();
+  await page.waitForTimeout(2500);
+  expect(await page.evaluate(() => window.udonariumAxeAutomation === undefined)).toBe(true);
+});
+
 test('stop and reload remove the API and discard write grants and old session IDs', async ({ page }) => {
   await ready(page, 'a');
   const old = await page.evaluate(() => window.udonariumAxeAutomation!.health());

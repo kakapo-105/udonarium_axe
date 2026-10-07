@@ -22,10 +22,19 @@ export class AutomationPolicyService {
   readonly enabled = this.active.asReadonly();
   readonly scopes = this.grants.asReadonly();
   readonly sessionId = signal(crypto.randomUUID());
+  private readonly halted = signal(false);
+  /** Whether a person pressed stop, which nothing but their pressing enable again undoes until the page reloads. */
+  readonly stoppedByUser = this.halted.asReadonly();
 
   enable(): void {
     this.stop();
+    this.halted.set(false);
     this.active.set(true);
+  }
+  /** Stops automation at a person's word, and keeps it stopped until they enable it again. */
+  stopByUser(): void {
+    this.halted.set(true);
+    this.stop();
   }
   stop(): void {
     this.active.set(false);
