@@ -2765,7 +2765,9 @@
         "modeHint_offline": "This browser is on its own: no SkyWay, no backend, nobody else. Switching reloads the page.",
         "confirmOffline": "Go offline? The page reloads and you leave this room.",
         "confirmOnline": "Go online? The page reloads and connects.",
-        "offlineNote": "Saving and loading a room still works. Switch to Online to play with others."
+        "offlineNote": "Saving and loading a room still works. Switch to Online to play with others.",
+        "samplePieces": "Set out the sample pieces when the app opens",
+        "samplePiecesHint": "Takes effect from the next load. Samples already in the room can be sent to the graveyard from the inventory and deleted there."
       },
       "lobby": {
         "title": "Lobby",
