@@ -1,5 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { fail } from '@axe/application/automation/automation-contract';
+import { ChatWaitService } from '@axe/application/automation/chat-wait.service';
 import { CharacterMacroService } from '@axe/application/chat/character-macro.service';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { MovePlanService } from '@axe/application/tabletop/move-plan.service';
@@ -36,6 +37,7 @@ export class SessionCommandService {
   private readonly triggers = inject(TriggerFireService);
   private readonly chat = inject(ChatMessageService);
   private readonly macro = inject(CharacterMacroService);
+  private readonly chatWait = inject(ChatWaitService);
 
   get ready(): boolean {
     return (
@@ -157,9 +159,11 @@ export class SessionCommandService {
     if (this.store.get(tab.identifier) !== tab || (character && this.store.get(character.identifier) !== character)) {
       fail('CONFLICT', 'The speaker or chat tab was replaced while preparing the message.');
     }
-    const message = character
-      ? this.macro.send(character, text, { tab, gameSystem, targets: [] })
-      : this.chat.sendMessage(tab, text, gameSystem, PeerCursor.myCursor.identifier);
+    const message = this.chatWait.said(() =>
+      character
+        ? this.macro.send(character, text, { tab, gameSystem, targets: [] })
+        : this.chat.sendMessage(tab, text, gameSystem, PeerCursor.myCursor.identifier)
+    );
     if (!message) fail('NOT_READY', 'Chat is not ready.');
     return { identifier: message.identifier, tabId: tab.identifier };
   }
@@ -184,7 +188,7 @@ export class SessionCommandService {
     if (this.store.get(tab.identifier) !== tab || this.store.get(character.identifier) !== character) {
       fail('CONFLICT', 'The speaker or chat tab was replaced while preparing the message.');
     }
-    const message = this.macro.send(character, line, { tab, gameSystem, targets });
+    const message = this.chatWait.said(() => this.macro.send(character, line, { tab, gameSystem, targets }));
     if (!message) fail('NOT_READY', 'Chat is not ready.');
     return { identifier: message.identifier, tabId: tab.identifier, text: message.text.slice(0, 2000) };
   }

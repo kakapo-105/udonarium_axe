@@ -91,10 +91,7 @@ export class CharacterImportService {
 
     try {
       const imageIdentifier = await this.resolveImageIdentifier(imported);
-      const character = ImportedCharacterFactory.create(imported, imageIdentifier);
-      character.owner = PeerCursor.myCursor?.userId ?? '';
-      if (PeerCursor.isMyselfGameMaster) character.disclosureMode = DisclosureMode.GameMaster;
-      character.update();
+      const character = this.ownedCharacterOf(imported, imageIdentifier);
       return {
         character,
         error: null,
@@ -105,6 +102,27 @@ export class CharacterImportService {
     } catch {
       return { character: null, error: 'failed', imageResolved: false, service: serviceOf(plan), systemUnknown: false };
     }
+  }
+
+  /**
+   * Reads sheet JSON already in hand into the imported model, fetching nothing. Null when the JSON
+   * is in no known format.
+   */
+  async readSheet(json: unknown): Promise<ImportedCharacter | null> {
+    await loadLabelMaps();
+    return parseImportedCharacterJson(json);
+  }
+
+  /**
+   * The piece built from the imported model, owned by you and kept to game masters when you are one.
+   * It is not placed anywhere; a portrait shows only when `imageIdentifier` is already in storage.
+   */
+  ownedCharacterOf(imported: ImportedCharacter, imageIdentifier: string): GameCharacter {
+    const character = ImportedCharacterFactory.create(imported, imageIdentifier);
+    character.owner = PeerCursor.myCursor?.userId ?? '';
+    if (PeerCursor.isMyselfGameMaster) character.disclosureMode = DisclosureMode.GameMaster;
+    character.update();
+    return character;
   }
 
   private async fetchJson(plan: ImportFetchPlan, text: string): Promise<unknown> {

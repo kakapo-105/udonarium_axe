@@ -140,6 +140,10 @@ export class GameObjectInventoryService {
   graveyardInventory: ObjectInventory = new ObjectInventory((object) => {
     return object.location.name === 'graveyard';
   });
+  /** The pieces the master has put out of sight, listed for the master alone. */
+  concealedInventory: ObjectInventory = new ObjectInventory((object) => {
+    return object.location.name === CONCEALED_LOCATION;
+  });
 
   private locationMap: Map<ObjectIdentifier, LocationName> = new Map();
   private tagNameMap: Map<ObjectIdentifier, ElementName> = new Map();
@@ -270,6 +274,7 @@ export class GameObjectInventoryService {
     this.commonInventory.refreshObjects();
     this.privateInventory.refreshObjects();
     this.graveyardInventory.refreshObjects();
+    this.concealedInventory.refreshObjects();
   }
 
   private refreshDataElements() {
@@ -277,6 +282,7 @@ export class GameObjectInventoryService {
     this.commonInventory.refreshDataElements();
     this.privateInventory.refreshDataElements();
     this.graveyardInventory.refreshDataElements();
+    this.concealedInventory.refreshDataElements();
   }
 
   private refreshSort() {
@@ -284,6 +290,7 @@ export class GameObjectInventoryService {
     this.commonInventory.refreshSort();
     this.privateInventory.refreshSort();
     this.graveyardInventory.refreshSort();
+    this.concealedInventory.refreshSort();
   }
 
   private callInventoryUpdate() {

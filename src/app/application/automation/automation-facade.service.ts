@@ -3,6 +3,7 @@ import { AutomationAuditService } from '@axe/application/automation/automation-a
 import {
   AUTOMATION_COMMANDS,
   AUTOMATION_WRITES,
+  AutomationCommand,
   AutomationError,
   AutomationRequest,
   AutomationResult,
@@ -13,9 +14,14 @@ import {
   record,
   textArgument,
 } from '@axe/application/automation/automation-contract';
+import { automationImagesOf } from '@axe/application/automation/automation-image.service';
 import { AutomationPolicyService } from '@axe/application/automation/automation-policy.service';
 import { BuffChanges, BuffCommandService } from '@axe/application/automation/buff-command.service';
 import { characterSheetView } from '@axe/application/automation/character-sheet-view';
+import { ChatWaitService, isPublicMessage } from '@axe/application/automation/chat-wait.service';
+import { MapRequest } from '@axe/application/automation/map-generator';
+import { MAX_CREATED_PIECES, PieceCommandService } from '@axe/application/automation/piece-command.service';
+import { RoomPrepCommandService } from '@axe/application/automation/room-prep-command.service';
 import { SessionCommandService } from '@axe/application/automation/session-command.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { BuffRemovalRule } from '@axe/domain/character/buff-bulk-removal';
@@ -23,10 +29,28 @@ import { GameCharacter } from '@axe/domain/character/game-character';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { canRoleSpeakTab, canRoleViewTab } from '@axe/domain/chat/chat-tab-permission';
 import { PaletteRow, paletteRowsOf } from '@axe/domain/chat/palette-rows';
+import { DisclosureMode } from '@axe/domain/disclosure/disclosure';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 
 const REQUEST_TIMEOUT_MS = 15000;
+const DEFAULT_WAIT_SECONDS = 60;
+const MAX_WAIT_SECONDS = 300;
+/** Time a wait is given beyond the wait itself, to look one last time and answer. */
+const WAIT_MARGIN_MS = 5000;
+const MAX_WAIT_TABS = 20;
+const MAX_SHEET_PATHS = 50;
+/** Building a large generated map stands thousands of blocks, which takes a while. */
+const TABLE_CREATE_TIMEOUT_MS = 120000;
+const MAX_NOTE_TEXT = 10000;
+/** The commands that set the room up, which only the game master runs. */
+const ROOM_PREP_WRITES: readonly AutomationCommand[] = [
+  'table_create',
+  'table_select',
+  'chat_tab_create',
+  'note_create',
+];
 const REPLAY_WINDOW_MS = 5 * 60 * 1000;
 /**
  * One resource change on the speaking piece. Besides a plain number the amount may roll dice, hold a
@@ -91,6 +115,79 @@ function buffCommandsOf(value: unknown): string[] {
   });
 }
 
+/** How long a chat_wait may wait, in seconds: a whole number from 1 to the cap, a minute when left out. */
+function waitSecondsOf(value: unknown): number {
+  if (value === undefined) return DEFAULT_WAIT_SECONDS;
+  const seconds = numberArgument(value);
+  if (!Number.isInteger(seconds) || seconds < 1 || seconds > MAX_WAIT_SECONDS)
+    fail('INVALID_ARGUMENT', `waitSeconds must be a whole number from 1 to ${MAX_WAIT_SECONDS}.`);
+  return seconds;
+}
+
+/** How long a request may run before it is given up: a wait for chat gets its own wait and a margin. */
+function timeoutFor(request: AutomationRequest): number {
+  if (request.command === 'table_create') return TABLE_CREATE_TIMEOUT_MS;
+  if (request.command !== 'chat_wait') return REQUEST_TIMEOUT_MS;
+  return waitSecondsOf(request.arguments['waitSeconds']) * 1000 + WAIT_MARGIN_MS;
+}
+
+/** A whole number argument from `min` to `max`, or the fallback when left out. */
+function wholeOf(value: unknown, key: string, min: number, max: number, fallback: number): number {
+  if (value === undefined) return fallback;
+  const number = numberArgument(value);
+  if (!Number.isInteger(number) || number < min || number > max)
+    fail('INVALID_ARGUMENT', `${key} must be a whole number from ${min} to ${max}.`);
+  return number;
+}
+
+/** The generated map a table_create asks for, each value checked; the generator clamps the rest. */
+function mapRequestOf(a: Record<string, unknown>): MapRequest {
+  const kind = a['kind'];
+  if (kind !== 'dungeon' && kind !== 'field') fail('INVALID_ARGUMENT', 'kind must be dungeon or field.');
+  return {
+    kind,
+    atmosphere: textArgument(a['atmosphere'], 64),
+    seed: wholeOf(a['seed'], 'seed', 0, 2 ** 31 - 1, Math.floor(Math.random() * 2 ** 31)),
+    name: a['name'] === undefined ? '' : textArgument(a['name']).trim(),
+    roomCount: a['roomCount'] === undefined ? undefined : wholeOf(a['roomCount'], 'roomCount', 3, 20, 8),
+    trapCount: a['trapCount'] === undefined ? undefined : wholeOf(a['trapCount'], 'trapCount', 0, 30, 0),
+    size: a['size'] === undefined ? undefined : wholeOf(a['size'], 'size', 1, 200, 40),
+    density: a['density'] === undefined ? undefined : wholeOf(a['density'], 'density', 0, 100, 50),
+    fog: booleanOf(a['fog'], 'fog'),
+  };
+}
+
+/** Who may read and speak in a new tab: by default the players both read and speak, guests only read. */
+function tabPermissionOf(a: Record<string, unknown>) {
+  const flag = (key: string, fallback: boolean) => (a[key] === undefined ? fallback : booleanOf(a[key], key));
+  return {
+    plCanView: flag('playersRead', true),
+    plCanSpeak: flag('playersSpeak', true),
+    guestCanView: flag('guestsRead', true),
+    guestCanSpeak: flag('guestsSpeak', false),
+  };
+}
+
+/** The disclosure asked for: everyone, or the game master only. */
+function disclosureOf(value: unknown): DisclosureMode {
+  if (value === 'all') return DisclosureMode.All;
+  if (value === 'gm') return DisclosureMode.GameMaster;
+  return fail('INVALID_ARGUMENT', 'disclosure must be all or gm.');
+}
+
+function booleanOf(value: unknown, key: string): boolean {
+  if (value === undefined) return false;
+  if (typeof value !== 'boolean') fail('INVALID_ARGUMENT', `${key} must be boolean.`);
+  return value;
+}
+
+/** A list of strings, one to `max` of them, each checked as an argument. */
+function textsOf(value: unknown, key: string, max: number): string[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > max)
+    fail('INVALID_ARGUMENT', `${key} must list 1 to ${max} entries.`);
+  return value.map((entry) => textArgument(entry));
+}
+
 /** One palette line as automation reads it: where it is, what kind of line it is and what it says. */
 function paletteLineView(row: PaletteRow) {
   if (row.kind === 'heading') {
@@ -106,6 +203,9 @@ export class AutomationFacadeService {
   private readonly policy = inject(AutomationPolicyService);
   private readonly session = inject(SessionCommandService);
   private readonly buffCommands = inject(BuffCommandService);
+  private readonly pieceCommands = inject(PieceCommandService);
+  private readonly chatWait = inject(ChatWaitService);
+  private readonly roomPrep = inject(RoomPrepCommandService);
   private readonly audit = inject(AutomationAuditService);
   private readonly store = inject(ObjectStore);
   private readonly tables = inject(TableSelecter);
@@ -132,6 +232,7 @@ export class AutomationFacadeService {
       this.epoch = this.policy.sessionId();
       this.remembered.clear();
       this.calls = [];
+      this.chatWait.reset();
     }
   }
 
@@ -182,7 +283,8 @@ export class AutomationFacadeService {
 
   private async execute(request: AutomationRequest, writes: boolean): Promise<AutomationResult> {
     if (writes) this.writing = true;
-    const deadline = Date.now() + REQUEST_TIMEOUT_MS;
+    const timeout = timeoutFor(request);
+    const deadline = Date.now() + timeout;
     let expired = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const guard = () => {
@@ -198,7 +300,7 @@ export class AutomationFacadeService {
           timer = setTimeout(() => {
             expired = true;
             reject(new AutomationError('TIMEOUT', 'Request timed out.'));
-          }, REQUEST_TIMEOUT_MS);
+          }, timeout);
         }),
       ]);
       const result: AutomationResult = { ok: true, data };
@@ -247,6 +349,33 @@ export class AutomationFacadeService {
       this.policy.canManage(this.buffCommands.find(textArgument(args['identifier'])).owner);
     }
     if (request.command === 'buff_sweep') this.policy.require('edit_buff');
+    if (request.command === 'character_create') {
+      this.policy.require('create_piece');
+      this.policy.canCreatePieces();
+      if (args['concealed'] === true) this.policy.requireGameMaster();
+    }
+    if (ROOM_PREP_WRITES.includes(request.command)) {
+      this.policy.require('prepare_room');
+      this.policy.requireGameMaster();
+    }
+    if (request.command === 'piece_reveal' || request.command === 'piece_conceal') {
+      this.policy.require('create_piece');
+      this.policy.requireGameMaster();
+      const from = request.command === 'piece_reveal' ? CONCEALED_LOCATION : 'table';
+      for (const identifier of textsOf(args['identifiers'], 'identifiers', MAX_CREATED_PIECES))
+        this.pieceCommands.own(identifier, [from]);
+    }
+    if (request.command === 'piece_disclose') {
+      this.policy.require('create_piece');
+      this.policy.canCreatePieces();
+      this.pieceCommands.own(textArgument(args['identifier']));
+    }
+    if (request.command === 'piece_remove') {
+      this.policy.require('create_piece');
+      this.policy.canCreatePieces();
+      for (const identifier of textsOf(args['identifiers'], 'identifiers', MAX_CREATED_PIECES))
+        this.pieceCommands.own(identifier);
+    }
   }
 
   private validateChat(text: string, asCharacter: boolean): void {
@@ -286,13 +415,15 @@ export class AutomationFacadeService {
             })),
         };
       case 'scene_list': {
-        onlyKeys(a, ['limit', 'after', 'name']);
+        onlyKeys(a, ['limit', 'after', 'name', 'place']);
         const limit = pageSize(a['limit']);
         const after = a['after'] === undefined ? '' : textArgument(a['after']);
         const name = a['name'] === undefined ? '' : textArgument(a['name']);
+        const place = a['place'] ?? 'table';
+        if (place !== 'table' && place !== 'concealed') fail('INVALID_ARGUMENT', 'place must be table or concealed.');
         const pieces = this.store
           .getObjects<GameCharacter>(GameCharacter)
-          .filter((p) => this.policy.canSee(p))
+          .filter((p) => (place === 'table' ? this.policy.canSee(p) : this.policy.canSeeConcealed(p)))
           .map((p) => this.describe(p))
           .filter((p) => p.identifier > after && (!name || p.name.includes(name)))
           .sort((l, r) => (l.identifier < r.identifier ? -1 : l.identifier > r.identifier ? 1 : 0));
@@ -300,7 +431,7 @@ export class AutomationFacadeService {
       }
       case 'object_get':
         onlyKeys(a, ['identifier']);
-        return this.describe(this.piece(textArgument(a['identifier'])));
+        return this.describe(this.readable(textArgument(a['identifier'])));
       case 'piece_move': {
         onlyKeys(a, ['identifier', 'x', 'y', 'unit', 'expectedVersion', 'dryRun']);
         const piece = this.piece(textArgument(a['identifier']));
@@ -333,7 +464,7 @@ export class AutomationFacadeService {
         const limit = pageSize(a['limit'], 20);
         return {
           messages: tab.chatMessages
-            .filter((m) => !m.isSecret && !m.isDirect && m.isDisplayable)
+            .filter(isPublicMessage)
             .slice(-limit)
             .map((m) => ({
               identifier: m.identifier,
@@ -344,14 +475,32 @@ export class AutomationFacadeService {
           untrustedContent: true,
         };
       }
+      case 'chat_wait': {
+        onlyKeys(a, ['tabIds', 'waitSeconds', 'limit']);
+        const visible = this.store.getObjects<ChatTab>(ChatTab).filter((tab) => canRoleViewTab(tab, PeerCursor.myRole));
+        const tabs =
+          a['tabIds'] === undefined
+            ? visible
+            : textsOf(a['tabIds'], 'tabIds', MAX_WAIT_TABS).map((identifier) => this.tab(identifier));
+        return this.chatWait.wait(
+          tabs,
+          visible,
+          {
+            waitMs: waitSecondsOf(a['waitSeconds']) * 1000,
+            limit: pageSize(a['limit'], 50),
+          },
+          guard
+        );
+      }
       case 'character_sheet_get': {
-        onlyKeys(a, ['identifier']);
-        const piece = this.piece(textArgument(a['identifier']));
-        return { identifier: piece.identifier, name: this.describe(piece).name, ...characterSheetView(piece) };
+        onlyKeys(a, ['identifier', 'paths']);
+        const piece = this.readable(textArgument(a['identifier']));
+        const paths = a['paths'] === undefined ? undefined : textsOf(a['paths'], 'paths', MAX_SHEET_PATHS);
+        return { identifier: piece.identifier, name: this.describe(piece).name, ...characterSheetView(piece, paths) };
       }
       case 'palette_get': {
         onlyKeys(a, ['identifier']);
-        const piece = this.piece(textArgument(a['identifier']));
+        const piece = this.readable(textArgument(a['identifier']));
         const palette = piece.chatPalette;
         const rows = palette ? paletteRowsOf(palette.getPalette()) : [];
         return {
@@ -383,7 +532,7 @@ export class AutomationFacadeService {
       }
       case 'buff_list': {
         onlyKeys(a, ['identifier']);
-        if (a['identifier'] !== undefined) return this.buffsOf(this.piece(textArgument(a['identifier'])));
+        if (a['identifier'] !== undefined) return this.buffsOf(this.readable(textArgument(a['identifier'])));
         const pieces = this.store
           .getObjects<GameCharacter>(GameCharacter)
           .filter((piece) => this.policy.canSee(piece))
@@ -417,6 +566,112 @@ export class AutomationFacadeService {
           fail('INVALID_ARGUMENT', 'dryRun must be boolean.');
         return this.buffCommands.sweep(sweepRuleOf(a), a['dryRun'] === true);
       }
+      case 'character_create': {
+        onlyKeys(a, ['pieces', 'x', 'y', 'unit', 'disclosure', 'concealed', 'dicebot', 'images', 'dryRun']);
+        const pieces = a['pieces'];
+        if (!Array.isArray(pieces) || pieces.length < 1 || pieces.length > MAX_CREATED_PIECES)
+          fail('INVALID_ARGUMENT', `pieces must list 1 to ${MAX_CREATED_PIECES} sheets.`);
+        const unit = a['unit'] ?? 'grid';
+        if (unit !== 'grid' && unit !== 'px') fail('INVALID_ARGUMENT', 'Unit must be grid or px.');
+        const disclosure =
+          a['disclosure'] === undefined
+            ? PeerCursor.isMyselfGameMaster
+              ? DisclosureMode.GameMaster
+              : DisclosureMode.All
+            : disclosureOf(a['disclosure']);
+        return this.pieceCommands.create(
+          pieces,
+          { x: numberArgument(a['x']), y: numberArgument(a['y']), unit },
+          {
+            disclosure,
+            concealed: booleanOf(a['concealed'], 'concealed'),
+            dicebot: a['dicebot'] === undefined ? undefined : textArgument(a['dicebot'], 64).trim(),
+            images: a['images'] === undefined ? undefined : automationImagesOf(a['images']),
+          },
+          booleanOf(a['dryRun'], 'dryRun'),
+          guard
+        );
+      }
+      case 'piece_disclose': {
+        onlyKeys(a, ['identifier', 'disclosure', 'dryRun']);
+        const piece = this.pieceCommands.own(textArgument(a['identifier']));
+        const disclosure = disclosureOf(a['disclosure']);
+        if (booleanOf(a['dryRun'], 'dryRun')) return { identifier: piece.identifier, disclosure, dryRun: true };
+        return this.pieceCommands.disclose(piece, disclosure);
+      }
+      case 'piece_remove': {
+        onlyKeys(a, ['identifiers', 'dryRun']);
+        const pieces = textsOf(a['identifiers'], 'identifiers', MAX_CREATED_PIECES).map((identifier) =>
+          this.pieceCommands.own(identifier)
+        );
+        if (booleanOf(a['dryRun'], 'dryRun')) return { removed: pieces.map((piece) => piece.identifier), dryRun: true };
+        return this.pieceCommands.remove(pieces);
+      }
+      case 'piece_reveal':
+      case 'piece_conceal': {
+        onlyKeys(a, ['identifiers', 'dryRun']);
+        const revealing = request.command === 'piece_reveal';
+        const pieces = textsOf(a['identifiers'], 'identifiers', MAX_CREATED_PIECES).map((identifier) =>
+          this.pieceCommands.own(identifier, [revealing ? CONCEALED_LOCATION : 'table'])
+        );
+        if (booleanOf(a['dryRun'], 'dryRun'))
+          return { [revealing ? 'revealed' : 'concealed']: pieces.map((piece) => piece.identifier), dryRun: true };
+        return revealing ? this.pieceCommands.reveal(pieces) : this.pieceCommands.conceal(pieces);
+      }
+      case 'table_list':
+        onlyKeys(a, []);
+        return this.roomPrep.list();
+      case 'table_create':
+        if (a['kind'] === 'board') {
+          onlyKeys(a, ['kind', 'name', 'width', 'height', 'background', 'grid', 'flat', 'images']);
+          return this.roomPrep.createBoard(
+            {
+              name: textArgument(a['name']).trim(),
+              width: wholeOf(a['width'], 'width', 1, 200, 30),
+              height: wholeOf(a['height'], 'height', 1, 200, 20),
+              background: a['background'] === undefined ? '' : textArgument(a['background'], 64),
+              images: a['images'] === undefined ? [] : automationImagesOf(a['images']),
+              grid: booleanOf(a['grid'], 'grid'),
+              flat: booleanOf(a['flat'], 'flat'),
+            },
+            guard
+          );
+        }
+        onlyKeys(a, ['kind', 'atmosphere', 'seed', 'name', 'roomCount', 'trapCount', 'size', 'density', 'fog']);
+        return this.roomPrep.create(mapRequestOf(a), guard);
+      case 'table_select': {
+        onlyKeys(a, ['identifier', 'dryRun']);
+        const table = this.roomPrep.table(textArgument(a['identifier']));
+        if (booleanOf(a['dryRun'], 'dryRun')) return { identifier: table.identifier, dryRun: true };
+        return this.roomPrep.select(table);
+      }
+      case 'chat_tab_create': {
+        onlyKeys(a, ['name', 'playersRead', 'playersSpeak', 'guestsRead', 'guestsSpeak', 'dryRun']);
+        const name = textArgument(a['name'], 64).trim();
+        const permission = tabPermissionOf(a);
+        if (booleanOf(a['dryRun'], 'dryRun')) return { name, ...permission, dryRun: true };
+        return this.roomPrep.createTab(name, permission);
+      }
+      case 'note_create': {
+        onlyKeys(a, ['title', 'text', 'x', 'y', 'unit', 'width', 'height', 'disclosure', 'concealed', 'dryRun']);
+        const unit = a['unit'] ?? 'grid';
+        if (unit !== 'grid' && unit !== 'px') fail('INVALID_ARGUMENT', 'Unit must be grid or px.');
+        if (typeof a['text'] !== 'string' || a['text'].length > MAX_NOTE_TEXT)
+          fail('INVALID_ARGUMENT', `text must be a string of at most ${MAX_NOTE_TEXT} characters.`);
+        const request = {
+          title: textArgument(a['title']),
+          text: a['text'],
+          x: numberArgument(a['x']),
+          y: numberArgument(a['y']),
+          unit,
+          width: wholeOf(a['width'], 'width', 1, 40, 5),
+          height: wholeOf(a['height'], 'height', 1, 40, 4),
+          disclosure: a['disclosure'] === undefined ? DisclosureMode.All : disclosureOf(a['disclosure']),
+          concealed: booleanOf(a['concealed'], 'concealed'),
+        } as const;
+        if (booleanOf(a['dryRun'], 'dryRun')) return { title: request.title, dryRun: true };
+        return this.roomPrep.createNote(request);
+      }
     }
   }
 
@@ -438,6 +693,12 @@ export class AutomationFacadeService {
     if (!(piece instanceof GameCharacter) || !this.policy.canSee(piece)) fail('NOT_FOUND', 'Visible piece not found.');
     return piece;
   }
+  /** A piece to read: one in view on the table, or one out of sight this reader may look at. */
+  private readable(identifier: string): GameCharacter {
+    const piece = this.store.get(identifier);
+    if (piece instanceof GameCharacter && this.policy.canSeeConcealed(piece)) return piece;
+    return this.piece(identifier);
+  }
   private tab(identifier: string, speak = false): ChatTab {
     const tab = this.store.get(identifier);
     if (!(tab instanceof ChatTab) || !canRoleViewTab(tab, PeerCursor.myRole))
@@ -456,6 +717,7 @@ export class AutomationFacadeService {
       unit: 'px',
       gridX: piece.location.x / gridSize,
       gridY: piece.location.y / gridSize,
+      place: piece.location.name === CONCEALED_LOCATION ? 'concealed' : 'table',
       surface: piece.location.surface ?? 'floor',
       posZ: piece.posZ,
       size: piece.size,

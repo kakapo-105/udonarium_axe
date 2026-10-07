@@ -10,6 +10,7 @@ import { ConfirmService } from '@axe/application/ui/confirm.service';
 import { LocalModePreferenceService } from '@axe/application/ui/local-mode-preference.service';
 import { ModalService } from '@axe/application/ui/modal.service';
 import { PanelService } from '@axe/application/ui/panel.service';
+import { SamplePiecesPreferenceService } from '@axe/application/ui/sample-pieces-preference.service';
 import { transientSignal } from '@axe/application/ui/transient-signal';
 import { Network } from '@axe/core/index';
 import { Logger } from '@axe/core/logging/logger';
@@ -47,6 +48,7 @@ export class PeerMenuComponent {
   private readonly tabletopActionService = inject(TabletopActionService);
   private readonly modalService = inject(ModalService);
   private readonly localModePreference = inject(LocalModePreferenceService);
+  protected readonly samplePieces = inject(SamplePiecesPreferenceService);
 
   private readonly confirm = inject(ConfirmService);
 
@@ -78,6 +80,11 @@ export class PeerMenuComponent {
     if (!asked) return;
     this.localModePreference.set(mode === 'offline');
     this.reload();
+  }
+
+  /** Whether this browser sets out the sample pieces from the next load, from the box's change event. */
+  setSamplePieces(event: Event): void {
+    this.samplePieces.set((event.target as HTMLInputElement).checked);
   }
 
   protected reload(): void {

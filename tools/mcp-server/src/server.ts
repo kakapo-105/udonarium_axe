@@ -1,6 +1,7 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 import { BrowserSession } from '#mcp/browser-session.js';
+import { pieceSourceOrigins } from '#mcp/piece-source.js';
 import { createServer } from '#mcp/tools.js';
 
 const args = process.argv.slice(2);
@@ -9,7 +10,14 @@ if (args.length !== 0 && (args.length !== 2 || args[0] !== '--url')) {
   process.exit(1);
 }
 const session = new BrowserSession(args[1] ?? process.env.UDONARIUM_URL ?? 'http://localhost:4200');
-const server = createServer(session);
+let pieceSources: string[];
+try {
+  pieceSources = pieceSourceOrigins(process.env.UDONARIUM_PIECE_SOURCES);
+} catch (error) {
+  console.error('UDONARIUM_PIECE_SOURCES:', error instanceof Error ? error.message : error);
+  process.exit(1);
+}
+const server = createServer(session, { pieceSources });
 const stop = async () => {
   await session.close();
   await server.close();

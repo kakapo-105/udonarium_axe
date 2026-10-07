@@ -7,6 +7,8 @@ import { VisionService } from '@axe/application/tabletop/vision.service';
 import { LocalModePreferenceService } from '@axe/application/ui/local-mode-preference.service';
 import { Network } from '@axe/core/network/network';
 import { localDispatch } from '@axe/core/network/network-messaging';
+import { calcSHA256Async } from '@axe/core/storage/file-reader-util';
+import { ImageStorage } from '@axe/core/storage/image-storage';
 import { ObjectContext } from '@axe/core/sync/game-object';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { ObjectSynchronizer } from '@axe/core/sync/object-synchronizer';
@@ -21,7 +23,9 @@ import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
 import { GameTable } from '@axe/domain/tabletop/game-table';
+import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { Terrain } from '@axe/domain/tabletop/terrain';
+import { TextNote } from '@axe/domain/tabletop/text-note';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 
 describe('AutomationFacadeService', () => {
@@ -574,6 +578,477 @@ describe('AutomationFacadeService', () => {
       });
       expect([...piece.buffs.snapshot(), ...other.buffs.snapshot()]).toEqual([]);
       expect(tab.chatMessages.at(-1)?.text).toContain('（2体・2件）');
+    });
+  });
+
+  it('reads only the sheet fields asked for, whole sections included', async () => {
+    const read = async (paths: string[]) =>
+      (
+        (await call('character_sheet_get', { identifier: piece.identifier, paths })) as {
+          data: { fields: { path: string }[] };
+        }
+      ).data.fields.map((f) => f.path);
+
+    expect(await read(['リソース/基本/HP'])).toEqual(['リソース/基本/HP']);
+    expect(await read(['リソース'])).toEqual(expect.arrayContaining(['リソース/基本/HP', 'リソース/基本/MP']));
+    expect(await read(['リソース/基'])).toEqual([]);
+    error(await call('character_sheet_get', { identifier: piece.identifier, paths: [] }), 'INVALID_ARGUMENT');
+  });
+
+  describe('waiting for chat', () => {
+    let at = 1000;
+    function say(text: string, from = 'player') {
+      return tab.addMessage({ name: 'Player', text, from, timestamp: at++ });
+    }
+    async function wait(args: Record<string, unknown> = {}) {
+      const pending = call('chat_wait', { waitSeconds: 2, ...args });
+      await vi.advanceTimersByTimeAsync(2500);
+      return (await pending) as { ok: true; data: { messages: { text: string }[]; timedOut: boolean; more: boolean } };
+    }
+    beforeEach(() => vi.useFakeTimers());
+
+    it('hands over what arrives after the first wait began, each message once', async () => {
+      say('before');
+      expect((await wait()).data).toMatchObject({ messages: [], timedOut: true });
+
+      const pending = call('chat_wait', { waitSeconds: 10 });
+      await vi.advanceTimersByTimeAsync(1000);
+      say('first');
+      say('second');
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect((await pending) as unknown).toMatchObject({
+        ok: true,
+        data: { messages: [{ text: 'first' }, { text: 'second' }], timedOut: false },
+      });
+      expect((await wait()).data.timedOut).toBe(true);
+    });
+
+    it('hands over at most the limit, keeping the rest for the next wait', async () => {
+      await wait();
+      say('one');
+      say('two');
+      expect((await wait({ limit: 1 })).data).toMatchObject({ messages: [{ text: 'one' }], more: true });
+      expect((await wait()).data.messages).toMatchObject([{ text: 'two' }]);
+    });
+
+    it('leaves out secret rolls and what automation said, but not a person at the same browser', async () => {
+      await wait();
+      tab.addMessage({ name: 'Secret', text: 'secret value', tag: 'secret', timestamp: at++ });
+      const sent = call('chat_send', { tabId: tab.identifier, text: 'said by automation' });
+      await vi.advanceTimersByTimeAsync(100);
+      expect((await sent).ok).toBe(true);
+      expect((await wait()).data.messages).toEqual([]);
+
+      say('typed by hand', Network.peerContext.userId);
+      expect((await wait()).data.messages).toMatchObject([{ text: 'typed by hand' }]);
+    });
+
+    it('waits only on the tabs named, and refuses tabs it cannot read', async () => {
+      const other = new ChatTab();
+      other.name = 'Chatter';
+      other.initialize();
+      ChatTabList.instance.addChatTab(other);
+      await wait();
+      other.addMessage({ name: 'Player', text: 'off topic', from: 'player', timestamp: at++ });
+      expect((await wait({ tabIds: [tab.identifier] })).data.timedOut).toBe(true);
+      other.plCanView = false;
+      error(await call('chat_wait', { tabIds: [other.identifier] }), 'NOT_FOUND');
+    });
+
+    it('bounds the wait and forgets what it handed over when the session starts again', async () => {
+      error(await call('chat_wait', { waitSeconds: 301 }), 'INVALID_ARGUMENT');
+      error(await call('chat_wait', { waitSeconds: 0.5 }), 'INVALID_ARGUMENT');
+      await wait();
+      say('during the old session');
+      policy.enable();
+      expect((await wait()).data.timedOut).toBe(true);
+    });
+
+    it('ends the wait when automation is stopped', async () => {
+      const pending = call('chat_wait', { waitSeconds: 10 });
+      await vi.advanceTimersByTimeAsync(500);
+      policy.stop();
+      await vi.advanceTimersByTimeAsync(1000);
+      error(await pending, 'NOT_READY');
+    });
+  });
+
+  describe('pieces made by automation', () => {
+    const goblin = (name = 'ゴブリン') => ({
+      kind: 'character',
+      data: {
+        name,
+        status: [{ label: 'HP', value: '16', max: '16' }],
+        params: [{ label: 'LV', value: '1' }],
+        commands: '2d+3【命中力／武器】',
+      },
+    });
+    function grant() {
+      policy.setScope('create_piece', true);
+    }
+    function created(result: AutomationResult) {
+      expect(result).toMatchObject({ ok: true });
+      return (result as { data: { pieces: { identifier: string; name: string; x: number; y: number }[] } }).data.pieces;
+    }
+
+    it('puts pieces from sheets in a row from the cell asked for, owned by the operator', async () => {
+      grant();
+      const pieces = created(
+        await call('character_create', { pieces: [goblin('ゴブリンA'), goblin('ゴブリンB')], x: 2, y: 3 })
+      );
+
+      expect(pieces).toMatchObject([
+        { name: 'ゴブリンA', x: 100, y: 150 },
+        { name: 'ゴブリンB', x: 150, y: 150 },
+      ]);
+      const made = store.get<GameCharacter>(pieces[0].identifier)!;
+      expect(made.owner).toBe('operator');
+      expect(made.location.name).toBe('table');
+      expect(made.disclosureMode).toBe('all');
+    });
+
+    describe('from this tool’s own XML', () => {
+      // happy-dom cannot read dotted attribute names such as location.name, which browsers read; the
+      // end-to-end test reads a piece with them.
+      const xml = (name: string, image = '') => `<character disclosureMode="all" owner="someone">
+  <data name="character">
+    <data name="image"><data type="image" name="imageIdentifier">${image}</data></data>
+    <data name="common"><data name="name">${name}</data><data name="size">2</data><data name="altitude">0</data></data>
+    <data name="detail">
+      <data role="section" name="パラメータ"><data role="group" name="基本">
+        <data fieldType="number" role="field" name="命中力修正">1</data>
+        <data fieldType="calc" role="field" name="命中力固定値" formula="10+命中力修正">10</data>
+      </data></data>
+    </data>
+  </data>
+  <chat-palette dicebot="SwordWorld2.5">2d6+3 【命中力判定】</chat-palette>
+</character>`;
+
+      it('builds a piece as a dropped file would, owned by the operator and placed as asked', async () => {
+        grant();
+        const [made] = created(
+          await call('character_create', { pieces: [xml('トロール')], x: 2, y: 3, disclosure: 'gm', concealed: false })
+        );
+
+        const piece = store.get<GameCharacter>(made.identifier)!;
+        expect(made).toMatchObject({ name: 'トロール', x: 100, y: 150, size: 2 });
+        expect(piece.owner).toBe('operator');
+        expect(piece.disclosureMode).toBe('gm');
+        expect(piece.chatPalette?.dicebot).toBe('SwordWorld2.5');
+        const sheet = await call('character_sheet_get', { identifier: made.identifier, paths: ['パラメータ'] });
+        expect(JSON.stringify(sheet)).toContain('"path":"パラメータ/基本/命中力固定値","type":"calc","value":"11"');
+      });
+
+      it('takes only a piece, never room data or a chat tab', async () => {
+        grant();
+        const before = store.getObjects(GameCharacter).length;
+        for (const sheet of ['<chat-tab name="x"></chat-tab>', '<room></room>', 'not xml at all']) {
+          error(await call('character_create', { pieces: [xml('ゴブリン'), sheet], x: 0, y: 0 }), 'INVALID_ARGUMENT');
+        }
+        expect(store.getObjects(GameCharacter)).toHaveLength(before);
+      });
+
+      it('adds the picture a piece wears under the identifier it names, after checking the bytes', async () => {
+        grant();
+        const bytes = new Uint8Array([0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4]);
+        const identifier = await calcSHA256Async(bytes.buffer);
+        const data = btoa(String.fromCharCode(...bytes));
+        // A test DOM cannot decode a picture to make its thumbnail, so the storage itself is left out.
+        const added = vi.spyOn(ImageStorage.instance, 'addAsync').mockResolvedValue(null as never);
+
+        error(
+          await call('character_create', {
+            pieces: [xml('ゴブリン', identifier)],
+            x: 0,
+            y: 0,
+            images: [{ identifier: 'f'.repeat(64), type: 'image/webp', data }],
+          }),
+          'INVALID_ARGUMENT'
+        );
+        expect(added).not.toHaveBeenCalled();
+
+        const [made] = created(
+          await call('character_create', {
+            pieces: [xml('ゴブリン', identifier)],
+            x: 0,
+            y: 0,
+            images: [{ identifier, type: 'image/webp', data }],
+          })
+        );
+        expect(added).toHaveBeenCalledTimes(1);
+        expect((added.mock.calls[0][0] as File).name).toBe(`${identifier}.webp`);
+        const worn = store
+          .get<GameCharacter>(made.identifier)!
+          .imageDataElement?.getFirstElementByName('imageIdentifier');
+        expect(worn?.value).toBe(identifier);
+      });
+    });
+
+    it('gives the pieces the dice bot asked for, which a sheet from another tool does not name', async () => {
+      grant();
+      const [made] = created(
+        await call('character_create', { pieces: [goblin()], x: 0, y: 0, dicebot: 'SwordWorld2.5' })
+      );
+      expect(store.get<GameCharacter>(made.identifier)!.chatPalette?.dicebot).toBe('SwordWorld2.5');
+    });
+
+    it('keeps what a piece says about itself to the game master by default when run by one', async () => {
+      PeerCursor.myCursor.role = PeerRole.GameMaster;
+      facade.health();
+      policy.enable();
+      grant();
+      const [piece] = created(await call('character_create', { pieces: [goblin()], x: 0, y: 0 }));
+      expect(store.get<GameCharacter>(piece.identifier)!.disclosureMode).toBe('gm');
+
+      expect(await call('piece_disclose', { identifier: piece.identifier, disclosure: 'all' })).toMatchObject({
+        ok: true,
+        data: { disclosure: 'all' },
+      });
+      expect(store.get<GameCharacter>(piece.identifier)!.disclosureMode).toBe('all');
+    });
+
+    it('builds nothing when a sheet cannot be read, the row runs off the table, or on a dry run', async () => {
+      grant();
+      const before = store.getObjects(GameCharacter).length;
+      error(await call('character_create', { pieces: [goblin(), { nonsense: true }], x: 0, y: 0 }), 'INVALID_ARGUMENT');
+      error(await call('character_create', { pieces: [goblin(), goblin()], x: 19, y: 0 }), 'INVALID_ARGUMENT');
+      expect(await call('character_create', { pieces: [goblin()], x: 0, y: 0, dryRun: true })).toMatchObject({
+        ok: true,
+        data: { pieces: [{ name: 'ゴブリン', x: 0, y: 0 }], dryRun: true },
+      });
+      expect(store.getObjects(GameCharacter)).toHaveLength(before);
+    });
+
+    it('needs its own grant and refuses guests', async () => {
+      error(await call('character_create', { pieces: [goblin()], x: 0, y: 0 }), 'FORBIDDEN');
+      PeerCursor.myCursor.role = 'guest';
+      facade.health();
+      policy.enable();
+      grant();
+      error(await call('character_create', { pieces: [goblin()], x: 0, y: 0 }), 'FORBIDDEN');
+    });
+
+    describe('out of sight', () => {
+      function beGameMaster() {
+        PeerCursor.myCursor.role = PeerRole.GameMaster;
+        facade.health();
+        policy.enable();
+        grant();
+      }
+      async function hide(name = 'ドレイク') {
+        const [made] = created(await call('character_create', { pieces: [goblin(name)], x: 4, y: 5, concealed: true }));
+        return made;
+      }
+      const names = async (args: Record<string, unknown>) =>
+        ((await call('scene_list', args)) as { data: { objects: { name: string }[] } }).data.objects.map(
+          (object) => object.name
+        );
+
+      it('keeps a piece put out early off every table, where it stood, yet readable to the master', async () => {
+        beGameMaster();
+        const made = await hide();
+
+        const piece = store.get<GameCharacter>(made.identifier)!;
+        expect(piece.location).toMatchObject({ name: 'concealed', x: 200, y: 250 });
+        expect(await names({})).not.toContain('ドレイク');
+        expect(await names({ place: 'concealed' })).toEqual(['ドレイク']);
+        expect(await call('object_get', { identifier: made.identifier })).toMatchObject({
+          ok: true,
+          data: { place: 'concealed' },
+        });
+        expect((await call('character_sheet_get', { identifier: made.identifier, paths: ['リソース'] })).ok).toBe(true);
+        expect((await call('palette_get', { identifier: made.identifier })).ok).toBe(true);
+      });
+
+      it('brings it back where it stood, and puts it out of sight again', async () => {
+        beGameMaster();
+        const made = await hide();
+
+        expect(await call('piece_reveal', { identifiers: [made.identifier] })).toMatchObject({
+          ok: true,
+          data: { revealed: [{ identifier: made.identifier, x: 200, y: 250 }] },
+        });
+        expect(store.get<GameCharacter>(made.identifier)!.location.name).toBe('table');
+        error(await call('piece_reveal', { identifiers: [made.identifier] }), 'NOT_FOUND');
+
+        expect((await call('piece_conceal', { identifiers: [made.identifier] })).ok).toBe(true);
+        expect(store.get<GameCharacter>(made.identifier)!.location).toMatchObject({ name: 'concealed', x: 200 });
+      });
+
+      it('leaves putting out of sight to the master, and never touches a player’s piece', async () => {
+        grant();
+        error(await call('character_create', { pieces: [goblin()], x: 0, y: 0, concealed: true }), 'FORBIDDEN');
+        error(await call('piece_conceal', { identifiers: [piece.identifier] }), 'FORBIDDEN');
+
+        beGameMaster();
+        const players = GameCharacter.create('PC', 1, '');
+        players.owner = 'player';
+        players.location = { name: 'table', x: 100, y: 100 };
+        error(await call('piece_conceal', { identifiers: [players.identifier] }), 'NOT_FOUND');
+        expect(players.location.name).toBe('table');
+      });
+
+      it('lets an owner who is not the master read what is theirs out of sight, but nobody else’s', async () => {
+        beGameMaster();
+        const made = await hide();
+        const others = GameCharacter.create('Other', 1, '');
+        others.owner = 'someone';
+        others.location = { name: 'concealed', x: 0, y: 0 };
+
+        PeerCursor.myCursor.role = 'pl';
+        facade.health();
+        policy.enable();
+        expect(await names({ place: 'concealed' })).toEqual(['ドレイク']);
+        error(await call('character_sheet_get', { identifier: others.identifier }), 'NOT_FOUND');
+        expect((await call('character_sheet_get', { identifier: made.identifier })).ok).toBe(true);
+      });
+    });
+
+    it('treats what nobody owns as its own when offline, where there is no user id to own it by', async () => {
+      PeerCursor.myCursor.userId = '';
+      facade.health();
+      policy.enable();
+      grant();
+      const [made] = created(await call('character_create', { pieces: [goblin()], x: 0, y: 0, disclosure: 'gm' }));
+      const someones = GameCharacter.create('PC', 1, '');
+      someones.owner = 'someone';
+      someones.location = { name: 'table', x: 100, y: 100 };
+
+      expect((await call('piece_disclose', { identifier: made.identifier, disclosure: 'all' })).ok).toBe(true);
+      expect((await call('piece_remove', { identifiers: [made.identifier] })).ok).toBe(true);
+      expect(store.get<GameCharacter>(made.identifier)!.location.name).toBe('graveyard');
+      error(await call('piece_remove', { identifiers: [someones.identifier] }), 'NOT_FOUND');
+    });
+
+    it('clears away its own pieces to the graveyard, and never a player’s', async () => {
+      grant();
+      const [made] = created(await call('character_create', { pieces: [goblin()], x: 0, y: 0 }));
+      const players = GameCharacter.create('PC', 1, '');
+      players.owner = 'player';
+      players.location = { name: 'table', x: 100, y: 100 };
+
+      error(await call('piece_remove', { identifiers: [made.identifier, players.identifier] }), 'NOT_FOUND');
+      error(await call('piece_disclose', { identifier: players.identifier, disclosure: 'gm' }), 'NOT_FOUND');
+      expect(store.get<GameCharacter>(made.identifier)!.location.name).toBe('table');
+
+      expect(await call('piece_remove', { identifiers: [made.identifier] })).toMatchObject({
+        ok: true,
+        data: { removed: [made.identifier] },
+      });
+      expect(store.get<GameCharacter>(made.identifier)!.location.name).toBe('graveyard');
+      expect(players.location.name).toBe('table');
+    });
+  });
+
+  describe('preparing the room', () => {
+    function beGameMaster() {
+      PeerCursor.myCursor.role = PeerRole.GameMaster;
+      facade.health();
+      policy.enable();
+      policy.setScope('prepare_room', true);
+      policy.setScope('create_piece', true);
+    }
+
+    it('lists every table with the one in view', async () => {
+      const other = new GameTable();
+      other.name = 'Town';
+      other.initialize();
+
+      const result = await call('table_list');
+
+      expect(result).toMatchObject({ ok: true });
+      const tables = (result as { data: { tables: { identifier: string; viewing: boolean }[] } }).data.tables;
+      expect(tables.find((t) => t.identifier === table.identifier)?.viewing).toBe(true);
+      expect(tables.find((t) => t.identifier === other.identifier)?.viewing).toBe(false);
+    });
+
+    it('leaves setting the room up to the game master with its own grant', async () => {
+      policy.setScope('prepare_room', true);
+      error(await call('chat_tab_create', { name: 'メイン' }), 'FORBIDDEN');
+
+      PeerCursor.myCursor.role = PeerRole.GameMaster;
+      facade.health();
+      policy.enable();
+      error(await call('chat_tab_create', { name: 'メイン' }), 'FORBIDDEN');
+    });
+
+    it('puts another table in view for the room', async () => {
+      beGameMaster();
+      const town = new GameTable();
+      town.name = 'Town';
+      town.initialize();
+
+      expect(await call('table_select', { identifier: town.identifier })).toMatchObject({
+        ok: true,
+        data: { identifier: town.identifier },
+      });
+      expect(TestBed.inject(TableSelecter).viewTableIdentifier).toBe(town.identifier);
+      error(await call('table_select', { identifier: piece.identifier }), 'NOT_FOUND');
+    });
+
+    it('opens a chat tab the players cannot read, for the master’s own notes', async () => {
+      beGameMaster();
+
+      const result = await call('chat_tab_create', { name: 'GM', playersRead: false, guestsRead: false });
+
+      expect(result).toMatchObject({ ok: true, data: { plCanView: false, plCanSpeak: false, guestCanView: false } });
+      const made = store.get<ChatTab>((result as { data: { identifier: string } }).data.identifier)!;
+      expect(made.name).toBe('GM');
+      expect(ChatTabList.instance.chatTabs).toContain(made);
+    });
+
+    it('puts a note on the table, or keeps it out of sight until it is revealed', async () => {
+      beGameMaster();
+
+      const shown = await call('note_create', { title: '依頼書', text: 'ゴブリン退治', x: 1, y: 2 });
+      expect(shown).toMatchObject({ ok: true, data: { x: 50, y: 100, concealed: false } });
+      const note = store.get<TextNote>((shown as { data: { identifier: string } }).data.identifier)!;
+      expect(note.text).toBe('ゴブリン退治');
+      expect(note.owner).toBe('operator');
+
+      const hidden = await call('note_create', { title: '地図', text: '', x: 0, y: 0, concealed: true });
+      const id = (hidden as { data: { identifier: string } }).data.identifier;
+      expect(store.get<TextNote>(id)!.location.name).toBe('concealed');
+      expect((await call('piece_reveal', { identifiers: [id] })).ok).toBe(true);
+      expect(store.get<TextNote>(id)!.location.name).toBe('table');
+
+      error(await call('note_create', { title: '大きすぎる', text: '', x: 18, y: 0, width: 5 }), 'INVALID_ARGUMENT');
+    });
+
+    it('builds a plain table from a board template, wearing its picture and laid flat', async () => {
+      beGameMaster();
+      const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 9]);
+      const identifier = await calcSHA256Async(bytes.buffer);
+      // A test DOM cannot decode a picture to make its thumbnail, so the storage itself is left out.
+      const added = vi.spyOn(ImageStorage.instance, 'addAsync').mockResolvedValue(null as never);
+
+      const result = await call('table_create', {
+        kind: 'board',
+        name: '基本戦闘',
+        width: 30,
+        height: 12,
+        background: identifier,
+        flat: true,
+        images: [{ identifier, type: 'image/png', data: btoa(String.fromCharCode(...bytes)) }],
+      });
+
+      expect(result).toMatchObject({ ok: true, data: { name: '基本戦闘', width: 30, height: 12 } });
+      const board = store.get<GameTable>((result as { data: { identifier: string } }).data.identifier)!;
+      expect(board.imageIdentifier).toBe(identifier);
+      expect(board.mode2d).toBe(true);
+      expect((added.mock.calls[0][0] as File).name).toBe(`${identifier}.png`);
+      error(
+        await call('table_create', { kind: 'board', name: '大きすぎる', width: 999, height: 10 }),
+        'INVALID_ARGUMENT'
+      );
+    });
+
+    it('says plainly when this build cannot generate maps', async () => {
+      beGameMaster();
+      error(await call('table_create', { kind: 'dungeon', atmosphere: 'crypt' }), 'NOT_READY');
+      error(await call('table_create', { kind: 'cave', atmosphere: 'crypt' }), 'INVALID_ARGUMENT');
+      error(await call('table_create', { kind: 'dungeon', atmosphere: 'crypt', roomCount: 99 }), 'INVALID_ARGUMENT');
     });
   });
 });

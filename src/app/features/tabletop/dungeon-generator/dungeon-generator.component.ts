@@ -3,11 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PartyService } from '@axe/application/party/party.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
-import {
-  DUNGEON_GRID_SIZE,
-  DungeonBuildService,
-  DungeonMaterial,
-} from '@axe/application/tabletop/dungeon-build.service';
+import { DungeonBuildService, DungeonMaterial } from '@axe/application/tabletop/dungeon-build.service';
 import { PanelService } from '@axe/application/ui/panel.service';
 import { emitSelectGameTable } from '@axe/core/event/domain-events';
 import { ImageStorage } from '@axe/core/storage/image-storage';
@@ -76,7 +72,7 @@ import { DungeonMaterialPickerComponent } from '@axe/features/tabletop/dungeon-g
 import { describeDungeon } from '@axe/features/tabletop/dungeon-generator/dungeon-notes';
 import { withFieldMaterials } from '@axe/features/tabletop/dungeon-generator/field-materials';
 import { describeField } from '@axe/features/tabletop/dungeon-generator/field-notes';
-import { buildGroundScene } from '@axe/features/tabletop/dungeon-generator/ground-scene';
+import { MapGenerationService } from '@axe/features/tabletop/dungeon-generator/map-generation.service';
 import { buildMapPreview, previewColors } from '@axe/features/tabletop/dungeon-generator/map-preview';
 import { TranslocoModule } from '@jsverse/transloco';
 
@@ -99,6 +95,7 @@ export class DungeonGeneratorComponent {
   private readonly panelService = inject(PanelService);
   private readonly rolePermission = inject(RolePermissionService);
   private readonly dungeonBuild = inject(DungeonBuildService);
+  private readonly generation = inject(MapGenerationService);
   private readonly partyService = inject(PartyService);
   private readonly objectStore = inject(ObjectStore);
   private readonly imageStorage = inject(ImageStorage);
@@ -442,28 +439,9 @@ export class DungeonGeneratorComponent {
    * floor rather than the table.
    */
   private async paintFloor(plan: DungeonPlan | FieldPlan): Promise<string> {
-    const floor = this.floor();
-    const hazardId =
-      'atmosphere' in plan ? ((plan.atmosphere as { cave?: { hazardFloor?: string } }).cave?.hazardFloor ?? '') : '';
-    const scene = buildGroundScene(
-      plan.layout,
-      plan.blocks.paint,
-      { floor, hazard: hazardId ? { kind: 'texture', id: hazardId } : floor },
-      DUNGEON_GRID_SIZE,
-      this.gridType()
-    );
-    try {
-      const blob = await this.exportFn(scene, [], {
-        drawGrid: false,
-        resolveImageUrl: (id) => this.imageStorage.get(id)?.url ?? null,
-      });
-      const file = await this.imageStorage.addAsync(blob);
-      this.floorImage.set(file.identifier);
-      return file.identifier;
-    } catch {
-      this.floorImage.set('');
-      return '';
-    }
+    const painted = await this.generation.paintFloor(plan, this.floor(), this.gridType(), this.exportFn);
+    this.floorImage.set(painted);
+    return painted;
   }
 
   protected goToTable(): void {

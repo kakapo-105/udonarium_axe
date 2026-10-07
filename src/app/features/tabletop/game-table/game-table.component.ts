@@ -43,6 +43,7 @@ import { ModalService } from '@axe/application/ui/modal.service';
 import { MotionService } from '@axe/application/ui/motion.service';
 import { PanelService } from '@axe/application/ui/panel.service';
 import { RenderLiteService } from '@axe/application/ui/render-lite.service';
+import { SamplePiecesPreferenceService } from '@axe/application/ui/sample-pieces-preference.service';
 import { SelectionSignalService } from '@axe/application/ui/selection-signal.service';
 import { buildToggleAction } from '@axe/application/ui/tabletop-context-menu-actions';
 import { UiSignalService } from '@axe/application/ui/ui-signal.service';
@@ -249,6 +250,7 @@ export class GameTableComponent {
   private readonly ambienceService = inject(TableAmbienceService);
   private readonly terrainBatch = inject(TerrainBatchService);
   private readonly tabletopActionService = inject(TabletopActionService);
+  private readonly samplePieces = inject(SamplePiecesPreferenceService);
   protected readonly visionService = inject(VisionService);
   private readonly modalService = inject(ModalService);
   private readonly panelService = inject(PanelService);
@@ -370,7 +372,7 @@ export class GameTableComponent {
       untracked(() => this.redrawTableGrid());
     });
     this.tabletopActionService.makeDefaultTable();
-    this.tabletopActionService.makeDefaultTabletopObjects();
+    if (this.samplePieces.enabled()) this.tabletopActionService.makeDefaultTabletopObjects();
 
     afterNextRender(() => {
       this._initialized = true;

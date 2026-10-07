@@ -1,5 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { fail } from '@axe/application/automation/automation-contract';
+import { ChatWaitService } from '@axe/application/automation/chat-wait.service';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
@@ -32,6 +33,7 @@ export class BuffCommandService {
   private readonly store = inject(ObjectStore);
   private readonly objectChange = inject(ObjectChangeService);
   private readonly chat = inject(ChatMessageService);
+  private readonly chatWait = inject(ChatWaitService);
   private readonly t = inject(TRANSLATE_FN);
 
   /** The buffs on a piece, each with the identifier {@link edit} takes it by. */
@@ -104,7 +106,9 @@ export class BuffCommandService {
     for (const piece of pieces) this.objectChange.notifyChanged(piece.identifier);
     if (removed.buffs > 0) {
       const what = this.describe(rule);
-      this.chat.sendSystemMessageToMainTab(this.t('feature.buffManager.sweepDone', { what, ...removed }));
+      this.chatWait.said(() =>
+        this.chat.sendSystemMessageToMainTab(this.t('feature.buffManager.sweepDone', { what, ...removed }))
+      );
     }
     return removed;
   }

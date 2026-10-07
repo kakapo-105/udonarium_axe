@@ -13,6 +13,17 @@ export const AUTOMATION_COMMANDS = [
   'buff_send',
   'buff_edit',
   'buff_sweep',
+  'chat_wait',
+  'character_create',
+  'piece_disclose',
+  'piece_remove',
+  'piece_reveal',
+  'piece_conceal',
+  'table_list',
+  'table_create',
+  'table_select',
+  'chat_tab_create',
+  'note_create',
 ] as const;
 export type AutomationCommand = (typeof AUTOMATION_COMMANDS)[number];
 export const AUTOMATION_SCOPES = [
@@ -22,6 +33,8 @@ export const AUTOMATION_SCOPES = [
   'edit_resource',
   'use_palette',
   'edit_buff',
+  'create_piece',
+  'prepare_room',
 ] as const;
 /** The commands that change the room, which are run one at a time and may be replayed by request ID. */
 export const AUTOMATION_WRITES: readonly AutomationCommand[] = [
@@ -31,6 +44,15 @@ export const AUTOMATION_WRITES: readonly AutomationCommand[] = [
   'buff_send',
   'buff_edit',
   'buff_sweep',
+  'character_create',
+  'piece_disclose',
+  'piece_remove',
+  'piece_reveal',
+  'piece_conceal',
+  'table_create',
+  'table_select',
+  'chat_tab_create',
+  'note_create',
 ];
 export type AutomationScope = (typeof AUTOMATION_SCOPES)[number];
 export type AutomationErrorCode =

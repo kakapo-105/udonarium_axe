@@ -88,6 +88,16 @@
   <p class="m-0 text-[11px] text-(--ui-text-muted)" data-testid="connection-mode-hint">
     {{ 'feature.lobby.peerMenu.modeHint_' + connectionMode() | transloco }}
   </p>
+  <label class="flex cursor-pointer items-center gap-1.5 text-xs">
+    <input
+      type="checkbox"
+      data-testid="sample-pieces"
+      [checked]="samplePieces.enabled()"
+      (change)="setSamplePieces($event)"
+    />
+    {{ 'feature.lobby.peerMenu.samplePieces' | transloco }}
+  </label>
+  <p class="m-0 text-[11px] text-(--ui-text-muted)">{{ 'feature.lobby.peerMenu.samplePiecesHint' | transloco }}</p>
 </div>
 
 @if (!isOffline()) {

@@ -4,6 +4,7 @@ import '../../src/main';
 import { Network } from '@axe/core/network/network';
 import { EventContext } from '@axe/core/network/network-messaging';
 import { PeerContext } from '@axe/core/network/peer-context';
+import { ImageStorage } from '@axe/core/storage/image-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
@@ -23,6 +24,10 @@ peer.isOpen = true;
 Object.defineProperty(Network, 'peerId', { get: () => peer.peerId });
 Object.defineProperty(Network, 'peerContext', { get: () => peer });
 Object.defineProperty(Network, 'isOpen', { get: () => true });
+// The fixture is the whole network. A real connection attempt cannot reach its server here, and once
+// its retries run out it reports the network closed, which stops automation mid-test.
+Network.instance.openStandby = () => {};
+Network.instance.open = () => {};
 const channel = new BroadcastChannel('automation-e2e-sync');
 let connected = false;
 const queued: EventContext[] = [];
@@ -82,6 +87,9 @@ window.__automationTest = {
   position(id: string) {
     return ObjectStore.instance.get<GameCharacter>(id)?.location;
   },
+  imageState(identifier: string) {
+    return ImageStorage.instance.get(identifier)?.state ?? null;
+  },
   messages(id: string) {
     return ObjectStore.instance.get<ChatTab>(id)?.chatMessages.map((m) => m.text) ?? [];
   },
@@ -94,6 +102,7 @@ declare global {
       snapshot(): void;
       position(id: string): unknown;
       messages(id: string): string[];
+      imageState(identifier: string): number | null;
     };
   }
 }

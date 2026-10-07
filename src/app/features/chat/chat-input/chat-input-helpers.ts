@@ -1,11 +1,12 @@
 import { Network } from '@axe/core/index';
 import { GameCharacter } from '@axe/domain/character/game-character';
+import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 
 /**
  * Whether a character may be picked as the speaker in this seat's chat input.
  *
- * Characters in the graveyard never speak, and neither do those in the private inventory of another
- * connected peer. Anywhere else a character marked as non-talking is left out too, unless
+ * Characters in the graveyard never speak, nor do those the master has put out of sight, whose names
+ * the list would give away, nor those in the private inventory of another connected peer. Anywhere else a character marked as non-talking is left out too, unless
  * `ignoreNonTalk` is set, as it is for inputs that offer only characters.
  */
 export function allowsChat(gameCharacter: GameCharacter, myPeerId: string, ignoreNonTalk = false): boolean {
@@ -16,6 +17,7 @@ export function allowsChat(gameCharacter: GameCharacter, myPeerId: string, ignor
       if (!ignoreNonTalk && gameCharacter.nonTalkFlag) return false;
       return true;
     case 'graveyard':
+    case CONCEALED_LOCATION:
       return false;
     default:
       if (!ignoreNonTalk && gameCharacter.nonTalkFlag) return false;

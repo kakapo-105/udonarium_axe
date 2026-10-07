@@ -47,7 +47,8 @@ export class BrowserSession {
       await this.browser.close();
       throw new Error('Browser startup was cancelled.');
     }
-    const context = await this.browser.newContext({ acceptDownloads: false });
+    // No fixed viewport: the page follows the window, so a person checking on it can make it larger.
+    const context = await this.browser.newContext({ acceptDownloads: false, viewport: null });
     const page = await context.newPage();
     this.page = page;
     context.on('page', (opened) => {
@@ -77,7 +78,8 @@ export class BrowserSession {
     command: string,
     args: Record<string, unknown>,
     requestId: string,
-    sessionId?: string
+    sessionId?: string,
+    timeoutMs = 20000
   ): Promise<FacadeResult> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -97,7 +99,7 @@ export class BrowserSession {
                 'Browser request timed out. Restart the MCP server and inspect the board before retrying.'
               )
             );
-          }, 20000);
+          }, timeoutMs);
         }),
       ]);
     } catch (error) {

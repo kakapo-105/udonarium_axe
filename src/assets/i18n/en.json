@@ -171,7 +171,9 @@
         "send_chat": "Send chat",
         "edit_resource": "Adjust the speaking character’s resources (e.g. :HP-5)",
         "use_palette": "Use chat palettes (references, targets and resource edits included)",
-        "edit_buff": "Edit buffs and debuffs"
+        "edit_buff": "Edit buffs and debuffs",
+        "create_piece": "Create pieces, change who can read them and clear them away (own pieces only)",
+        "prepare_room": "Prepare the room (generate and switch tables, add chat tabs and shared notes), GM only"
       },
       "ownedOnly": "Limit AI control to pieces owned by this user",
       "roomHint": "The ownership limit is shared by the room. Only the GM can change it.",
@@ -1310,7 +1312,8 @@
         "table": "Table",
         "common": "Shared",
         "personal": "Personal",
-        "graveyard": "Graveyard"
+        "graveyard": "Graveyard",
+        "concealed": "Out of sight"
       },
       "list": {
         "tabTable": "Table",
@@ -2762,7 +2765,9 @@
         "modeHint_offline": "This browser is on its own: no SkyWay, no backend, nobody else. Switching reloads the page.",
         "confirmOffline": "Go offline? The page reloads and you leave this room.",
         "confirmOnline": "Go online? The page reloads and connects.",
-        "offlineNote": "Saving and loading a room still works. Switch to Online to play with others."
+        "offlineNote": "Saving and loading a room still works. Switch to Online to play with others.",
+        "samplePieces": "Set out the sample pieces when the app opens",
+        "samplePiecesHint": "Takes effect from the next load. Samples already in the room can be sent to the graveyard from the inventory and deleted there."
       },
       "lobby": {
         "title": "Lobby",

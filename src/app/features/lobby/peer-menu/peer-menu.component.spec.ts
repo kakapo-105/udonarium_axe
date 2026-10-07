@@ -1,6 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ConfirmService } from '@axe/application/ui/confirm.service';
 import { LOCAL_MODE_STORAGE_KEY, LocalModePreferenceService } from '@axe/application/ui/local-mode-preference.service';
+import {
+  SAMPLE_PIECES_STORAGE_KEY,
+  SamplePiecesPreferenceService,
+} from '@axe/application/ui/sample-pieces-preference.service';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
 import { PeerMenuComponent } from '@axe/features/lobby/peer-menu/peer-menu.component';
@@ -48,6 +52,21 @@ describe('PeerMenuComponent', () => {
         PeerCursor.createMyCursor();
       },
     });
+  });
+
+  it('lets this browser stop setting out the sample pieces from the next load', () => {
+    PeerCursor.createMyCursor();
+    fixture.detectChanges();
+    const box = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
+      '[data-testid="sample-pieces"]'
+    )!;
+    expect(box.checked).toBe(true);
+
+    box.click();
+
+    expect(TestBed.inject(SamplePiecesPreferenceService).enabled()).toBe(false);
+    expect(localStorage.getItem(SAMPLE_PIECES_STORAGE_KEY)).toBe('0');
+    localStorage.removeItem(SAMPLE_PIECES_STORAGE_KEY);
   });
 
   it('leaves the private connection controls out', () => {
