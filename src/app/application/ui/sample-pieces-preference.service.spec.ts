@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { PAGE_ADDRESS } from '@axe/application/ui/page-address.token';
 import {
   SAMPLE_PIECES_STORAGE_KEY,
   SamplePiecesPreferenceService,
@@ -7,11 +8,11 @@ import {
 describe('SamplePiecesPreferenceService', () => {
   afterEach(() => {
     localStorage.removeItem(SAMPLE_PIECES_STORAGE_KEY);
-    history.replaceState(null, '', '/');
   });
 
-  function service(): SamplePiecesPreferenceService {
+  function service(address = 'http://localhost:4200/'): SamplePiecesPreferenceService {
     TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [{ provide: PAGE_ADDRESS, useValue: () => address }] });
     return TestBed.inject(SamplePiecesPreferenceService);
   }
 
@@ -30,8 +31,7 @@ describe('SamplePiecesPreferenceService', () => {
   });
 
   it('leaves them out for one load when the address says samples=0, without remembering it', () => {
-    history.replaceState(null, '', '/?automation=1&samples=0');
-    expect(service().enabled()).toBe(false);
+    expect(service('http://localhost:4200/?automation=1&samples=0').enabled()).toBe(false);
     expect(localStorage.getItem(SAMPLE_PIECES_STORAGE_KEY)).toBeNull();
   });
 });

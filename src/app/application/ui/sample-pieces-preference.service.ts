@@ -1,4 +1,5 @@
-import { Injectable, signal } from '@angular/core';
+import { inject, Injectable, signal } from '@angular/core';
+import { PAGE_ADDRESS } from '@axe/application/ui/page-address.token';
 
 export const SAMPLE_PIECES_STORAGE_KEY = 'ui-sample-pieces';
 
@@ -13,7 +14,7 @@ export const SAMPLE_PIECES_STORAGE_KEY = 'ui-sample-pieces';
  */
 @Injectable({ providedIn: 'root' })
 export class SamplePiecesPreferenceService {
-  readonly enabled = signal<boolean>(stored() && !refusedByAddress());
+  readonly enabled = signal<boolean>(stored() && !refusedByAddress(inject(PAGE_ADDRESS)()));
 
   /** Turns the sample pieces on or off in this browser. It takes effect on the next load, not now. */
   set(enabled: boolean): void {
@@ -35,9 +36,9 @@ function stored(): boolean {
   }
 }
 
-function refusedByAddress(): boolean {
+function refusedByAddress(href: string): boolean {
   try {
-    return new URL(location.href).searchParams.get('samples') === '0';
+    return new URL(href).searchParams.get('samples') === '0';
   } catch {
     return false;
   }

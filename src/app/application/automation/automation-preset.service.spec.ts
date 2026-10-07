@@ -1,8 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { AUTOMATION_SCOPES } from '@axe/application/automation/automation-contract';
 import { AutomationPolicyService } from '@axe/application/automation/automation-policy.service';
-import { AutomationPresetService, automationPresetOf } from '@axe/application/automation/automation-preset.service';
+import { automationPresetOf, AutomationPresetService } from '@axe/application/automation/automation-preset.service';
 import { LocalModePreferenceService } from '@axe/application/ui/local-mode-preference.service';
+import { PAGE_ADDRESS } from '@axe/application/ui/page-address.token';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { ObjectSynchronizer } from '@axe/core/sync/object-synchronizer';
 import { Config } from '@axe/domain/peer/config';
@@ -15,8 +16,11 @@ describe('AutomationPresetService', () => {
   const store = ObjectStore.instance;
 
   function start(address: string): { preset: AutomationPresetService; policy: AutomationPolicyService } {
-    history.replaceState(null, '', address);
-    TestBed.configureTestingModule({ providers: [...TEST_PROVIDERS] });
+    // A cursor another spec left behind could read as a game master already in the room.
+    for (const object of store.getObjects()) store.remove(object);
+    TestBed.configureTestingModule({
+      providers: [...TEST_PROVIDERS, { provide: PAGE_ADDRESS, useValue: () => `http://localhost:4200${address}` }],
+    });
     TestBed.inject(LocalModePreferenceService).enabled.set(true);
     Config.instance.initialize();
     new GameTable().initialize();
@@ -27,7 +31,6 @@ describe('AutomationPresetService', () => {
   }
 
   afterEach(() => {
-    history.replaceState(null, '', '/');
     ObjectSynchronizer.instance.destroy();
     for (const object of store.getObjects()) store.remove(object);
     store.clearDeleteHistory();

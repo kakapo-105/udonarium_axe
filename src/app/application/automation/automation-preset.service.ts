@@ -3,6 +3,7 @@ import { AUTOMATION_SCOPES } from '@axe/application/automation/automation-contra
 import { AutomationFacadeService } from '@axe/application/automation/automation-facade.service';
 import { AutomationPolicyService } from '@axe/application/automation/automation-policy.service';
 import { SessionCommandService } from '@axe/application/automation/session-command.service';
+import { PAGE_ADDRESS } from '@axe/application/ui/page-address.token';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
@@ -41,7 +42,7 @@ export class AutomationPresetService {
   private readonly policy = inject(AutomationPolicyService);
   private readonly session = inject(SessionCommandService);
   private readonly store = inject(ObjectStore);
-  readonly preset: AutomationPreset | null = automationPresetOf(location.href);
+  readonly preset: AutomationPreset | null = automationPresetOf(inject(PAGE_ADDRESS)());
 
   /** Applies the preset once, doing as much as the seat's state allows; meant to be run again and again. */
   apply(): void {
