@@ -213,6 +213,102 @@ test('a GM puts out a piece of this tool’s own, wearing a picture the players 
   expect(JSON.stringify(await invoke(player, 'scene_list'))).toContain('トロール');
 });
 
+test('a GM builds a battlefield from a room template, with its range, cut-in and music', async ({ context }) => {
+  const gm = await context.newPage();
+  const player = await context.newPage();
+  await ready(gm, 'a');
+  await ready(player, 'b');
+  await gm.evaluate(() => window.__automationTest.seed());
+  await gm.evaluate(() => window.__automationTest.snapshot());
+  await gm.getByTestId('automation-scope-prepare_room').check();
+  // A saved room keeps no sounds; the music comes along under the identifier its table names.
+  const music = Buffer.from('ID3 template battle music');
+  const bgm = createHash('sha256').update(music).digest('hex');
+  const room =
+    '<room>' +
+    `<game-table name="上級戦闘" width="50" height="11" gridSize="50" bgm="${bgm}" cutInIdentifiers="e2e-cut-in"></game-table>` +
+    '<game-table name="シナリオ前" width="20" height="15" gridSize="50"></game-table>' +
+    '<range location.name="common" location.x="1525" location.y="275" posZ="0"></range>' +
+    '<cut-in name="戦闘開始" identifier="e2e-cut-in"></cut-in>' +
+    '</room>';
+
+  const loaded = await invoke(gm, 'room_template_load', {
+    room,
+    tables: ['上級戦闘'],
+    config: '<config _defaultDiceBot="SwordWorld2.5" _turnOrderMode="faction" automationOwnedOnly="false"></config>',
+    audios: [{ identifier: bgm, type: 'audio/mpeg', name: 'battle.mp3', data: music.toString('base64') }],
+  });
+  expect(loaded).toMatchObject({
+    ok: true,
+    data: {
+      tables: [{ name: '上級戦闘', bgm, cutIns: ['e2e-cut-in'] }],
+      cutIns: [{ name: '戦闘開始' }],
+      missingAudio: [],
+    },
+  });
+  const battle = (loaded as { data: { tables: { identifier: string }[] } }).data.tables[0];
+  await expect
+    .poll(() => invoke(player, 'table_list').then((result) => JSON.stringify(result)))
+    .toContain(battle.identifier);
+  expect(JSON.stringify(await invoke(player, 'table_list'))).not.toContain('シナリオ前');
+  await expect
+    .poll(() => player.evaluate(() => window.__automationTest.ranges()))
+    .toEqual([expect.objectContaining({ name: 'common', x: 1525, y: 275 })]);
+  await expect
+    .poll(() => player.evaluate((id) => window.__automationTest.audioState(id), bgm))
+    .toBeGreaterThanOrEqual(1);
+  // The template's rules come with it; how far automation reaches stays as the master set it.
+  expect(await gm.evaluate(() => window.__automationTest.ownedOnly())).toBe(true);
+
+  // The template keeps its range in the shared inventory; the GM brings it out where the melee is.
+  const listed = await invoke(gm, 'range_list');
+  const [melee] = (listed as { data: { ranges: { identifier: string; place: string }[] } }).data.ranges;
+  expect(melee.place).toBe('common');
+  expect((await invoke(gm, 'range_set', { identifier: melee.identifier, x: 10, y: 5, place: 'table' })).ok).toBe(true);
+  await expect
+    .poll(() => player.evaluate(() => window.__automationTest.ranges()))
+    .toEqual([expect.objectContaining({ name: 'table', x: 525, y: 275 })]);
+
+  expect((await invoke(gm, 'bgm_play', { identifier: bgm })).ok).toBe(true);
+  expect((await invoke(gm, 'bgm_play', { stop: true })).ok).toBe(true);
+});
+
+test('a GM runs exploration on the board: player moves, a door, the fog, a pointed view and headings', async ({
+  context,
+}) => {
+  const gm = await context.newPage();
+  const player = await context.newPage();
+  await ready(gm, 'a');
+  await ready(player, 'b');
+  const { pieceId, tabId } = await gm.evaluate(() => window.__automationTest.seed());
+  const doorId = await gm.evaluate(() => window.__automationTest.door());
+  await gm.evaluate(() => window.__automationTest.fog());
+  await gm.evaluate(() => window.__automationTest.snapshot());
+  await gm.getByTestId('automation-scope-prepare_room').check();
+  await gm.getByTestId('automation-scope-send_chat').check();
+  // The shared piece is made the player's to move, so the GM watches it.
+  await expect.poll(() => player.evaluate((id) => window.__automationTest.position(id), pieceId)).toBeTruthy();
+  await player.evaluate((id) => window.__automationTest.own(id), pieceId);
+
+  const first = await invoke(gm, 'chat_wait', { pieces: true, waitSeconds: 2 });
+  expect(first).toMatchObject({ ok: true, data: { timedOut: true } });
+  const waiting = invoke(gm, 'chat_wait', { pieces: true, waitSeconds: 20 });
+  await player.evaluate((id) => window.__automationTest.move(id, 200, 150), pieceId);
+  expect(await waiting).toMatchObject({ ok: true, data: { moves: [{ identifier: pieceId, x: 4, y: 3 }] } });
+
+  expect(await invoke(gm, 'door_set', { identifier: doorId, open: true })).toMatchObject({ ok: true });
+  await expect.poll(() => player.evaluate((id) => window.__automationTest.doorOpen(id), doorId)).toBe(true);
+
+  expect(await invoke(gm, 'fog_reveal', { x: 5, y: 2, w: 3, h: 3 })).toMatchObject({ ok: true, data: { fog: true } });
+  await expect.poll(() => player.evaluate(() => window.__automationTest.explored(6, 3))).toBe(true);
+
+  expect((await invoke(gm, 'view_focus', { x: 6, y: 3 })).ok).toBe(true);
+  await expect.poll(() => player.evaluate(() => window.__automationTest.focuses().length)).toBe(1);
+
+  expect((await invoke(gm, 'chat_send', { tabId, text: '地下墓地の入口', style: 'location' })).ok).toBe(true);
+  await expect.poll(() => player.evaluate((id) => window.__automationTest.kinds(id), tabId)).toContain('location');
+});
+
 test('a browser started with the gm preset is the game master with every grant, until a person stops it', async ({
   page,
 }) => {

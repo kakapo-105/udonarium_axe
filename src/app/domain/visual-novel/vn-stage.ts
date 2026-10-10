@@ -5,6 +5,12 @@ export type VnStageTransition = 'none' | 'fade' | 'wipe';
 
 export const VN_STAGE_TRANSITIONS: readonly VnStageTransition[] = ['none', 'fade', 'wipe'];
 
+/**
+ * The network event that opens or closes novel mode on a screen. Each screen keeps its own, and
+ * one sent to the room opens or closes it on every screen.
+ */
+export const VN_MODE_EVENT = 'VN_MODE';
+
 @SyncObject('vn-stage')
 export class VnStage extends GameObject {
   @SyncVar() backgroundImageIdentifier = '';

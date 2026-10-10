@@ -19,6 +19,7 @@ import { cellCenterOf } from '@axe/domain/tabletop/fog/cell-grid';
 import { cheapestPath } from '@axe/domain/tabletop/move/cheapest-path';
 import { pieceCellOf, pieceCornerOn } from '@axe/domain/tabletop/move/piece-on-grid';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
+import { encodeVnEmote, VN_EMOTE_DEFAULT, VnMessageKind } from '@axe/domain/visual-novel/vn-emote';
 
 export interface PieceDestination {
   x: number;
@@ -152,18 +153,31 @@ export class SessionCommandService {
     };
   }
 
-  async send(tab: ChatTab, text: string, character: GameCharacter | null, guard: () => void) {
+  /**
+   * Says a line in a tab, as yourself or a piece. `style` stages it as narration, a place heading or a
+   * scene heading, as picking that kind in the chat input does, so it stands out in the log and in
+   * novel mode.
+   */
+  async send(
+    tab: ChatTab,
+    text: string,
+    character: GameCharacter | null,
+    guard: () => void,
+    style: VnMessageKind = 'normal'
+  ) {
     const gameSystem = await DiceBot.loadGameSystemAsync(character?.chatPalette?.dicebot ?? this.chat.gameType);
     // Loading dice code yields to the UI; permissions may have been withdrawn in the meantime.
     guard();
     if (this.store.get(tab.identifier) !== tab || (character && this.store.get(character.identifier) !== character)) {
       fail('CONFLICT', 'The speaker or chat tab was replaced while preparing the message.');
     }
-    const message = this.chatWait.said(() =>
-      character
+    const message = this.chatWait.said(() => {
+      const said = character
         ? this.macro.send(character, text, { tab, gameSystem, targets: [] })
-        : this.chat.sendMessage(tab, text, gameSystem, PeerCursor.myCursor.identifier)
-    );
+        : this.chat.sendMessage(tab, text, gameSystem, PeerCursor.myCursor.identifier);
+      if (said && style !== 'normal') said.vnEmote = encodeVnEmote({ ...VN_EMOTE_DEFAULT, kind: style });
+      return said;
+    });
     if (!message) fail('NOT_READY', 'Chat is not ready.');
     return { identifier: message.identifier, tabId: tab.identifier };
   }

@@ -1580,7 +1580,8 @@
         "radialMove": "이동",
         "radialDisclosure": "공개·소유자",
         "radialObject": "말 조작",
-        "moveMode": "이동 방법"
+        "moveMode": "이동 방법",
+        "showEveryone": "모두에게 보여주기"
       },
       "panel": {
         "sheet": "캐릭터 시트",
@@ -2425,7 +2426,9 @@
         "scopeOwn": "이 화면만",
         "scopeRoom": "방·GM",
         "scopeTable": "탁자·GM",
-        "whenFlat": "2D일 때"
+        "whenFlat": "2D일 때",
+        "followFocus": "GM이 가리킨 곳으로 시점 이동",
+        "followFocusHint": "GM이 말이나 장소를 가리키면 이 화면의 시점이 그곳으로 움직입니다. 직접 둘러보고 싶을 때는 끄세요."
       },
       "trigger": {
         "unnamed": "장치",

@@ -29,6 +29,7 @@ import { ConcealmentService } from '@axe/application/tabletop/concealment.servic
 import { MovePlanService } from '@axe/application/tabletop/move-plan.service';
 import { MoveRangeService } from '@axe/application/tabletop/move-range.service';
 import { RangeShapeInvokeService } from '@axe/application/tabletop/range-shape-invoke.service';
+import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { TriggerFireService } from '@axe/application/tabletop/trigger-fire.service';
 import { VisionService } from '@axe/application/tabletop/vision.service';
@@ -221,6 +222,7 @@ export class GameCharacterComponent {
   private readonly moveRangeService = inject(MoveRangeService);
   private readonly triggerFire = inject(TriggerFireService);
   private readonly movePlan = inject(MovePlanService);
+  private readonly sharedFocus = inject(SharedFocusService);
   private readonly effectLibrary = inject(EffectLibraryService);
   private readonly effectCast = inject(EffectCastService);
   private readonly effectAutoPlay = inject(EffectAutoPlayService);
@@ -1330,6 +1332,7 @@ export class GameCharacterComponent {
         onPlanMove: this.moveRangeService.canPlan(char) ? () => void this.movePlan.begin(char) : undefined,
         onToggleTarget: () => this.toggleTarget(),
         onClearTargets: this.anythingTargeted() ? () => this.clearEveryTarget() : undefined,
+        onShowEveryone: PeerCursor.isMyselfGameMaster ? () => void this.sharedFocus.showPiece(char) : undefined,
       },
       this.translateFn,
       overlapEntries,

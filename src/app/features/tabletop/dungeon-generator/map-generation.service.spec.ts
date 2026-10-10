@@ -68,6 +68,16 @@ describe('MapGenerationService', () => {
     expect(built.table.name.length).toBeGreaterThan(0);
   });
 
+  it('lays the table flat and dresses it in the materials asked for', async () => {
+    const flat = await service.generate(
+      request({ flat: true, floor: { kind: 'texture', id: 'marble' }, wallHeight: 3 })
+    );
+    expect(flat.table.mode2d).toBe(true);
+
+    const standing = await service.generate(request({ flat: false }));
+    expect(standing.table.mode2d).toBe(false);
+  });
+
   it('refuses an atmosphere there is none of, building nothing', async () => {
     await expect(service.generate(request({ atmosphere: 'moon' }))).rejects.toThrow(RangeError);
     await expect(service.generate(request({ kind: 'field', atmosphere: 'crypt' }))).rejects.toThrow(RangeError);

@@ -1,9 +1,21 @@
 import { inject, Injectable } from '@angular/core';
 import { ObjectStore } from '@axe/core/sync/object-store';
+import { GameCharacter } from '@axe/domain/character/game-character';
 import { ChatMessage } from '@axe/domain/chat/chat-message';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 
 const POLL_MS = 500;
+/** How long a piece must stand still before its move counts: a drag passes through many places. */
+export const SETTLE_MS = 1500;
+
+/** A piece that was moved and has come to rest, in pixels of the table. */
+export interface PieceMove {
+  piece: GameCharacter;
+  fromX: number;
+  fromY: number;
+  x: number;
+  y: number;
+}
 
 /** A public message as automation reads it. */
 export function chatMessageView(message: ChatMessage) {
@@ -34,11 +46,26 @@ export class ChatWaitService {
   private readonly store = inject(ObjectStore);
   private handed = new Set<string>();
   private primed = false;
+  /** Where each watched piece was last said to stand. */
+  private standing = new Map<string, { x: number; y: number }>();
+  /** Where a moving piece is now, and since when it has stood there. */
+  private moving = new Map<string, { x: number; y: number; since: number }>();
 
   /** Forgets what was handed over, for a new automation session. */
   reset(): void {
     this.handed = new Set();
     this.primed = false;
+    this.standing = new Map();
+    this.moving = new Map();
+  }
+
+  /**
+   * Takes a piece's place as already known, as after automation moved it itself, so the next wait
+   * does not hand the move back as a player's.
+   */
+  settle(piece: GameCharacter): void {
+    this.standing.set(piece.identifier, { x: piece.location.x, y: piece.location.y });
+    this.moving.delete(piece.identifier);
   }
 
   /**
@@ -67,7 +94,7 @@ export class ChatWaitService {
   async wait(
     tabs: readonly ChatTab[],
     allTabs: readonly ChatTab[],
-    options: { waitMs: number; limit: number },
+    options: { waitMs: number; limit: number; pieces?: () => readonly GameCharacter[] },
     guard: () => void
   ) {
     if (!this.primed) {
@@ -77,21 +104,52 @@ export class ChatWaitService {
     const until = Date.now() + options.waitMs;
     for (;;) {
       guard();
+      const moves = options.pieces ? this.movesOf(options.pieces()) : [];
       const fresh = this.freshIn(tabs);
-      if (fresh.length > 0) {
+      if (fresh.length > 0 || moves.length > 0) {
         const messages = fresh.slice(0, options.limit);
         this.remember(messages);
         return {
           messages: messages.map(chatMessageView),
+          moves,
           more: fresh.length > messages.length,
           timedOut: false,
           untrustedContent: true,
         };
       }
       const left = until - Date.now();
-      if (left <= 0) return { messages: [], more: false, timedOut: true, untrustedContent: true };
+      if (left <= 0) return { messages: [], moves: [], more: false, timedOut: true, untrustedContent: true };
       await new Promise((resolve) => setTimeout(resolve, Math.min(POLL_MS, left)));
     }
+  }
+
+  /**
+   * The watched pieces that have come to rest somewhere new since they were last said to stand. A
+   * piece seen for the first time, as one just brought out, is only taken note of.
+   */
+  private movesOf(pieces: readonly GameCharacter[]): PieceMove[] {
+    const now = Date.now();
+    const moves: PieceMove[] = [];
+    for (const piece of pieces) {
+      const { x, y } = piece.location;
+      const stood = this.standing.get(piece.identifier);
+      if (!stood) {
+        this.standing.set(piece.identifier, { x, y });
+        continue;
+      }
+      if (stood.x === x && stood.y === y) {
+        this.moving.delete(piece.identifier);
+        continue;
+      }
+      const move = this.moving.get(piece.identifier);
+      if (!move || move.x !== x || move.y !== y) {
+        this.moving.set(piece.identifier, { x, y, since: now });
+      } else if (now - move.since >= SETTLE_MS) {
+        moves.push({ piece, fromX: stood.x, fromY: stood.y, x, y });
+        this.settle(piece);
+      }
+    }
+    return moves;
   }
 
   private freshIn(tabs: readonly ChatTab[]): ChatMessage[] {

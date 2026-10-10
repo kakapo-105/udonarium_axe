@@ -24,6 +24,18 @@ export const AUTOMATION_COMMANDS = [
   'table_select',
   'chat_tab_create',
   'note_create',
+  'room_template_load',
+  'bgm_play',
+  'audio_restore',
+  'table_view',
+  'view_focus',
+  'fog_reveal',
+  'terrain_list',
+  'door_set',
+  'light_place',
+  'vn_stage',
+  'range_list',
+  'range_set',
 ] as const;
 export type AutomationCommand = (typeof AUTOMATION_COMMANDS)[number];
 export const AUTOMATION_SCOPES = [
@@ -53,6 +65,16 @@ export const AUTOMATION_WRITES: readonly AutomationCommand[] = [
   'table_select',
   'chat_tab_create',
   'note_create',
+  'room_template_load',
+  'bgm_play',
+  'audio_restore',
+  'table_view',
+  'view_focus',
+  'fog_reveal',
+  'door_set',
+  'light_place',
+  'vn_stage',
+  'range_set',
 ];
 export type AutomationScope = (typeof AUTOMATION_SCOPES)[number];
 export type AutomationErrorCode =

@@ -115,11 +115,12 @@ export class MapGenerationService {
       ? `feature.tabletop.dungeonGenerator.roleIn.${atmosphere.roleNames}`
       : 'feature.tabletop.dungeonGenerator.role';
     const built = await this.build(plan, name, {
-      wall: { kind: 'texture', id: atmosphere.defaultWall },
-      floor: { kind: 'texture', id: atmosphere.defaultFloor },
-      wallHeight: clampWallHeight(atmosphere.wallHeight),
+      wall: request.wall ?? { kind: 'texture', id: atmosphere.defaultWall },
+      floor: request.floor ?? { kind: 'texture', id: atmosphere.defaultFloor },
+      wallHeight: clampWallHeight(request.wallHeight ?? atmosphere.wallHeight),
       summary: describeDungeon(plan.layout, plan.blocks, name, this.t, atmosphere.roleNames),
       fog: request.fog,
+      flat: request.flat,
     });
     return {
       ...built,
@@ -144,7 +145,7 @@ export class MapGenerationService {
     if (!(FIELD_ATMOSPHERE_IDS as readonly string[]).includes(request.atmosphere))
       throw new RangeError(`No field atmosphere ${request.atmosphere}; use one of ${FIELD_ATMOSPHERE_IDS.join(', ')}.`);
     const atmosphere = fieldAtmosphereById(request.atmosphere as FieldAtmosphereId);
-    const floor: DungeonMaterial = { kind: 'texture', id: atmosphere.defaultGround };
+    const floor: DungeonMaterial = request.floor ?? { kind: 'texture', id: atmosphere.defaultGround };
     const shape = planField({
       atmosphere: atmosphere.id,
       size: clampFieldSize(request.size ?? 40),
@@ -152,14 +153,18 @@ export class MapGenerationService {
       seed: request.seed,
       gridType: GridType.SQUARE,
     });
-    const plan: FieldPlan = { ...shape, blocks: withFieldMaterials(shape.blocks, shape.atmosphere, floor, null) };
+    const plan: FieldPlan = {
+      ...shape,
+      blocks: withFieldMaterials(shape.blocks, shape.atmosphere, floor, request.wall ?? null),
+    };
     const name = request.name || this.t(`feature.tabletop.dungeonGenerator.field.${atmosphere.id}`);
     const built = await this.build(plan, name, {
-      wall: { kind: 'texture', id: atmosphere.defaultProp },
+      wall: request.wall ?? { kind: 'texture', id: atmosphere.defaultProp },
       floor,
-      wallHeight: clampWallHeight(atmosphereById(FIELD_WALL_HEIGHT_FROM).wallHeight),
+      wallHeight: clampWallHeight(request.wallHeight ?? atmosphereById(FIELD_WALL_HEIGHT_FROM).wallHeight),
       summary: describeField(plan, name, request.seed, this.t),
       fog: request.fog,
+      flat: request.flat,
     });
     return { ...built, entrance: null, rooms: [], traps: [] };
   }
@@ -167,7 +172,14 @@ export class MapGenerationService {
   private async build(
     plan: DungeonPlan | FieldPlan,
     name: string,
-    look: { wall: DungeonMaterial; floor: DungeonMaterial; wallHeight: number; summary: string; fog: boolean }
+    look: {
+      wall: DungeonMaterial;
+      floor: DungeonMaterial;
+      wallHeight: number;
+      summary: string;
+      fog: boolean;
+      flat?: boolean;
+    }
   ) {
     if (plan.blocks.blocks.length > MAP_MAX_TERRAINS)
       throw new RangeError(`The map would stand ${plan.blocks.blocks.length} blocks, more than a table holds.`);
@@ -180,6 +192,7 @@ export class MapGenerationService {
       gridType: GridType.SQUARE,
       fogEnabled: look.fog,
     });
+    if (look.flat !== undefined) result.table.mode2d = look.flat;
     return { table: result.table, summary: result.summary, width: plan.layout.width, height: plan.layout.height };
   }
 }
