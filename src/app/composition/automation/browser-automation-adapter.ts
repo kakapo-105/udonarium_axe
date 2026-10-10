@@ -4,6 +4,8 @@ import { AutomationFacadeService } from '@axe/application/automation/automation-
 import { AutomationPolicyService } from '@axe/application/automation/automation-policy.service';
 import { AutomationPresetService } from '@axe/application/automation/automation-preset.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
+import { PAGE_ADDRESS } from '@axe/application/ui/page-address.token';
+import { automationRequested } from '@axe/composition/automation/automation-request';
 import { networkMessage$ } from '@axe/core/network/network-messaging';
 
 declare global {
@@ -20,7 +22,7 @@ const PRESET_INTERVAL_MS = 1000;
  */
 @Injectable({ providedIn: 'root' })
 export class BrowserAutomationAdapter {
-  readonly available = new URL(location.href).searchParams.get('automation') === '1';
+  readonly available = automationRequested(inject(PAGE_ADDRESS)());
   private readonly facade = inject(AutomationFacadeService);
   private readonly policy = inject(AutomationPolicyService);
 
