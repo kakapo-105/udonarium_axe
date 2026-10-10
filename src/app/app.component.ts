@@ -7,6 +7,7 @@ import {
   effect,
   ElementRef,
   inject,
+  Injector,
   signal,
   untracked,
   viewChild,
@@ -35,6 +36,7 @@ import { MobileLayoutService } from '@axe/application/ui/mobile-layout.service';
 import { ModalService } from '@axe/application/ui/modal.service';
 import { MotionService } from '@axe/application/ui/motion.service';
 import { OverlayModeService } from '@axe/application/ui/overlay-mode.service';
+import { PAGE_ADDRESS } from '@axe/application/ui/page-address.token';
 import { PanelService } from '@axe/application/ui/panel.service';
 import { ReloadNoticeService } from '@axe/application/ui/reload-notice.service';
 import { RenderLiteService } from '@axe/application/ui/render-lite.service';
@@ -43,7 +45,7 @@ import { ThemeService } from '@axe/application/ui/theme.service';
 import { ViewportService } from '@axe/application/ui/viewport.service';
 import { WIDGET_FAB } from '@axe/application/ui/widget-place';
 import { WidgetVisibilityService } from '@axe/application/ui/widget-visibility.service';
-import { BrowserAutomationAdapter } from '@axe/composition/automation/browser-automation-adapter';
+import { automationRequested } from '@axe/composition/automation/automation-request';
 import { Network } from '@axe/core/network/network';
 import { FileArchiver } from '@axe/core/storage/file-archiver';
 import { ObjectStore } from '@axe/core/sync/object-store';
@@ -178,7 +180,11 @@ const FAB_MARGIN_PX = 12;
   host: { '(window:resize)': 'measureFabSides()' },
 })
 export class AppComponent {
-  readonly automation = inject(BrowserAutomationAdapter);
+  /**
+   * Whether this page was opened for AI control. Only such a page loads automation and its panel,
+   * so a player's page carries none of it.
+   */
+  readonly automationAvailable = automationRequested(inject(PAGE_ADDRESS)());
   // Built with the shell, whether or not anything shows them: each dresses the page in this
   // seat's setting as it starts, before the first screen is drawn.
   private readonly theme = inject(ThemeService);
@@ -401,6 +407,14 @@ export class AppComponent {
   progressPercent = signal(0);
   constructor() {
     inject(Title).setTitle(`Udonarium Axe ${APP_VERSION}`);
+
+    // AI control is fetched only by a page opened for it, so the players' pages never load it.
+    if (this.automationAvailable) {
+      const injector = inject(Injector);
+      void import('@axe/composition/automation/browser-automation-adapter').then(({ BrowserAutomationAdapter }) =>
+        injector.get(BrowserAutomationAdapter)
+      );
+    }
 
     // Saving the room and asking for files to load are the screen's own to do, and the menus
     // dispatch everything else by themselves; this is the one thing they cannot reach without
