@@ -44,6 +44,8 @@ export interface GameCharacterContextMenuCallbacks {
   onToggleTarget?: () => void;
   /** Stops aiming at everything. Left out where nothing is aimed at. */
   onClearTargets?: () => void;
+  /** Points everyone's view at the piece. Left out for all but the game master. */
+  onShowEveryone?: () => void;
 }
 
 export interface GameCharacterContextMenuModel {
@@ -167,6 +169,9 @@ export function buildGameCharacterContextMenuModel(
       name: t('feature.character.contextMenu.showDetail'),
       action: () => callbacks.onShowDetail(),
     },
+    ...(callbacks.onShowEveryone
+      ? [{ name: t('feature.character.contextMenu.showEveryone'), action: () => callbacks.onShowEveryone?.() }]
+      : []),
   ];
   const chatActions: ContextMenuAction[] = [
     {

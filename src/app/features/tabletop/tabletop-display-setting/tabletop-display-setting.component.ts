@@ -6,6 +6,7 @@ import { ObjectChangeService } from '@axe/application/sync/object-change.service
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { TabletopDisplayService } from '@axe/application/tabletop/tabletop-display.service';
 import { DisplayCalibrationService } from '@axe/application/ui/display-calibration.service';
+import { FollowFocusPreferenceService } from '@axe/application/ui/follow-focus-preference.service';
 import { ModalService } from '@axe/application/ui/modal.service';
 import { PanelService } from '@axe/application/ui/panel.service';
 import { ViewLockService } from '@axe/application/ui/view-lock.service';
@@ -73,6 +74,7 @@ export class TabletopDisplaySettingComponent {
   private readonly display = inject(TabletopDisplayService);
   private readonly tabletop = inject(TabletopService);
   private readonly viewMode = inject(ViewModePreferenceService);
+  private readonly followFocus = inject(FollowFocusPreferenceService);
   private readonly displayCalibration = inject(DisplayCalibrationService);
   private readonly viewLock = inject(ViewLockService);
   private readonly t = inject(TRANSLATE_FN);
@@ -110,6 +112,13 @@ export class TabletopDisplaySettingComponent {
   /** Chooses how this seat looks at the table, remembered in this browser. */
   chooseViewMode(mode: ViewMode): void {
     this.viewMode.choose(mode);
+  }
+
+  /** Whether this seat's view glides to where the game master points everyone. */
+  protected readonly followsFocus = this.followFocus.enabled;
+
+  setFollowsFocus(enabled: boolean): void {
+    this.followFocus.set(enabled);
   }
 
   /**

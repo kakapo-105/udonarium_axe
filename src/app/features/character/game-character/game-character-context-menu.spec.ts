@@ -91,6 +91,28 @@ describe('buildGameCharacterContextMenu()', () => {
     expect(onPlanMove).toHaveBeenCalled();
   });
 
+  it('offers to show everyone the piece only when given a way to', () => {
+    const onShowEveryone = vi.fn();
+    const shown = buildGameCharacterContextMenu(
+      makeChar() as unknown as GameCharacter,
+      50,
+      makeService(),
+      { ...callbacks(), onShowEveryone },
+      t
+    );
+    shown.find((action) => action.name === '全員にここを見せる')!.action!();
+    expect(onShowEveryone).toHaveBeenCalled();
+
+    const plain = buildGameCharacterContextMenu(
+      makeChar() as unknown as GameCharacter,
+      50,
+      makeService(),
+      callbacks(),
+      t
+    );
+    expect(names(plain)).not.toContain('全員にここを見せる');
+  });
+
   it('puts working a move out above everything else the piece is asked', () => {
     const menu = buildGameCharacterContextMenu(
       makeChar() as unknown as GameCharacter,

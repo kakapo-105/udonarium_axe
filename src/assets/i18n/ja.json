@@ -1580,7 +1580,8 @@
         "radialMove": "移動",
         "radialDisclosure": "公開・所有",
         "radialObject": "コマ操作",
-        "moveMode": "移動の仕方"
+        "moveMode": "移動の仕方",
+        "showEveryone": "全員にここを見せる"
       },
       "panel": {
         "sheet": "キャラクターシート",
@@ -2425,7 +2426,9 @@
         "scopeOwn": "この画面だけ",
         "scopeRoom": "部屋・GM",
         "scopeTable": "テーブル・GM",
-        "whenFlat": "2D のとき"
+        "whenFlat": "2D のとき",
+        "followFocus": "GM が「ここを見て」と示した場所へ視点を寄せる",
+        "followFocusHint": "GM が駒や場所を示すと、この画面の視点がそこへ動きます。自分で見回したいときはオフにします。"
       },
       "trigger": {
         "unnamed": "仕掛け",

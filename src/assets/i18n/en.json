@@ -1580,7 +1580,8 @@
         "radialMove": "Move",
         "radialDisclosure": "Access & owner",
         "radialObject": "Piece actions",
-        "moveMode": "Getting about"
+        "moveMode": "Getting about",
+        "showEveryone": "Show everyone"
       },
       "panel": {
         "sheet": "Character sheet",
@@ -2425,7 +2426,9 @@
         "scopeOwn": "this screen",
         "scopeRoom": "room, master",
         "scopeTable": "table, master",
-        "whenFlat": "in 2D"
+        "whenFlat": "in 2D",
+        "followFocus": "Follow where the GM points",
+        "followFocusHint": "When the GM points at a piece or a place, this screen's view moves there. Turn it off to look around on your own."
       },
       "trigger": {
         "unnamed": "Trap",
