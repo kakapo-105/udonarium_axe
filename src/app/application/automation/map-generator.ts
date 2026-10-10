@@ -1,5 +1,6 @@
 import { InjectionToken } from '@angular/core';
 import { GameTable } from '@axe/domain/tabletop/game-table';
+import { MapMaterial } from '@axe/domain/tabletop/map-blocks';
 
 /** A generated map asked for: a dungeon or a field, in one of its atmospheres, rolled from a seed. */
 export interface MapRequest {
@@ -18,6 +19,14 @@ export interface MapRequest {
   density?: number;
   /** Whether the table starts under the fog of war. */
   fog: boolean;
+  /** Whether the table recommends being viewed laid flat; left out, as the generator panel leaves it. */
+  flat?: boolean;
+  /** What the ground is painted with instead of the atmosphere's own: a bundled texture or a picture the room holds. */
+  floor?: MapMaterial;
+  /** What the walls (a field's props) are dressed in instead of the atmosphere's own. */
+  wall?: MapMaterial;
+  /** How tall walls stand, in cells, instead of the atmosphere's own. */
+  wallHeight?: number;
 }
 
 /** One room of a generated dungeon, in cells from the table's top-left corner. */
