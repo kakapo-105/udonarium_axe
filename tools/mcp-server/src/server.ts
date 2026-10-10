@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 import { BrowserSession } from '#mcp/browser-session.js';
@@ -17,7 +19,17 @@ try {
   console.error('UDONARIUM_PIECE_SOURCES:', error instanceof Error ? error.message : error);
   process.exit(1);
 }
-const server = createServer(session, { pieceSources });
+const audioFolders = (process.env.UDONARIUM_AUDIO_DIR ?? '')
+  .split(path.delimiter)
+  .filter((folder) => folder.trim().length > 0);
+const server = createServer(session, {
+  pieceSources,
+  templates: {
+    templates: process.env.UDONARIUM_TEMPLATE_DIR || undefined,
+    audio: audioFolders,
+    images: process.env.UDONARIUM_IMAGE_DIR || undefined,
+  },
+});
 const stop = async () => {
   await session.close();
   await server.close();

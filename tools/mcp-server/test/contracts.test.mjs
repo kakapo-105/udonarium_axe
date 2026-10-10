@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -25,7 +29,7 @@ test('the real stdio entry point lists tools and reports missing Chromium withou
   });
   try {
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length, 24);
+    assert.equal((await client.listTools()).tools.length, 37);
     const result = await client.callTool({ name: 'session_get', arguments: {} });
     assert.equal(result.structuredContent.error.code, 'NOT_READY');
     assert.match(stderr, /Udonarium browser/);
@@ -48,12 +52,13 @@ async function connected(invoke, work, options) {
   }
 }
 
-test('exposes exactly the twenty-four bounded tools with schemas and read annotations', async () => {
+test('exposes exactly the thirty-seven bounded tools with schemas and read annotations', async () => {
   await connected(
     async () => ({ ok: true, data: {} }),
     async (client) => {
       const { tools } = await client.listTools();
       assert.deepEqual(tools.map((t) => t.name).sort(), [
+        'bgm_play',
         'buff_edit',
         'buff_list',
         'buff_send',
@@ -64,6 +69,9 @@ test('exposes exactly the twenty-four bounded tools with schemas and read annota
         'chat_send',
         'chat_tab_create',
         'chat_wait',
+        'door_set',
+        'fog_reveal',
+        'light_place',
         'note_create',
         'object_get',
         'palette_get',
@@ -73,11 +81,20 @@ test('exposes exactly the twenty-four bounded tools with schemas and read annota
         'piece_move',
         'piece_remove',
         'piece_reveal',
+        'range_list',
+        'range_set',
+        'room_audio_restore',
+        'room_template_list',
+        'room_template_load',
         'scene_list',
         'session_get',
         'table_create',
         'table_list',
         'table_select',
+        'table_view',
+        'terrain_list',
+        'view_focus',
+        'vn_stage',
       ]);
       assert.equal(tools.find((t) => t.name === 'palette_send').annotations.readOnlyHint, false);
       assert.equal(tools.find((t) => t.name === 'palette_get').annotations.readOnlyHint, true);
@@ -358,4 +375,219 @@ test('builds a board from a template, handing the browser its picture and the mo
       fetchBytes: async () => ({ ok: true, status: 200, type: 'image/png', bytes: new Uint8Array([7]) }),
     }
   );
+});
+
+async function workspace(work) {
+  const root = await mkdtemp(path.join(tmpdir(), 'axe-templates-'));
+  try {
+    const templates = path.join(root, 'templates');
+    const audio = path.join(root, 'audio');
+    await mkdir(path.join(templates, 'battle'), { recursive: true });
+    await mkdir(audio);
+    await work({ root, templates, audio });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
+
+test('loads a room template from this machine, finding the sounds its tables name by their content', async () => {
+  await workspace(async ({ root, templates, audio }) => {
+    const picture = Buffer.from([1, 2, 3]);
+    const music = Buffer.from([4, 5, 6]);
+    const lost = 'e'.repeat(64);
+    await writeFile(
+      path.join(templates, 'battle', 'data.xml'),
+      `<room><game-table name="上級戦闘" imageIdentifier="${sha(picture)}" bgm="${sha(music)}"></game-table>` +
+        `<game-table name="シナリオ前" bgm="${lost}"></game-table></room>`
+    );
+    await writeFile(path.join(templates, 'battle', 'config.xml'), '<config _defaultDiceBot="SwordWorld2.5"></config>');
+    await writeFile(path.join(templates, 'battle', `${sha(picture)}.webp`), picture);
+    await writeFile(path.join(templates, 'battle', `${'0'.repeat(64)}.png`), picture);
+    await writeFile(path.join(audio, 'battle theme.mp3'), music);
+    await writeFile(
+      path.join(templates, 'battle', 'template.json'),
+      JSON.stringify({ description: '上級戦闘の盤面', tables: { 上級戦闘: { metersPerCell: 1 } } })
+    );
+    let received;
+    await connected(
+      async (command, args) => {
+        received = [command, args];
+        return { ok: true, data: { tables: [], missingAudio: [lost] } };
+      },
+      async (client) => {
+        const listed = await client.callTool({ name: 'room_template_list', arguments: {} });
+        assert.deepEqual(listed.structuredContent.data.templates, [
+          { name: 'battle', tables: ['上級戦闘', 'シナリオ前'], description: '上級戦闘の盤面' },
+        ]);
+        assert.deepEqual(listed.structuredContent.data.sounds, [
+          { file: 'battle theme.mp3', identifier: sha(music), size: 3 },
+        ]);
+        assert.equal(received, undefined);
+
+        const result = await client.callTool({
+          name: 'room_template_load',
+          arguments: { sessionId: 'session', template: 'battle', tables: ['上級戦闘'] },
+        });
+        assert.equal(received[0], 'room_template_load');
+        assert.deepEqual(received[1].tables, ['上級戦闘']);
+        assert.match(received[1].config, /SwordWorld2.5/);
+        assert.deepEqual(received[1].images, [
+          { identifier: sha(picture), type: 'image/webp', data: picture.toString('base64') },
+        ]);
+        assert.deepEqual(received[1].audios, [
+          { identifier: sha(music), type: 'audio/mpeg', name: 'battle theme.mp3', data: music.toString('base64') },
+        ]);
+        assert.match(result.structuredContent.data.sourceWarnings[0], new RegExp(lost));
+        assert.deepEqual(result.structuredContent.data.templateNotes.tables, { 上級戦闘: { metersPerCell: 1 } });
+
+        await client.callTool({
+          name: 'room_template_load',
+          arguments: { sessionId: 'session', template: 'battle', config: false },
+        });
+        assert.equal(received[1].config, undefined);
+        for (const template of ['..', '../battle', 'none']) {
+          const refused = await client.callTool({
+            name: 'room_template_load',
+            arguments: { sessionId: 'session', template },
+          });
+          assert.ok(['INVALID_ARGUMENT', 'NOT_FOUND'].includes(refused.structuredContent.error.code));
+        }
+      },
+      { templates: { templates, audio: [audio] } }
+    );
+    assert.ok(root);
+  });
+});
+
+test('plays a sound file from the sound folders for the room, or stops the music', async () => {
+  await workspace(async ({ audio }) => {
+    const music = Buffer.from([7, 8, 9]);
+    await writeFile(path.join(audio, 'town.ogg'), music);
+    const calls = [];
+    await connected(
+      async (command, args) => {
+        calls.push([command, args]);
+        return { ok: true, data: {} };
+      },
+      async (client) => {
+        await client.callTool({ name: 'bgm_play', arguments: { sessionId: 'session', file: 'town.ogg' } });
+        assert.deepEqual(calls[0], [
+          'bgm_play',
+          {
+            identifier: sha(music),
+            audios: [{ identifier: sha(music), type: 'audio/ogg', name: 'town.ogg', data: music.toString('base64') }],
+          },
+        ]);
+        await client.callTool({ name: 'bgm_play', arguments: { sessionId: 'session', stop: true } });
+        assert.deepEqual(calls[1], ['bgm_play', { stop: true }]);
+        const missing = await client.callTool({ name: 'bgm_play', arguments: { sessionId: 'session', file: 'x.mp3' } });
+        assert.equal(missing.structuredContent.error.code, 'NOT_FOUND');
+        assert.equal(calls.length, 2);
+      },
+      { templates: { audio: [audio] } }
+    );
+  });
+});
+
+test('takes back the sounds a loaded room names from the sound folders', async () => {
+  await workspace(async ({ audio }) => {
+    const music = Buffer.from([1, 1, 2]);
+    const lost = 'a'.repeat(64);
+    await writeFile(path.join(audio, 'battle.mp3'), music);
+    const calls = [];
+    await connected(
+      async (command, args) => {
+        calls.push([command, args]);
+        if (!args.audios) return { ok: true, data: { added: 0, missingAudio: [sha(music), lost] } };
+        return { ok: true, data: { added: args.audios.length, missingAudio: [lost] } };
+      },
+      async (client) => {
+        const result = await client.callTool({ name: 'room_audio_restore', arguments: { sessionId: 'session' } });
+        assert.deepEqual(
+          calls.map(([command, args]) => [command, (args.audios ?? []).map((sound) => sound.name)]),
+          [
+            ['audio_restore', []],
+            ['audio_restore', ['battle.mp3']],
+          ]
+        );
+        assert.deepEqual(result.structuredContent.data, { added: 1, missingAudio: [lost] });
+      },
+      { templates: { audio: [audio] } }
+    );
+  });
+});
+
+test('builds scenes and maps from pictures in the image folder, which reach the browser and not the conversation', async () => {
+  await workspace(async ({ root }) => {
+    const folder = path.join(root, 'images');
+    await mkdir(path.join(folder, 'tiles'), { recursive: true });
+    const tavern = Buffer.from([9, 9, 9]);
+    const planks = Buffer.from([8, 8]);
+    await writeFile(path.join(folder, 'tavern.webp'), tavern);
+    await writeFile(path.join(folder, 'tiles', 'planks.png'), planks);
+    await writeFile(
+      path.join(folder, 'index.json'),
+      JSON.stringify({ 'tavern.webp': { kind: 'background', tags: ['酒場'] }, 'tiles/planks.png': { kind: 'texture' } })
+    );
+    const calls = [];
+    await connected(
+      async (command, args) => {
+        calls.push([command, args]);
+        return { ok: true, data: {} };
+      },
+      async (client) => {
+        const listed = await client.callTool({ name: 'room_template_list', arguments: {} });
+        assert.deepEqual(listed.structuredContent.data.images, [
+          { file: 'tavern.webp', type: 'image/webp', size: 3, kind: 'background', tags: ['酒場'] },
+          { file: 'tiles/planks.png', type: 'image/png', size: 2, kind: 'texture' },
+        ]);
+
+        await client.callTool({
+          name: 'table_create',
+          arguments: { sessionId: 'session', kind: 'board', backgroundFile: 'tavern.webp', name: '酒場' },
+        });
+        assert.deepEqual(calls[0][1], {
+          kind: 'board',
+          name: '酒場',
+          width: 32,
+          height: 18,
+          background: sha(tavern),
+          grid: false,
+          flat: true,
+          images: [{ identifier: sha(tavern), type: 'image/webp', data: tavern.toString('base64') }],
+        });
+
+        await client.callTool({
+          name: 'table_create',
+          arguments: { sessionId: 'session', kind: 'dungeon', atmosphere: 'crypt', floorFile: 'tiles/planks.png' },
+        });
+        assert.equal(calls[1][1].floor, sha(planks));
+        assert.equal(calls[1][1].images[0].identifier, sha(planks));
+
+        await client.callTool({
+          name: 'vn_stage',
+          arguments: { sessionId: 'session', open: true, backgroundFile: 'tavern.webp' },
+        });
+        assert.equal(calls[2][0], 'vn_stage');
+        assert.equal(calls[2][1].background, sha(tavern));
+        assert.equal(calls[2][1].open, true);
+        await client.callTool({
+          name: 'character_create',
+          arguments: { sessionId: 'session', pieces: ['<character/>'], x: 1, y: 1, imageFile: 'tavern.webp' },
+        });
+        assert.equal(calls[3][1].image, sha(tavern));
+        assert.equal(calls[3][1].images[0].identifier, sha(tavern));
+        calls.length = 2;
+
+        const missing = await client.callTool({
+          name: 'table_create',
+          arguments: { sessionId: 'session', kind: 'board', backgroundFile: 'none.png', name: 'x' },
+        });
+        assert.equal(missing.structuredContent.error.code, 'NOT_FOUND');
+        assert.equal(calls.length, 2);
+      },
+      { templates: { images: folder } }
+    );
+  });
 });
