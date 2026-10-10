@@ -111,8 +111,13 @@ export class RoomPrepCommandService {
    * Builds a table from a generated map and answers what the master needs to run it: the notes the
    * generator panel shows, where the way in is and where each room lies, in cells.
    */
-  async create(request: MapRequest, guard: () => void) {
+  async create(request: MapRequest, images: readonly AutomationImage[], guard: () => void) {
     if (!this.generator) fail('NOT_READY', 'Map generation is not available in this build.');
+    // A floor or wall dressed in a picture of the room's own needs the picture before the ground is painted.
+    const pictures = await this.images.check(images);
+    guard();
+    await this.images.add(pictures);
+    guard();
     let built;
     try {
       built = await this.generator(request);
@@ -132,7 +137,17 @@ export class RoomPrepCommandService {
       traps: built.traps,
       summary: built.summary.slice(0, 4000),
       seed: request.seed,
+      flat: built.table.mode2d,
     };
+  }
+
+  /**
+   * Changes whether a table recommends being viewed laid flat. Only those whose own view is left on
+   * automatic follow it; whoever chose flat or perspective for themselves keeps it.
+   */
+  view(table: GameTable, flat: boolean) {
+    table.mode2d = flat;
+    return { identifier: table.identifier, name: table.name.slice(0, 256), flat };
   }
 
   table(identifier: string): GameTable {

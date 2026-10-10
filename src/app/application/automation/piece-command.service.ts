@@ -87,6 +87,8 @@ export class PieceCommandService {
       concealed: boolean;
       dicebot?: string;
       images?: readonly AutomationImage[];
+      /** A picture every piece wears instead of its sheet's own, by its SHA-256, as an NPC drawn for the scene. */
+      image?: string;
     },
     dryRun: boolean,
     guard: () => void
@@ -116,6 +118,10 @@ export class PieceCommandService {
     const built = GameObject.batch(() =>
       read.map((sheet, index) => {
         const character = this.build(sheet, options.dicebot);
+        if (options.image) {
+          const picture = character.imageDataElement?.getFirstElementByName('imageIdentifier');
+          if (picture) picture.value = options.image;
+        }
         character.disclosureMode = options.disclosure;
         character.location = { ...character.location, name: place, ...places[index], surface: 'floor' };
         character.update();

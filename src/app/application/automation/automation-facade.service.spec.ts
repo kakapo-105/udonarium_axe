@@ -3,10 +3,14 @@ import { AutomationCommand, AutomationResult } from '@axe/application/automation
 import { AutomationFacadeService } from '@axe/application/automation/automation-facade.service';
 import { AutomationPolicyService } from '@axe/application/automation/automation-policy.service';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
+import { ConcealmentService } from '@axe/application/tabletop/concealment.service';
+import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
 import { VisionService } from '@axe/application/tabletop/vision.service';
 import { LocalModePreferenceService } from '@axe/application/ui/local-mode-preference.service';
 import { Network } from '@axe/core/network/network';
-import { localDispatch } from '@axe/core/network/network-messaging';
+import { setNetworkIsolated } from '@axe/core/network/network-isolation';
+import { localDispatch, networkMessage$ } from '@axe/core/network/network-messaging';
+import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { calcSHA256Async } from '@axe/core/storage/file-reader-util';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import { ObjectContext } from '@axe/core/sync/game-object';
@@ -19,13 +23,22 @@ import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { DataElement } from '@axe/domain/data/data-element';
 import { DiceBot } from '@axe/domain/dice/dice-bot';
+import { EffectPreset } from '@axe/domain/effect/effect-preset';
+import { CutIn } from '@axe/domain/media/cut-in';
+import { Jukebox } from '@axe/domain/media/jukebox';
 import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
+import { cellGridOf, cellIndexOf } from '@axe/domain/tabletop/fog/cell-grid';
+import { fogMemoryOn } from '@axe/domain/tabletop/fog/fog-memory';
 import { GameTable } from '@axe/domain/tabletop/game-table';
+import { LightSource } from '@axe/domain/tabletop/light-source';
+import { RangeArea } from '@axe/domain/tabletop/range';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
-import { Terrain } from '@axe/domain/tabletop/terrain';
+import { DoorStyle, Terrain } from '@axe/domain/tabletop/terrain';
 import { TextNote } from '@axe/domain/tabletop/text-note';
+import { decodeVnEmote } from '@axe/domain/visual-novel/vn-emote';
+import { VN_MODE_EVENT, VnStage } from '@axe/domain/visual-novel/vn-stage';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 
 describe('AutomationFacadeService', () => {
@@ -193,6 +206,16 @@ describe('AutomationFacadeService', () => {
     expect((await call('chat_send', { tabId: tab.identifier, characterId: piece.identifier, text: ':HP-5' })).ok).toBe(
       true
     );
+  });
+  it('stages a line as narration, a place heading or a scene heading when asked', async () => {
+    const sent = await call('chat_send', { tabId: tab.identifier, text: '古い遺跡の入口', style: 'location' });
+
+    expect(sent.ok).toBe(true);
+    const message = store.get<ChatMessage>((sent as { data: { identifier: string } }).data.identifier)!;
+    expect(decodeVnEmote(message.vnEmote).kind).toBe('location');
+    const plain = await call('chat_send', { tabId: tab.identifier, text: 'ふつうの発言' });
+    expect(store.get<ChatMessage>((plain as { data: { identifier: string } }).data.identifier)!.vnEmote ?? '').toBe('');
+    error(await call('chat_send', { tabId: tab.identifier, text: 'x', style: 'shout' }), 'INVALID_ARGUMENT');
   });
   it('lets a resource amount roll dice and branch with if() and $n, but never reach a reference', async () => {
     policy.setScope('edit_resource', true);
@@ -602,7 +625,11 @@ describe('AutomationFacadeService', () => {
     }
     async function wait(args: Record<string, unknown> = {}) {
       const pending = call('chat_wait', { waitSeconds: 2, ...args });
-      await vi.advanceTimersByTimeAsync(2500);
+      // The wait may set its timers only after work the fake clock does not run, as under a busy
+      // test run; so the clock is moved on in steps until the wait has answered.
+      let settled = false;
+      void pending.finally(() => (settled = true));
+      for (let step = 0; step < 100 && !settled; step++) await vi.advanceTimersByTimeAsync(100);
       return (await pending) as { ok: true; data: { messages: { text: string }[]; timedOut: boolean; more: boolean } };
     }
     beforeEach(() => vi.useFakeTimers());
@@ -642,6 +669,23 @@ describe('AutomationFacadeService', () => {
 
       say('typed by hand', Network.peerContext.userId);
       expect((await wait()).data.messages).toMatchObject([{ text: 'typed by hand' }]);
+    });
+
+    it('hands over a player’s piece once it has come to rest somewhere new', async () => {
+      piece.owner = 'player';
+      expect((await wait({ pieces: true })).data.timedOut).toBe(true);
+
+      piece.location = { ...piece.location, x: 150, y: 100 };
+      const moved = (await wait({ pieces: true })).data as unknown as { moves: unknown[]; timedOut: boolean };
+
+      expect(moved).toMatchObject({
+        timedOut: false,
+        moves: [{ identifier: piece.identifier, fromX: 1, fromY: 1, x: 3, y: 2, unit: 'grid' }],
+      });
+      expect((await wait({ pieces: true })).data.timedOut).toBe(true);
+      // Without asking, moves are not waited for.
+      piece.location = { ...piece.location, x: 200, y: 100 };
+      expect((await wait()).data.timedOut).toBe(true);
     });
 
     it('waits only on the tabs named, and refuses tabs it cannot read', async () => {
@@ -706,6 +750,30 @@ describe('AutomationFacadeService', () => {
       expect(made.owner).toBe('operator');
       expect(made.location.name).toBe('table');
       expect(made.disclosureMode).toBe('all');
+    });
+
+    it('dresses every piece in the picture asked for, as an NPC drawn for the scene', async () => {
+      grant();
+      const bytes = new Uint8Array([0x52, 0x49, 0x46, 0x46, 3]);
+      const identifier = await calcSHA256Async(bytes.buffer);
+      vi.spyOn(ImageStorage.instance, 'addAsync').mockResolvedValue(null as never);
+
+      const [npc] = created(
+        await call('character_create', {
+          pieces: [goblin('店主')],
+          x: 1,
+          y: 1,
+          image: identifier,
+          images: [{ identifier, type: 'image/webp', data: btoa(String.fromCharCode(...bytes)) }],
+        })
+      );
+
+      const made = store.get<GameCharacter>(npc.identifier)!;
+      expect(made.imageDataElement?.getFirstElementByName('imageIdentifier')?.value).toBe(identifier);
+      error(
+        await call('character_create', { pieces: [goblin('x')], x: 1, y: 1, image: 'face.png' }),
+        'INVALID_ARGUMENT'
+      );
     });
 
     describe('from this tool’s own XML', () => {
@@ -973,6 +1041,171 @@ describe('AutomationFacadeService', () => {
       error(await call('chat_tab_create', { name: 'メイン' }), 'FORBIDDEN');
     });
 
+    it('points everyone at a piece or a cell of the table in view', async () => {
+      beGameMaster();
+      const sent: unknown[] = [];
+      const focus = TestBed.inject(SharedFocusService);
+      vi.spyOn(focus, 'showPoint').mockImplementation((x, y) => {
+        sent.push({ x, y });
+        return { table: table.identifier, x, y };
+      });
+      vi.spyOn(focus, 'showPiece').mockImplementation((object) => {
+        sent.push(object.identifier);
+        return { table: table.identifier, x: 0, y: 0, identifier: object.identifier };
+      });
+
+      expect((await call('view_focus', { x: 2, y: 3 })).ok).toBe(true);
+      expect((await call('view_focus', { identifier: piece.identifier })).ok).toBe(true);
+      expect(sent).toEqual([{ x: 125, y: 175 }, piece.identifier]);
+      error(await call('view_focus', { x: 99, y: 0 }), 'INVALID_ARGUMENT');
+      error(await call('view_focus', { identifier: 'nothing' }), 'NOT_FOUND');
+    });
+
+    describe('exploring the board', () => {
+      function door(name = '扉'): Terrain {
+        const terrain = Terrain.create(name, 1, 0.2, 2, '', '');
+        terrain.doorStyle = DoorStyle.SWING;
+        terrain.location = { ...terrain.location, x: 100, y: 50 };
+        table.appendChild(terrain);
+        return terrain;
+      }
+
+      it('lifts the fog from a room as if the party had seen it', async () => {
+        beGameMaster();
+        table.fogEnabled = true;
+
+        expect(await call('fog_reveal', { x: 1, y: 1, w: 3, h: 2 })).toMatchObject({ ok: true, data: { revealed: 6 } });
+        expect(await call('fog_reveal', { x: 1, y: 1, w: 3, h: 2 })).toMatchObject({ ok: true, data: { revealed: 0 } });
+        const grid = cellGridOf(table.width, table.height, table.gridSize, table.gridType);
+        expect(
+          fogMemoryOn(table)!
+            .read(grid)
+            .get(cellIndexOf(grid, 2, 2))
+        ).toBe(true);
+        error(await call('fog_reveal', { x: 19, y: 0, w: 3, h: 1 }), 'INVALID_ARGUMENT');
+        table.fogMode = 'hard';
+        error(await call('fog_reveal', { x: 0, y: 0, w: 1, h: 1 }), 'INVALID_ARGUMENT');
+      });
+
+      it('lists the doors and opens one, bringing a hidden one out first', async () => {
+        beGameMaster();
+        const hidden = door('隠し扉');
+        TestBed.inject(ConcealmentService).conceal(hidden);
+
+        const listed = await call('terrain_list');
+        expect(listed).toMatchObject({
+          ok: true,
+          data: { items: [{ identifier: hidden.identifier, kind: 'door', x: 2, y: 1, open: false, concealed: true }] },
+        });
+        expect(await call('door_set', { identifier: hidden.identifier, open: true })).toMatchObject({
+          ok: true,
+          data: { open: true, found: true },
+        });
+        expect(hidden.isDoorOpen).toBe(true);
+        expect(TestBed.inject(ConcealmentService).isConcealed(hidden)).toBe(false);
+        error(await call('door_set', { identifier: piece.identifier, open: true }), 'NOT_FOUND');
+      });
+
+      it('stands a light that everyone sees', async () => {
+        beGameMaster();
+
+        const placed = await call('light_place', { x: 4, y: 5, kind: 'brazier', name: '祭壇の火' });
+        expect(placed).toMatchObject({ ok: true, data: { name: '祭壇の火', x: 4, y: 5 } });
+        const light = store.get<LightSource>((placed as { data: { identifier: string } }).data.identifier)!;
+        expect(light.lightRevealToAll).toBe(true);
+        expect(light.parent).toBe(table);
+        error(await call('light_place', { x: 4, y: 5, kind: 'laser' }), 'INVALID_ARGUMENT');
+      });
+
+      it('keeps the ground plan and the doors to the game master', async () => {
+        policy.setScope('prepare_room', true);
+        error(await call('terrain_list'), 'FORBIDDEN');
+        error(await call('fog_reveal', { x: 0, y: 0, w: 1, h: 1 }), 'FORBIDDEN');
+        error(await call('light_place', { x: 0, y: 0 }), 'FORBIDDEN');
+      });
+    });
+
+    it('sets a picture behind the speakers and opens novel mode on every screen', async () => {
+      beGameMaster();
+      const stage = new VnStage('VnStage');
+      stage.initialize();
+      const bytes = new Uint8Array([0x52, 0x49, 0x46, 0x46, 7]);
+      const identifier = await calcSHA256Async(bytes.buffer);
+      vi.spyOn(ImageStorage.instance, 'addAsync').mockResolvedValue(null as never);
+      const opened: unknown[] = [];
+      const listening = networkMessage$.subscribe((message) => {
+        if (message.eventName === VN_MODE_EVENT) opened.push(message.data);
+      });
+      setNetworkIsolated(true);
+      try {
+        const result = await call('vn_stage', {
+          open: true,
+          background: identifier,
+          transition: 'wipe',
+          images: [{ identifier, type: 'image/webp', data: btoa(String.fromCharCode(...bytes)) }],
+        });
+        expect(result).toMatchObject({ ok: true, data: { background: identifier, transition: 'wipe', open: true } });
+        expect(stage.backgroundImageIdentifier).toBe(identifier);
+        expect(opened).toEqual([{ active: true }]);
+        expect((await call('vn_stage', { open: false, background: '' })).ok).toBe(true);
+        expect(stage.backgroundImageIdentifier).toBe('');
+        error(await call('vn_stage', { transition: 'spin' }), 'INVALID_ARGUMENT');
+      } finally {
+        setNetworkIsolated(false);
+        listening();
+      }
+    });
+
+    it('brings a range out of the shared inventory, moves it, lets it follow a piece and puts it away', async () => {
+      beGameMaster();
+      const melee = RangeArea.create('乱戦エリア（2〜5人）', 7, 11, 100);
+      melee.location = { ...melee.location, name: 'common', x: 1525, y: 275 };
+
+      expect(await call('range_list')).toMatchObject({
+        ok: true,
+        data: { ranges: [{ identifier: melee.identifier, place: 'common', width: 7 }] },
+      });
+      expect(await call('range_set', { identifier: melee.identifier, x: 4, y: 5, place: 'table' })).toMatchObject({
+        ok: true,
+        data: { place: 'table', x: 4, y: 5 },
+      });
+      expect(melee.location).toMatchObject({ name: 'table', x: 225, y: 275 });
+
+      piece.location = { ...piece.location, x: 400, y: 100 };
+      expect((await call('range_set', { identifier: melee.identifier, follow: piece.identifier })).ok).toBe(true);
+      expect(melee.followingCharacterIdentifier).toBe(piece.identifier);
+      expect(melee.location).toMatchObject({ x: 425, y: 125 });
+
+      expect((await call('range_set', { identifier: melee.identifier, follow: '', place: 'common' })).ok).toBe(true);
+      expect(melee.location.name).toBe('common');
+      expect(melee.followingCharacterIdentifier).toBe('');
+      error(await call('range_set', { identifier: melee.identifier, x: 99, y: 0 }), 'INVALID_ARGUMENT');
+      error(await call('range_set', { identifier: melee.identifier, place: 'graveyard' }), 'INVALID_ARGUMENT');
+      error(await call('range_set', { identifier: piece.identifier, place: 'table' }), 'NOT_FOUND');
+    });
+
+    it('leaves the ranges to the game master', async () => {
+      policy.setScope('prepare_room', true);
+      error(await call('range_list'), 'FORBIDDEN');
+    });
+
+    it('changes whether a table recommends being viewed laid flat', async () => {
+      beGameMaster();
+
+      expect(await call('table_view', { identifier: table.identifier, flat: true })).toMatchObject({
+        ok: true,
+        data: { flat: true },
+      });
+      expect(table.mode2d).toBe(true);
+      expect((await call('table_view', { identifier: table.identifier, flat: false })).ok).toBe(true);
+      expect(table.mode2d).toBe(false);
+      error(await call('table_view', { identifier: table.identifier }), 'INVALID_ARGUMENT');
+      error(
+        await call('table_create', { kind: 'dungeon', atmosphere: 'crypt', floor: 'moon_rock' }),
+        'INVALID_ARGUMENT'
+      );
+    });
+
     it('puts another table in view for the room', async () => {
       beGameMaster();
       const town = new GameTable();
@@ -1049,6 +1282,126 @@ describe('AutomationFacadeService', () => {
       error(await call('table_create', { kind: 'dungeon', atmosphere: 'crypt' }), 'NOT_READY');
       error(await call('table_create', { kind: 'cave', atmosphere: 'crypt' }), 'INVALID_ARGUMENT');
       error(await call('table_create', { kind: 'dungeon', atmosphere: 'crypt', roomCount: 99 }), 'INVALID_ARGUMENT');
+    });
+    describe('from a room template', () => {
+      async function sound(seed: number) {
+        const bytes = new Uint8Array([0x49, 0x44, 0x33, seed, seed, seed]);
+        const identifier = await calcSHA256Async(bytes.buffer);
+        return { identifier, type: 'audio/mpeg', name: `bgm-${seed}.mp3`, data: btoa(String.fromCharCode(...bytes)) };
+      }
+      function room(scene: string, battle: string) {
+        return (
+          '<room>' +
+          `<game-table name="シナリオ前" width="20" height="15" bgm="${scene}"></game-table>` +
+          `<game-table name="上級戦闘" width="50" height="11" bgm="${battle}" cutInIdentifiers="template-cut-in"></game-table>` +
+          '<cut-in name="戦闘開始" identifier="template-cut-in"></cut-in>' +
+          '<effect-preset name="炎"></effect-preset>' +
+          '</room>'
+        );
+      }
+      const tables = () => store.getObjects<GameTable>(GameTable).filter((t) => t !== table);
+      afterEach(() => {
+        for (const audio of AudioStorage.instance.audios) AudioStorage.instance.delete(audio.identifier);
+      });
+
+      it('builds the tables asked for with their cut-ins, taking in the music they point at', async () => {
+        beGameMaster();
+        const battle = await sound(1);
+        const scene = await sound(2);
+
+        const result = await call('room_template_load', {
+          room: room(scene.identifier, battle.identifier),
+          tables: ['上級戦闘'],
+          audios: [battle],
+        });
+
+        expect(result).toMatchObject({
+          ok: true,
+          data: {
+            tables: [{ name: '上級戦闘', width: 50, height: 11, cutIns: ['template-cut-in'] }],
+            missingAudio: [],
+          },
+        });
+        expect(tables().map((t) => t.name)).toEqual(['上級戦闘']);
+        expect(store.get<CutIn>('template-cut-in')?.name).toBe('戦闘開始');
+        expect(AudioStorage.instance.get(battle.identifier)?.name).toBe('bgm-1.mp3');
+        expect(store.getObjects(EffectPreset)).toHaveLength(0);
+
+        // Loaded again, what it keeps under its own identifier is there already, and the sound left behind is named.
+        const again = await call('room_template_load', { room: room(scene.identifier, battle.identifier) });
+        expect(again).toMatchObject({ ok: true, data: { skipped: 1, missingAudio: [scene.identifier] } });
+        expect(tables()).toHaveLength(3);
+      });
+
+      it('takes the rules of play from the template, but not how far automation may reach', async () => {
+        beGameMaster();
+        Config.instance.automationOwnedOnly = false;
+
+        const result = await call('room_template_load', {
+          room: room('', ''),
+          tables: ['シナリオ前'],
+          config: '<config automationOwnedOnly="true" _defaultDiceBot="SwordWorld2.5" _roomVolume="0.1"></config>',
+        });
+
+        expect(result).toMatchObject({ ok: true, data: { config: true } });
+        expect(Config.instance.defaultDiceBot).toBe('SwordWorld2.5');
+        expect(Config.instance.automationOwnedOnly).toBe(false);
+      });
+
+      it('builds nothing from a template it cannot take whole', async () => {
+        beGameMaster();
+        const battle = await sound(1);
+
+        error(await call('room_template_load', { room: room('', ''), tables: ['城'] }), 'NOT_FOUND');
+        error(
+          await call('room_template_load', { room: room('', ''), audios: [{ ...battle, identifier: 'f'.repeat(64) }] }),
+          'INVALID_ARGUMENT'
+        );
+        error(await call('room_template_load', { room: '<config></config>' }), 'INVALID_ARGUMENT');
+        expect(tables()).toHaveLength(0);
+        expect(store.get('template-cut-in')).toBeNull();
+      });
+
+      it('takes back the sounds a loaded room names but was saved without', async () => {
+        beGameMaster();
+        const battle = await sound(4);
+        await call('room_template_load', { room: room('', battle.identifier), tables: ['上級戦闘'] });
+
+        expect(await call('audio_restore')).toMatchObject({
+          ok: true,
+          data: { added: 0, missingAudio: [battle.identifier] },
+        });
+        expect(await call('audio_restore', { audios: [battle] })).toMatchObject({
+          ok: true,
+          data: { added: 1, missingAudio: [] },
+        });
+      });
+
+      it('plays a sound it brings as the room music, and stops it', async () => {
+        beGameMaster();
+        const jukebox = new Jukebox('Jukebox');
+        jukebox.initialize();
+        const play = vi.spyOn(jukebox, 'play').mockImplementation(() => undefined);
+        const stop = vi.spyOn(jukebox, 'stop').mockImplementation(() => undefined);
+        const battle = await sound(3);
+
+        error(await call('bgm_play', { identifier: battle.identifier }), 'NOT_FOUND');
+        expect(await call('bgm_play', { identifier: battle.identifier, audios: [battle] })).toMatchObject({
+          ok: true,
+          data: { playing: battle.identifier, loop: true },
+        });
+        expect(play).toHaveBeenCalledWith(battle.identifier, true);
+        expect((await call('bgm_play', { stop: true })).ok).toBe(true);
+        expect(stop).toHaveBeenCalled();
+        error(await call('bgm_play', {}), 'INVALID_ARGUMENT');
+      });
+
+      it('leaves templates and music to the game master', async () => {
+        policy.setScope('prepare_room', true);
+        error(await call('room_template_load', { room: room('', '') }), 'FORBIDDEN');
+        error(await call('bgm_play', { stop: true }), 'FORBIDDEN');
+        error(await call('audio_restore'), 'FORBIDDEN');
+      });
     });
   });
 });
