@@ -29,7 +29,7 @@ test('the real stdio entry point lists tools and reports missing Chromium withou
   });
   try {
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length, 38);
+    assert.equal((await client.listTools()).tools.length, 39);
     const result = await client.callTool({ name: 'session_get', arguments: {} });
     assert.equal(result.structuredContent.error.code, 'NOT_READY');
     assert.match(stderr, /Udonarium browser/);
@@ -52,7 +52,7 @@ async function connected(invoke, work, options) {
   }
 }
 
-test('exposes exactly the thirty-eight bounded tools with schemas and read annotations', async () => {
+test('exposes exactly the thirty-nine bounded tools with schemas and read annotations', async () => {
   await connected(
     async () => ({ ok: true, data: {} }),
     async (client) => {
@@ -87,6 +87,7 @@ test('exposes exactly the thirty-eight bounded tools with schemas and read annot
         'room_template_list',
         'room_template_load',
         'scene_list',
+        'self_set',
         'session_get',
         'table_create',
         'table_list',
@@ -589,6 +590,19 @@ test('builds scenes and maps from pictures in the image folder, which reach the 
         });
         assert.equal(calls[3][1].image, sha(tavern));
         assert.equal(calls[3][1].images[0].identifier, sha(tavern));
+
+        await client.callTool({
+          name: 'self_set',
+          arguments: { sessionId: 'session', name: 'GM', imageFile: 'tavern.webp' },
+        });
+        assert.deepEqual(calls[4], [
+          'self_set',
+          {
+            name: 'GM',
+            image: sha(tavern),
+            images: [{ identifier: sha(tavern), type: 'image/webp', data: tavern.toString('base64') }],
+          },
+        ]);
         calls.length = 2;
 
         const missing = await client.callTool({
