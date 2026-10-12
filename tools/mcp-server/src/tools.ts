@@ -462,6 +462,21 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       },
     },
     {
+      name: 'self_set',
+      read: false,
+      description:
+        'Set the name and picture automation speaks under when it speaks as itself (chat_send with no characterId), as the connection panel does: name (such as GM) and imageFile (a picture in the image folder, kind portrait) or image (a SHA-256 the room holds). Call it once when the session starts, so narration carries a face of its own. Requires the send_chat browser grant.',
+      shape: {
+        ...retry,
+        name: z.string().min(1).max(64).optional(),
+        imageFile: z.string().min(1).max(256).optional(),
+        image: z
+          .string()
+          .regex(/^[0-9a-f]{64}$/)
+          .optional(),
+      },
+    },
+    {
       name: 'table_set',
       read: false,
       description:
@@ -668,6 +683,18 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
         }
         if (tool.name === 'chat_send' && given['text'] === undefined)
           return mapResult(failure('INVALID_ARGUMENT', 'Give text or lines.'));
+        if (tool.name === 'self_set') {
+          const { imageFile, ...rest } = given;
+          if (imageFile !== undefined) {
+            if (rest['image'] !== undefined)
+              return mapResult(failure('INVALID_ARGUMENT', 'Give image or imageFile, not both.'));
+            const picture = await images.read(String(imageFile));
+            if (!('identifier' in picture)) return mapResult(picture);
+            rest['image'] = picture.identifier;
+            rest['images'] = [picture];
+          }
+          args = rest;
+        }
         if (tool.name === 'table_set') {
           const { surfaceFile, backgroundFile, bgmFile, ...rest } = given;
           const pictures: unknown[] = [];

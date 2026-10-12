@@ -412,6 +412,8 @@ export class AutomationFacadeService {
       this.policy.canManage(this.buffCommands.find(textArgument(args['identifier'])).owner);
     }
     if (request.command === 'buff_sweep') this.policy.require('edit_buff');
+    // How automation speaks as itself goes with speaking.
+    if (request.command === 'self_set') this.policy.require('send_chat');
     if (request.command === 'character_create') {
       this.policy.require('create_piece');
       this.policy.canCreatePieces();
@@ -850,6 +852,20 @@ export class AutomationFacadeService {
         const px = unit === 'grid' ? (x + 0.5) * table.gridSize : x;
         const py = unit === 'grid' ? (y + 0.5) * table.gridSize : y;
         return { focus: this.sharedFocus.showPoint(px, py) };
+      }
+      case 'self_set': {
+        onlyKeys(a, ['name', 'image', 'images']);
+        const image = a['image'];
+        if (image !== undefined && (typeof image !== 'string' || !/^[0-9a-f]{64}$/.test(image)))
+          fail('INVALID_ARGUMENT', 'image must be a picture’s SHA-256.');
+        return this.session.setSelf(
+          {
+            name: a['name'] === undefined ? undefined : textArgument(a['name'], 64).trim(),
+            image: image as string | undefined,
+            images: a['images'] === undefined ? [] : automationImagesOf(a['images']),
+          },
+          guard
+        );
       }
       case 'table_set': {
         onlyKeys(a, ['identifier', 'surface', 'background', 'filter', 'bgm', 'images', 'audios']);

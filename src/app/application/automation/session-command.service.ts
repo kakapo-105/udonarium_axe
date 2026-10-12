@@ -1,5 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { fail } from '@axe/application/automation/automation-contract';
+import { AutomationImage, AutomationImageService } from '@axe/application/automation/automation-image.service';
 import { ChatWaitService } from '@axe/application/automation/chat-wait.service';
 import { CharacterMacroService } from '@axe/application/chat/character-macro.service';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
@@ -39,6 +40,7 @@ export class SessionCommandService {
   private readonly chat = inject(ChatMessageService);
   private readonly macro = inject(CharacterMacroService);
   private readonly chatWait = inject(ChatWaitService);
+  private readonly images = inject(AutomationImageService);
 
   get ready(): boolean {
     return (
@@ -118,6 +120,23 @@ export class SessionCommandService {
     const way = cheapestPath(terms.grid, terms.start, cell, terms.walk, (i) => terms.blocked.get(i), terms.options);
     if (!way || way.length > 100) fail('FORBIDDEN', 'No path within the 100-step limit.');
     return { x, y, planned: true, tableId: table.identifier, centre: cellCenterOf(terms.grid, cell) };
+  }
+
+  /**
+   * Sets the name and picture automation speaks under when it speaks as itself, as the connection
+   * panel's name and icon do: a game master's narration then carries the master's own face rather
+   * than the default icon. The picture is taken in first when it is brought along.
+   */
+  async setSelf(change: { name?: string; image?: string; images: readonly AutomationImage[] }, guard: () => void) {
+    const me = PeerCursor.myCursor;
+    if (!me) fail('NOT_READY', 'There is no seat to set.');
+    const pictures = await this.images.check(change.images);
+    guard();
+    await this.images.add(pictures);
+    guard();
+    if (change.name !== undefined) me.name = change.name;
+    if (change.image !== undefined) me.imageIdentifier = change.image;
+    return { name: me.name, image: me.imageIdentifier };
   }
 
   async move(piece: GameCharacter, destination: PieceDestination, dryRun: boolean, guard: () => void) {

@@ -217,6 +217,25 @@ describe('AutomationFacadeService', () => {
     expect(store.get<ChatMessage>((plain as { data: { identifier: string } }).data.identifier)!.vnEmote ?? '').toBe('');
     error(await call('chat_send', { tabId: tab.identifier, text: 'x', style: 'shout' }), 'INVALID_ARGUMENT');
   });
+  it('sets the name and picture automation speaks under as itself', async () => {
+    const bytes = new Uint8Array([0x52, 0x49, 0x46, 0x46, 4]);
+    const identifier = await calcSHA256Async(bytes.buffer);
+    vi.spyOn(ImageStorage.instance, 'addAsync').mockResolvedValue(null as never);
+
+    const result = await call('self_set', {
+      name: 'GM',
+      image: identifier,
+      images: [{ identifier, type: 'image/webp', data: btoa(String.fromCharCode(...bytes)) }],
+    });
+
+    expect(result).toMatchObject({ ok: true, data: { name: 'GM', image: identifier } });
+    expect(PeerCursor.myCursor.name).toBe('GM');
+    expect(PeerCursor.myCursor.imageIdentifier).toBe(identifier);
+    error(await call('self_set', { image: 'gm.png' }), 'INVALID_ARGUMENT');
+    policy.setScope('send_chat', false);
+    error(await call('self_set', { name: 'X' }), 'FORBIDDEN');
+  });
+
   it('lets a resource amount roll dice and branch with if() and $n, but never reach a reference', async () => {
     policy.setScope('edit_resource', true);
     const send = (text: string) => call('chat_send', { tabId: tab.identifier, characterId: piece.identifier, text });
