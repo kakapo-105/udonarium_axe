@@ -1206,6 +1206,41 @@ describe('AutomationFacadeService', () => {
       error(await call('range_list'), 'FORBIDDEN');
     });
 
+    it('dresses a table in pictures, a background filter and its own music', async () => {
+      beGameMaster();
+      const picture = new Uint8Array([0x52, 0x49, 0x46, 0x46, 9]);
+      const pictureId = await calcSHA256Async(picture.buffer);
+      const music = new Uint8Array([0x49, 0x44, 0x33, 9]);
+      const musicId = await calcSHA256Async(music.buffer);
+      vi.spyOn(ImageStorage.instance, 'addAsync').mockResolvedValue(null as never);
+
+      const result = await call('table_set', {
+        identifier: table.identifier,
+        surface: pictureId,
+        background: pictureId,
+        filter: 'black',
+        bgm: musicId,
+        images: [{ identifier: pictureId, type: 'image/webp', data: btoa(String.fromCharCode(...picture)) }],
+        audios: [
+          { identifier: musicId, type: 'audio/mpeg', name: 'battle.mp3', data: btoa(String.fromCharCode(...music)) },
+        ],
+      });
+
+      expect(result).toMatchObject({ ok: true, data: { filter: 'black', bgm: musicId } });
+      expect(table.imageIdentifier).toBe(pictureId);
+      expect(table.backgroundImageIdentifier).toBe(pictureId);
+      expect(table.backgroundFilterType).toBe('black');
+      expect(table.bgm).toBe(musicId);
+
+      expect((await call('table_set', { identifier: table.identifier, bgm: 'stop', filter: 'none' })).ok).toBe(true);
+      expect(table.bgm).toBe('__stop__');
+      expect(table.backgroundFilterType).toBe('');
+      error(await call('table_set', { identifier: table.identifier, bgm: 'f'.repeat(64) }), 'NOT_FOUND');
+      error(await call('table_set', { identifier: table.identifier, filter: 'sepia' }), 'INVALID_ARGUMENT');
+      error(await call('table_set', { identifier: table.identifier, background: 'tavern.webp' }), 'INVALID_ARGUMENT');
+      for (const audio of AudioStorage.instance.audios) AudioStorage.instance.delete(audio.identifier);
+    });
+
     it('changes whether a table recommends being viewed laid flat', async () => {
       beGameMaster();
 
