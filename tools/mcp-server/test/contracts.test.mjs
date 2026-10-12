@@ -496,6 +496,19 @@ test('plays a sound file from the sound folders for the room, or stops the music
         const missing = await client.callTool({ name: 'bgm_play', arguments: { sessionId: 'session', file: 'x.mp3' } });
         assert.equal(missing.structuredContent.error.code, 'NOT_FOUND');
         assert.equal(calls.length, 2);
+
+        // A jingle is played once, then the room goes back to the music named by thenFile.
+        await client.callTool({
+          name: 'bgm_play',
+          arguments: { sessionId: 'session', file: '03_冒険者ギルド.mp3', loop: false, thenFile: 'town.ogg' },
+        });
+        assert.equal(calls[2][1].identifier, sha(guild));
+        assert.equal(calls[2][1].loop, false);
+        assert.equal(calls[2][1].then, sha(music));
+        assert.deepEqual(
+          calls[2][1].audios.map((sound) => sound.identifier),
+          [sha(guild), sha(music)]
+        );
       },
       { templates: { audio: [audio] } }
     );
@@ -584,6 +597,12 @@ test('builds scenes and maps from pictures in the image folder, which reach the 
         assert.equal(calls[2][0], 'vn_stage');
         assert.equal(calls[2][1].background, sha(tavern));
         assert.equal(calls[2][1].open, true);
+        await client.callTool({
+          name: 'vn_stage',
+          arguments: { sessionId: 'session', open: false, resetCast: true, tabId: 'MainTab' },
+        });
+        assert.deepEqual(calls[3], ['vn_stage', { open: false, resetCast: true, tabId: 'MainTab' }]);
+        calls.length = 3;
         await client.callTool({
           name: 'character_create',
           arguments: { sessionId: 'session', pieces: ['<character/>'], x: 1, y: 1, imageFile: 'tavern.webp' },

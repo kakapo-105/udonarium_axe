@@ -1,4 +1,7 @@
-import { terrainBlocksMovement } from '@axe/domain/tabletop/move/blocked-cells';
+import { CellBits } from '@axe/domain/tabletop/fog/cell-bits';
+import { cellCount, cellGridOf, cellIndexOf } from '@axe/domain/tabletop/fog/cell-grid';
+import { GridType } from '@axe/domain/tabletop/grid-type';
+import { nearestOpenCell, terrainBlocksMovement } from '@axe/domain/tabletop/move/blocked-cells';
 import { DoorStyle, Terrain, TerrainViewState } from '@axe/domain/tabletop/terrain';
 
 function block(): Terrain {
@@ -44,5 +47,35 @@ describe('terrainBlocksMovement', () => {
     shelf.location.surface = 'north-wall';
 
     expect(terrainBlocksMovement(shelf)).toBe(false);
+  });
+});
+
+describe('nearestOpenCell', () => {
+  const grid = cellGridOf(5, 5, 50, GridType.SQUARE);
+
+  function walled(...cells: [number, number][]): CellBits {
+    const bits = new CellBits(cellCount(grid));
+    for (const [col, row] of cells) bits.set(cellIndexOf(grid, col, row));
+    return bits;
+  }
+
+  it('keeps a cell nothing stands on', () => {
+    expect(nearestOpenCell(grid, walled([0, 0]), cellIndexOf(grid, 2, 2))).toBe(cellIndexOf(grid, 2, 2));
+  });
+
+  it('stands a piece put inside a building on the nearest open cell beside it', () => {
+    const building: [number, number][] = [];
+    for (let col = 1; col <= 3; col++) for (let row = 1; row <= 3; row++) building.push([col, row]);
+
+    const open = nearestOpenCell(grid, walled(...building), cellIndexOf(grid, 2, 2));
+
+    expect(open).toBe(cellIndexOf(grid, 0, 0));
+  });
+
+  it('answers -1 when nowhere is open', () => {
+    const all: [number, number][] = [];
+    for (let col = 0; col < 5; col++) for (let row = 0; row < 5; row++) all.push([col, row]);
+
+    expect(nearestOpenCell(grid, walled(...all), cellIndexOf(grid, 2, 2))).toBe(-1);
   });
 });

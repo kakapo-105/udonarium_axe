@@ -16,11 +16,22 @@ import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { DiceBot } from '@axe/domain/dice/dice-bot';
 import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
-import { cellCenterOf } from '@axe/domain/tabletop/fog/cell-grid';
+import { cellCenterOf, cellGridOf } from '@axe/domain/tabletop/fog/cell-grid';
+import { GameTable } from '@axe/domain/tabletop/game-table';
+import { blockedByTerrain, nearestOpenCell, terrainBlocksMovement } from '@axe/domain/tabletop/move/blocked-cells';
 import { cheapestPath } from '@axe/domain/tabletop/move/cheapest-path';
 import { pieceCellOf, pieceCornerOn } from '@axe/domain/tabletop/move/piece-on-grid';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
+import { Terrain } from '@axe/domain/tabletop/terrain';
 import { encodeVnEmote, VN_EMOTE_DEFAULT, VnMessageKind } from '@axe/domain/visual-novel/vn-emote';
+
+/**
+ * What a piece cannot be stood inside: a wall or a building on the ground. A canopy or a roof
+ * hangs over the ground under it, which is somewhere to stand.
+ */
+function standsInTheWay(terrain: Terrain): boolean {
+  return terrainBlocksMovement(terrain) && !(terrain.altitude > 0);
+}
 
 export interface PieceDestination {
   x: number;
@@ -107,7 +118,10 @@ export class SessionCommandService {
     }
     if (this.plan.isPlanning() || this.plan.isWalking) fail('CONFLICT', 'Another move is in progress.');
     if (!strict || (x === piece.location.x && y === piece.location.y)) {
-      return { x, y, planned: false, tableId: table.identifier };
+      // A plain move goes wherever it is put, so a piece put on a wall or a building is stood
+      // beside it instead of inside it.
+      const open = this.openGroundFor(table, piece, x, y);
+      return { ...open, planned: false, tableId: table.identifier };
     }
     const terms = this.range.termsOf(piece);
     if (!terms) fail('FORBIDDEN', 'This piece has no legal movement range.');
@@ -119,7 +133,27 @@ export class SessionCommandService {
     }
     const way = cheapestPath(terms.grid, terms.start, cell, terms.walk, (i) => terms.blocked.get(i), terms.options);
     if (!way || way.length > 100) fail('FORBIDDEN', 'No path within the 100-step limit.');
-    return { x, y, planned: true, tableId: table.identifier, centre: cellCenterOf(terms.grid, cell) };
+    return { x, y, planned: true, adjusted: false, tableId: table.identifier, centre: cellCenterOf(terms.grid, cell) };
+  }
+
+  /** Whether a piece on the table in view stands inside a wall or a building, where nobody can stand. */
+  standsInside(piece: GameCharacter): boolean {
+    const table = this.tables.viewTable;
+    if (!table || !(table.gridSize > 0)) return false;
+    const grid = cellGridOf(table.width, table.height, table.gridSize, table.gridType);
+    const cell = pieceCellOf(grid, piece, table.gridSize);
+    return cell >= 0 && blockedByTerrain(grid, table.terrains, standsInTheWay).get(cell);
+  }
+
+  /** Where a piece put at x, y in pixels stands: there, or the open cell nearest it when that is walled. */
+  private openGroundFor(table: GameTable, piece: GameCharacter, x: number, y: number) {
+    const grid = cellGridOf(table.width, table.height, table.gridSize, table.gridType);
+    const cell = pieceCellOf(grid, piece, table.gridSize, { x, y });
+    if (cell < 0) return { x, y, adjusted: false };
+    const open = nearestOpenCell(grid, blockedByTerrain(grid, table.terrains, standsInTheWay), cell);
+    if (open < 0 || open === cell) return { x, y, adjusted: false };
+    const corner = pieceCornerOn(grid, piece, table.gridSize, open);
+    return { x: corner.x, y: corner.y, adjusted: true };
   }
 
   /**
@@ -142,7 +176,8 @@ export class SessionCommandService {
   async move(piece: GameCharacter, destination: PieceDestination, dryRun: boolean, guard: () => void) {
     guard();
     const next = this.destination(piece, destination);
-    if (dryRun) return { identifier: piece.identifier, x: next.x, y: next.y, unit: 'px', dryRun: true };
+    const adjusted = next.adjusted ? { adjusted: true } : {};
+    if (dryRun) return { identifier: piece.identifier, x: next.x, y: next.y, unit: 'px', ...adjusted, dryRun: true };
     if (piece.location.x === next.x && piece.location.y === next.y)
       return { identifier: piece.identifier, version: piece.version };
     if (next.planned && next.centre) {
@@ -169,6 +204,7 @@ export class SessionCommandService {
       x: piece.location.x,
       y: piece.location.y,
       unit: 'px',
+      ...adjusted,
     };
   }
 

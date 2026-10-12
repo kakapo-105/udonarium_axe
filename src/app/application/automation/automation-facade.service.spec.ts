@@ -133,6 +133,21 @@ describe('AutomationFacadeService', () => {
     piece.location = { ...piece.location, surface: 'north-wall' };
     error(await move(), 'FORBIDDEN');
   });
+  it('stands a piece put inside a building on the open cell nearest it, and says so', async () => {
+    Config.instance.moveStrict = false;
+    const building = Terrain.create('Building', 2, 2, 2, '', '');
+    building.location = { name: 'table', x: 150, y: 100 };
+    table.appendChild(building);
+
+    const moved = await move();
+
+    expect(moved).toMatchObject({ ok: true, data: { adjusted: true } });
+    expect(piece.location).not.toMatchObject({ x: 150, y: 100 });
+    expect(piece.location.x < 150 || piece.location.x >= 250 || piece.location.y < 100 || piece.location.y >= 200).toBe(
+      true
+    );
+    building.destroy();
+  });
   it('rejects locked pieces, guests, missing scopes and stale versions', async () => {
     piece.isLock = true;
     error(await move(), 'LOCKED');
@@ -1192,6 +1207,27 @@ describe('AutomationFacadeService', () => {
       }
     });
 
+    it('clears the speakers of the scene before when it opens or closes novel mode', async () => {
+      beGameMaster();
+      const stage = new VnStage('VnStage');
+      stage.initialize();
+      const listening = networkMessage$.subscribe(() => undefined);
+      setNetworkIsolated(true);
+      try {
+        const opened = await call('vn_stage', { open: true, tabId: tab.identifier });
+        expect(opened).toMatchObject({ ok: true, data: { open: true, castReset: tab.identifier } });
+        expect(tab.vnPortraitResetAt).toBeGreaterThan(0);
+
+        const before = tab.vnPortraitResetAt;
+        const kept = await call('vn_stage', { open: false, resetCast: false, tabId: tab.identifier });
+        expect((kept as { data: Record<string, unknown> }).data['castReset']).toBeUndefined();
+        expect(tab.vnPortraitResetAt).toBe(before);
+      } finally {
+        setNetworkIsolated(false);
+        listening();
+      }
+    });
+
     it('brings a range out of the shared inventory, moves it, lets it follow a piece and puts it away', async () => {
       beGameMaster();
       const melee = RangeArea.create('乱戦エリア（2〜5人）', 7, 11, 100);
@@ -1283,9 +1319,18 @@ describe('AutomationFacadeService', () => {
       town.name = 'Town';
       town.initialize();
 
+      const note = TextNote.create('Bakery', '', 14, 3, 1);
+      note.location = { name: 'table', x: 0, y: 0 };
+
       expect(await call('table_select', { identifier: town.identifier })).toMatchObject({
         ok: true,
-        data: { identifier: town.identifier },
+        data: {
+          identifier: town.identifier,
+          standing: expect.arrayContaining([
+            { identifier: note.identifier, name: 'Bakery', kind: 'note' },
+            { identifier: piece.identifier, name: 'Piece', kind: 'piece' },
+          ]),
+        },
       });
       expect(TestBed.inject(TableSelecter).viewTableIdentifier).toBe(town.identifier);
       error(await call('table_select', { identifier: piece.identifier }), 'NOT_FOUND');
@@ -1462,6 +1507,16 @@ describe('AutomationFacadeService', () => {
           data: { playing: battle.identifier, loop: true },
         });
         expect(play).toHaveBeenCalledWith(battle.identifier, true);
+        const once = vi.spyOn(jukebox, 'playOnce').mockImplementation(() => undefined);
+        jukebox.audioIdentifier = 'town';
+        jukebox.isPlaying = true;
+        expect((await call('bgm_play', { identifier: battle.identifier, loop: false })).ok).toBe(true);
+        expect(once).toHaveBeenCalledWith(battle.identifier, 'town');
+        error(await call('bgm_play', { identifier: battle.identifier, then: 'town' }), 'INVALID_ARGUMENT');
+        error(
+          await call('bgm_play', { identifier: battle.identifier, loop: false, then: 'f'.repeat(64) }),
+          'NOT_FOUND'
+        );
         expect((await call('bgm_play', { stop: true })).ok).toBe(true);
         expect(stop).toHaveBeenCalled();
         error(await call('bgm_play', {}), 'INVALID_ARGUMENT');

@@ -8,6 +8,7 @@ import { TableBgmService } from '@axe/application/media/table-bgm.service';
 import { emitSelectGameTable } from '@axe/core/event/domain-events';
 import { ImageFile } from '@axe/core/storage/image-file';
 import { ObjectStore } from '@axe/core/sync/object-store';
+import { GameCharacter } from '@axe/domain/character/game-character';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { ChatTabPermission } from '@axe/domain/chat/chat-tab-permission';
@@ -18,6 +19,9 @@ import { FilterType, GameTable } from '@axe/domain/tabletop/game-table';
 import { TABLE_BGM_STOP } from '@axe/domain/tabletop/table-bgm';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { TextNote } from '@axe/domain/tabletop/text-note';
+
+/** At most this many notes and pieces are listed as standing on a table just chosen. */
+const MAX_STANDING = 60;
 
 const BOARD_GRID_SIZE = 50;
 
@@ -212,7 +216,23 @@ export class RoomPrepCommandService {
       this.tableBgm.applyFor(table);
       this.cutIns.launchForTable(table);
     }
-    return { identifier: table.identifier, name: table.name.slice(0, 256) };
+    return { identifier: table.identifier, name: table.name.slice(0, 256), standing: this.standing() };
+  }
+
+  /**
+   * The notes and pieces out on the table, which every table shows, so whatever belongs to the scene
+   * left behind can be put out of sight.
+   */
+  private standing() {
+    const notes = this.store
+      .getObjects<TextNote>(TextNote)
+      .filter((note) => note.location.name === 'table')
+      .map((note) => ({ identifier: note.identifier, name: note.title.slice(0, 256), kind: 'note' }));
+    const pieces = this.store
+      .getObjects<GameCharacter>(GameCharacter)
+      .filter((piece) => piece.location.name === 'table')
+      .map((piece) => ({ identifier: piece.identifier, name: piece.name.slice(0, 256), kind: 'piece' }));
+    return [...notes, ...pieces].slice(0, MAX_STANDING);
   }
 
   /** Opens a chat tab with who may read and speak in it; the game master always may. */

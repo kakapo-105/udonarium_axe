@@ -37,6 +37,7 @@ import { ObjectStore } from '@axe/core/sync/object-store';
 import { BuffRemovalRule } from '@axe/domain/character/buff-bulk-removal';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
+import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { canRoleSpeakTab, canRoleViewTab } from '@axe/domain/chat/chat-tab-permission';
 import { PaletteRow, paletteRowsOf } from '@axe/domain/chat/palette-rows';
 import { DisclosureMode } from '@axe/domain/disclosure/disclosure';
@@ -585,6 +586,8 @@ export class AutomationFacadeService {
             x: move.x / grid,
             y: move.y / grid,
             unit: 'grid',
+            // Set down on a wall or a building: piece_move to the same place stands it beside.
+            ...(this.session.standsInside(move.piece) ? { inside: true } : {}),
           })),
         };
       }
@@ -813,16 +816,20 @@ export class AutomationFacadeService {
         return this.ranges.set(range, change);
       }
       case 'vn_stage': {
-        onlyKeys(a, ['open', 'background', 'transition', 'images']);
+        onlyKeys(a, ['open', 'background', 'transition', 'resetCast', 'tabId', 'images']);
         const transition = a['transition'];
         if (transition !== undefined && !VN_STAGE_TRANSITIONS.includes(transition as VnStageTransition))
           fail('INVALID_ARGUMENT', `transition must be one of ${VN_STAGE_TRANSITIONS.join(', ')}.`);
         const background = a['background'];
         if (background !== undefined && (typeof background !== 'string' || !/^([0-9a-f]{64})?$/.test(background)))
           fail('INVALID_ARGUMENT', 'background must be a picture’s SHA-256, or empty to clear it.');
+        const open = a['open'] === undefined ? undefined : booleanOf(a['open'], 'open');
+        // Opening or closing the stage starts the next scene of talk with nobody standing.
+        const resets = a['resetCast'] === undefined ? open !== undefined : booleanOf(a['resetCast'], 'resetCast');
         return this.vnStage.set(
           {
-            open: a['open'] === undefined ? undefined : booleanOf(a['open'], 'open'),
+            open,
+            resetCast: resets ? this.castTab(a['tabId']) : undefined,
             background: background as string | undefined,
             transition: transition as VnStageTransition | undefined,
             images: a['images'] === undefined ? [] : automationImagesOf(a['images']),
@@ -954,15 +961,18 @@ export class AutomationFacadeService {
         onlyKeys(a, ['audios']);
         return this.roomTemplates.restoreAudio(a['audios'] === undefined ? [] : automationAudiosOf(a['audios']), guard);
       case 'bgm_play': {
-        onlyKeys(a, ['identifier', 'loop', 'audios', 'stop']);
+        onlyKeys(a, ['identifier', 'loop', 'then', 'audios', 'stop']);
         const stop = booleanOf(a['stop'], 'stop');
         if (stop === (a['identifier'] !== undefined))
           fail('INVALID_ARGUMENT', 'Give either the identifier of a sound to play or stop: true.');
+        const loop = a['loop'] === undefined ? true : booleanOf(a['loop'], 'loop');
+        if (a['then'] !== undefined && loop) fail('INVALID_ARGUMENT', 'then is for a sound played once (loop: false).');
         return this.roomTemplates.play(
           stop ? null : textArgument(a['identifier'], 64),
-          a['loop'] === undefined ? true : booleanOf(a['loop'], 'loop'),
+          loop,
           a['audios'] === undefined ? [] : automationAudiosOf(a['audios']),
-          guard
+          guard,
+          a['then'] === undefined || a['then'] === '' ? a['then'] : textArgument(a['then'], 64)
         );
       }
     }
@@ -992,6 +1002,14 @@ export class AutomationFacadeService {
     if (piece instanceof GameCharacter && this.policy.canSeeConcealed(piece)) return piece;
     return this.piece(identifier);
   }
+  /** The tab whose novel stage is cleared: the one named, or the room's first, where the story is told. */
+  private castTab(identifier: unknown): ChatTab {
+    if (identifier !== undefined) return this.tab(textArgument(identifier));
+    const first = this.store.get<ChatTabList>('ChatTabList')?.chatTabs[0];
+    if (!first) fail('NOT_FOUND', 'The room has no chat tab.');
+    return first;
+  }
+
   private tab(identifier: string, speak = false): ChatTab {
     const tab = this.store.get(identifier);
     if (!(tab instanceof ChatTab) || !canRoleViewTab(tab, PeerCursor.myRole))

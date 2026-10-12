@@ -1,5 +1,5 @@
 import { CellBits } from '@axe/domain/tabletop/fog/cell-bits';
-import { cellCount, CellGrid, forEachCellInBox } from '@axe/domain/tabletop/fog/cell-grid';
+import { cellCount, CellGrid, forEachCellInBox, forEachNeighbourCell } from '@axe/domain/tabletop/fog/cell-grid';
 import { surfaceOf } from '@axe/domain/tabletop/tabletop-object';
 import { Terrain } from '@axe/domain/tabletop/terrain';
 import { terrainBoxOf } from '@axe/domain/tabletop/terrain-box';
@@ -48,4 +48,34 @@ export function blockedByTerrain(
     forEachCellInBox(grid, box.minX, box.minY, box.maxX, box.maxY, (cell) => bits.set(cell));
   }
   return bits;
+}
+
+/**
+ * The open cell nearest `from`, counting steps to the cells around: `from` itself when nothing
+ * stands on it, or -1 when every cell is taken or `from` is off the grid.
+ *
+ * It is how a piece set down inside a building or a wall is stood beside it instead.
+ */
+export function nearestOpenCell(grid: CellGrid, blocked: CellBits, from: number): number {
+  const count = cellCount(grid);
+  if (from < 0 || from >= count) return -1;
+  if (!blocked.get(from)) return from;
+  const seen = new CellBits(count);
+  seen.set(from);
+  let ring = [from];
+  while (ring.length > 0) {
+    const next: number[] = [];
+    for (const cell of ring) {
+      forEachNeighbourCell(grid, cell, (neighbour) => {
+        if (seen.get(neighbour)) return;
+        seen.set(neighbour);
+        next.push(neighbour);
+      });
+    }
+    // The lowest index of a ring wins, so the same board always gives the same cell.
+    const open = next.filter((cell) => !blocked.get(cell));
+    if (open.length > 0) return Math.min(...open);
+    ring = next;
+  }
+  return -1;
 }
