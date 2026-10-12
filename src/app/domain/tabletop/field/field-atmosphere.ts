@@ -13,6 +13,7 @@ export const FIELD_ATMOSPHERE_IDS = [
   'sfCity',
   'slum',
   'dump',
+  'oldTown',
 ] as const;
 
 export type FieldAtmosphereId = (typeof FIELD_ATMOSPHERE_IDS)[number];
@@ -308,6 +309,13 @@ export interface TownPlan {
   puddles?: number;
   /** Which band of ground each part of the town is painted with. */
   zones: { street: number; kerb: number; lot: number; puddle?: number };
+  /**
+   * A pitched roof on every building, stepped up to a ridge along its longer side, in place of
+   * the flat top an office block or a tenement wears: `rise` is how tall it stands in cells,
+   * `steps` how many courses it is built in, and each building's roof wears the texture of
+   * `skins` that goes with its facade.
+   */
+  roof?: { rise: number; steps: number; skins: readonly (WallTextureId | TextureId)[] };
 }
 
 /** What a place is lit by at night, and where those lights may stand. */
@@ -695,6 +703,58 @@ export const FIELD_ATMOSPHERES: Record<FieldAtmosphereId, FieldAtmosphere> = {
     weatherDensity: 0.3,
     gridShow: true,
     torches: 6,
+  },
+  /**
+   * The old town of a world of swords and sorcery: a market town inside its walls.
+   *
+   * Lanes of cobbles wind between houses of timber, plaster and stone two and three storeys
+   * high, each under a pitched roof of tile or shingle, standing shoulder to shoulder along the
+   * lane with a yard behind. Nothing is quite square, a tree grows here and there in a yard, and
+   * lanterns and braziers light the way at dusk. No glass, no concrete, no tanks on the roofs.
+   */
+  oldTown: {
+    id: 'oldTown',
+    defaultGround: 'stone_paving_small',
+    defaultProp: 'wall_timber',
+    relief: 10,
+    damp: 0,
+    bands: [
+      { upTo: 0.4, texture: 'stone_paving_small' },
+      { upTo: 0.7, texture: 'gravel' },
+      { upTo: 1, texture: 'packed_earth' },
+    ],
+    props: [
+      { prop: 'tree', chance: 0.05, bands: [2] },
+      { prop: 'bush', chance: 0.12, bands: [2] },
+    ],
+    town: {
+      street: { least: 2, most: 3 },
+      block: { least: 7, most: 11 },
+      kerb: 1,
+      lot: { least: 2, most: 4 },
+      storeys: { least: 1.5, most: 2.5 },
+      downtown: false,
+      vacancy: 14,
+      skins: [
+        { side: 'wall_timber', top: 'wood_plank' },
+        { side: 'wall_ashlar', top: 'brick' },
+        { side: 'wall_brick', top: 'brick' },
+        { side: 'wall_rubble', top: 'wood_plank' },
+      ],
+      roofPlant: 0,
+      frontage: 3,
+      crooked: true,
+      spin: 3,
+      zones: { street: 0, kerb: 1, lot: 2 },
+      roof: { rise: 1.2, steps: 4, skins: ['brick', 'stone_paving_small', 'brick', 'wood_plank'] },
+    },
+    fires: { kinds: ['lantern', 'brazier', 'lantern'], bands: [1] },
+    darkness: 0.3,
+    ambientColor: '#1a140c',
+    weatherKind: '',
+    weatherDensity: 0,
+    gridShow: true,
+    torches: 8,
   },
 };
 

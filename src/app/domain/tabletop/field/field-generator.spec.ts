@@ -317,4 +317,26 @@ describe('planField()', () => {
       }
     }
   });
+
+  it('roofs every house of an old town with a pitch rising to a ridge, and the towns of today with none', () => {
+    for (const seed of SEEDS) {
+      const plan = planField({ atmosphere: 'oldTown', size: 40, density: 50, seed });
+      const houses = plan.blocks.blocks.filter((block) => block.thing === 'building');
+      const roofs = plan.blocks.blocks.filter((block) => block.thing === 'roof');
+
+      expect(houses.length).toBeGreaterThan(0);
+      expect(roofs.length).toBe(houses.length * FIELD_ATMOSPHERES.oldTown.town!.roof!.steps);
+      for (const roof of roofs) expect(roof.altitude).toBeGreaterThan(0);
+    }
+    const city = planField({ atmosphere: 'city', size: 40, density: 50, seed: 7 });
+    expect(city.blocks.blocks.some((block) => block.thing === 'roof')).toBe(false);
+  });
+
+  it('keeps a whole old town within the terrain limit at the largest size', () => {
+    for (const seed of SEEDS) {
+      const plan = planField({ atmosphere: 'oldTown', size: MAX_FIELD_SIZE, density: 100, seed });
+
+      expect(plan.blocks.blocks.length).toBeLessThanOrEqual(MAP_MAX_TERRAINS);
+    }
+  });
 });

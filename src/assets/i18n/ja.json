@@ -2269,6 +2269,7 @@
           "streetTree": "街路樹",
           "building": "建物",
           "roofUnit": "屋上設備",
+          "roof": "屋根",
           "counter": "カウンター",
           "stool": "スツール",
           "table": "テーブル",
@@ -2371,7 +2372,8 @@
           "city": "ビル群",
           "sfCity": "ビル群(SF)",
           "slum": "スラム街",
-          "dump": "ゴミ処理場"
+          "dump": "ゴミ処理場",
+          "oldTown": "中世の町並み"
         },
         "prop": {
           "tree": "木",

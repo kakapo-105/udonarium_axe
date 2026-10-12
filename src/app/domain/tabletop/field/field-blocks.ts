@@ -22,7 +22,7 @@ export const FIELD_MERGE_SPAN = 4;
 const OPEN_FIRES: readonly MapLightKind[] = ['campfire', 'stand', 'brazier'];
 
 /** What a town is built of, besides what grows in it: the buildings and what stands on their roofs. */
-export const TOWN_PIECE_IDS = ['building', 'roofUnit'] as const;
+export const TOWN_PIECE_IDS = ['building', 'roofUnit', 'roof'] as const;
 
 /**
  * A tank or a plant room on a roof, which is most of what tells a roof from a car park seen
@@ -74,6 +74,40 @@ function findFires(layout: FieldLayout, atmosphere: FieldAtmosphere, seed: numbe
 }
 
 /**
+ * A pitched roof on a building, as courses that narrow up to a ridge along its longer side.
+ *
+ * Each course is the width of the building along the ridge and narrower across it than the one
+ * under it, so a table seen at a slant shows a gable rather than the flat top of a box.
+ */
+function roofBlocks(building: FieldBuilding, roof: NonNullable<TownPlan['roof']>, inset: number): MapBlock[] {
+  const { x, y, w, h } = building;
+  const wide = w - inset * 2;
+  const deep = h - inset * 2;
+  const ridgeAlongX = wide >= deep;
+  const across = ridgeAlongX ? deep : wide;
+  const course = roof.rise / roof.steps;
+  const texture = roof.skins[building.skin % roof.skins.length];
+  const blocks: MapBlock[] = [];
+  for (let step = 0; step < roof.steps; step++) {
+    const narrowed = across * (1 - (step + 0.5) / roof.steps);
+    blocks.push({
+      kind: 'prop',
+      rect: { x, y, w, h },
+      blocksSight: false,
+      locked: false,
+      rooms: [],
+      skin: { side: { kind: 'texture', id: texture }, top: { kind: 'texture', id: texture } },
+      height: course,
+      footprint: ridgeAlongX ? { w: wide, d: narrowed } : { w: narrowed, d: deep },
+      altitude: building.height + course * step,
+      rotate: building.spin || undefined,
+      thing: 'roof',
+    });
+  }
+  return blocks;
+}
+
+/**
  * The blocks one building is built of.
  *
  * On squares it is one block to the lot, or a podium the size of the lot with the tower set a
@@ -116,6 +150,8 @@ function buildingBlocks(building: FieldBuilding, plan: TownPlan, span: number): 
       }
     }
   }
+
+  if (plan.roof && span > 1) blocks.push(...roofBlocks(building, plan.roof, plan.inset ?? 0));
 
   if (building.plant) {
     blocks.push({

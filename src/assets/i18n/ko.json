@@ -2269,6 +2269,7 @@
           "streetTree": "가로수",
           "building": "건물",
           "roofUnit": "옥상 설비",
+          "roof": "지붕",
           "counter": "카운터",
           "stool": "스툴",
           "table": "테이블",
@@ -2371,7 +2372,8 @@
           "city": "빌딩 숲",
           "sfCity": "빌딩 숲(SF)",
           "slum": "슬럼가",
-          "dump": "쓰레기 처리장"
+          "dump": "쓰레기 처리장",
+          "oldTown": "중세 마을"
         },
         "prop": {
           "tree": "나무",

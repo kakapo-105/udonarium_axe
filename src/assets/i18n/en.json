@@ -2269,6 +2269,7 @@
           "streetTree": "Street tree",
           "building": "Building",
           "roofUnit": "Rooftop unit",
+          "roof": "Roof",
           "counter": "Counter",
           "stool": "Stool",
           "table": "Table",
@@ -2371,7 +2372,8 @@
           "city": "City blocks",
           "sfCity": "City blocks (SF)",
           "slum": "Slum",
-          "dump": "Garbage dump"
+          "dump": "Garbage dump",
+          "oldTown": "Old town (medieval)"
         },
         "prop": {
           "tree": "Trees",
