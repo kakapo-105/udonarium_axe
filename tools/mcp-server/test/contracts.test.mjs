@@ -29,7 +29,7 @@ test('the real stdio entry point lists tools and reports missing Chromium withou
   });
   try {
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length, 37);
+    assert.equal((await client.listTools()).tools.length, 38);
     const result = await client.callTool({ name: 'session_get', arguments: {} });
     assert.equal(result.structuredContent.error.code, 'NOT_READY');
     assert.match(stderr, /Udonarium browser/);
@@ -52,7 +52,7 @@ async function connected(invoke, work, options) {
   }
 }
 
-test('exposes exactly the thirty-seven bounded tools with schemas and read annotations', async () => {
+test('exposes exactly the thirty-eight bounded tools with schemas and read annotations', async () => {
   await connected(
     async () => ({ ok: true, data: {} }),
     async (client) => {
@@ -91,6 +91,7 @@ test('exposes exactly the thirty-seven bounded tools with schemas and read annot
         'table_create',
         'table_list',
         'table_select',
+        'table_set',
         'table_view',
         'terrain_list',
         'view_focus',
@@ -406,6 +407,10 @@ test('loads a room template from this machine, finding the sounds its tables nam
     await writeFile(path.join(templates, 'battle', `${'0'.repeat(64)}.png`), picture);
     await writeFile(path.join(audio, 'battle theme.mp3'), music);
     await writeFile(
+      path.join(audio, 'index.json'),
+      JSON.stringify({ 'battle theme.mp3': { use: 'battle', tags: ['激しい'] } })
+    );
+    await writeFile(
       path.join(templates, 'battle', 'template.json'),
       JSON.stringify({ description: '上級戦闘の盤面', tables: { 上級戦闘: { metersPerCell: 1 } } })
     );
@@ -421,7 +426,7 @@ test('loads a room template from this machine, finding the sounds its tables nam
           { name: 'battle', tables: ['上級戦闘', 'シナリオ前'], description: '上級戦闘の盤面' },
         ]);
         assert.deepEqual(listed.structuredContent.data.sounds, [
-          { file: 'battle theme.mp3', identifier: sha(music), size: 3 },
+          { file: 'battle theme.mp3', identifier: sha(music), size: 3, use: 'battle', tags: ['激しい'] },
         ]);
         assert.equal(received, undefined);
 
@@ -464,6 +469,9 @@ test('plays a sound file from the sound folders for the room, or stops the music
   await workspace(async ({ audio }) => {
     const music = Buffer.from([7, 8, 9]);
     await writeFile(path.join(audio, 'town.ogg'), music);
+    // A name spelled with a separate voicing mark (NFD), as some systems write it, is found by its composed spelling.
+    const guild = Buffer.from([2, 7, 1]);
+    await writeFile(path.join(audio, '03_冒険者ギルド.mp3'.normalize('NFD')), guild);
     const calls = [];
     await connected(
       async (command, args) => {
@@ -481,6 +489,9 @@ test('plays a sound file from the sound folders for the room, or stops the music
         ]);
         await client.callTool({ name: 'bgm_play', arguments: { sessionId: 'session', stop: true } });
         assert.deepEqual(calls[1], ['bgm_play', { stop: true }]);
+        await client.callTool({ name: 'bgm_play', arguments: { sessionId: 'session', file: '03_冒険者ギルド.mp3' } });
+        assert.equal(calls[2][1].identifier, sha(guild));
+        calls.length = 2;
         const missing = await client.callTool({ name: 'bgm_play', arguments: { sessionId: 'session', file: 'x.mp3' } });
         assert.equal(missing.structuredContent.error.code, 'NOT_FOUND');
         assert.equal(calls.length, 2);
@@ -655,4 +666,49 @@ test('says several lines in one call, each after the one before has had time to 
     },
     { sleep: async (ms) => void waits.push(ms) }
   );
+});
+
+test('dresses a table from the image and sound folders, sending a picture used twice once', async () => {
+  await workspace(async ({ root, audio }) => {
+    const folder = path.join(root, 'images');
+    await mkdir(folder);
+    const field = Buffer.from([3, 1, 4]);
+    const music = Buffer.from([1, 5, 9]);
+    await writeFile(path.join(folder, 'battlefield.webp'), field);
+    await writeFile(path.join(audio, 'battle.mp3'), music);
+    const calls = [];
+    await connected(
+      async (command, args) => {
+        calls.push([command, args]);
+        return { ok: true, data: {} };
+      },
+      async (client) => {
+        await client.callTool({
+          name: 'table_set',
+          arguments: {
+            sessionId: 'session',
+            identifier: 'battle-table',
+            surfaceFile: 'battlefield.webp',
+            backgroundFile: 'battlefield.webp',
+            filter: 'black',
+            bgmFile: 'battle.mp3',
+          },
+        });
+        const [command, args] = calls[0];
+        assert.equal(command, 'table_set');
+        assert.equal(args.surface, sha(field));
+        assert.equal(args.background, sha(field));
+        assert.equal(args.images.length, 1);
+        assert.equal(args.bgm, sha(music));
+        assert.equal(args.audios[0].name, 'battle.mp3');
+        assert.equal(args.filter, 'black');
+        const missing = await client.callTool({
+          name: 'table_set',
+          arguments: { sessionId: 'session', identifier: 't', bgmFile: 'none.mp3' },
+        });
+        assert.equal(missing.structuredContent.error.code, 'NOT_FOUND');
+      },
+      { templates: { images: folder, audio: [audio] } }
+    );
+  });
 });

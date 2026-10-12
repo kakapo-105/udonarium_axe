@@ -36,6 +36,7 @@ export const AUTOMATION_COMMANDS = [
   'vn_stage',
   'range_list',
   'range_set',
+  'table_set',
 ] as const;
 export type AutomationCommand = (typeof AUTOMATION_COMMANDS)[number];
 export const AUTOMATION_SCOPES = [
@@ -75,6 +76,7 @@ export const AUTOMATION_WRITES: readonly AutomationCommand[] = [
   'light_place',
   'vn_stage',
   'range_set',
+  'table_set',
 ];
 export type AutomationScope = (typeof AUTOMATION_SCOPES)[number];
 export type AutomationErrorCode =

@@ -43,6 +43,7 @@ import { DisclosureMode } from '@axe/domain/disclosure/disclosure';
 import { isTextureId, isWallTextureId } from '@axe/domain/media/texture-catalog';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
+import { FilterType } from '@axe/domain/tabletop/game-table';
 import { MapMaterial } from '@axe/domain/tabletop/map-blocks';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { TabletopObject } from '@axe/domain/tabletop/tabletop-object';
@@ -81,6 +82,7 @@ const ROOM_PREP_WRITES: readonly AutomationCommand[] = [
   'light_place',
   'vn_stage',
   'range_set',
+  'table_set',
 ];
 const REPLAY_WINDOW_MS = 5 * 60 * 1000;
 /**
@@ -158,7 +160,8 @@ function waitSecondsOf(value: unknown): number {
 /** How long a request may run before it is given up: a wait for chat gets its own wait and a margin. */
 function timeoutFor(request: AutomationRequest): number {
   if (request.command === 'table_create') return TABLE_CREATE_TIMEOUT_MS;
-  if (['room_template_load', 'bgm_play', 'audio_restore'].includes(request.command)) return ROOM_TEMPLATE_TIMEOUT_MS;
+  if (['room_template_load', 'bgm_play', 'audio_restore', 'table_set'].includes(request.command))
+    return ROOM_TEMPLATE_TIMEOUT_MS;
   if (request.command !== 'chat_wait') return REQUEST_TIMEOUT_MS;
   return waitSecondsOf(request.arguments['waitSeconds']) * 1000 + WAIT_MARGIN_MS;
 }
@@ -847,6 +850,35 @@ export class AutomationFacadeService {
         const px = unit === 'grid' ? (x + 0.5) * table.gridSize : x;
         const py = unit === 'grid' ? (y + 0.5) * table.gridSize : y;
         return { focus: this.sharedFocus.showPoint(px, py) };
+      }
+      case 'table_set': {
+        onlyKeys(a, ['identifier', 'surface', 'background', 'filter', 'bgm', 'images', 'audios']);
+        const table = this.roomPrep.table(textArgument(a['identifier']));
+        const picture = (key: string) => {
+          const value = a[key];
+          if (value === undefined) return undefined;
+          if (typeof value !== 'string' || !/^([0-9a-f]{64})?$/.test(value))
+            fail('INVALID_ARGUMENT', `${key} must be a picture’s SHA-256, or empty to clear it.`);
+          return value;
+        };
+        const filter = a['filter'];
+        if (filter !== undefined && filter !== 'none' && filter !== 'white' && filter !== 'black')
+          fail('INVALID_ARGUMENT', 'filter must be none, white or black.');
+        const bgm = a['bgm'];
+        if (bgm !== undefined && (typeof bgm !== 'string' || !/^([0-9a-f]{64}|stop)?$/.test(bgm)))
+          fail('INVALID_ARGUMENT', 'bgm must be a sound’s SHA-256, stop, or empty.');
+        return this.roomPrep.look(
+          table,
+          {
+            surface: picture('surface'),
+            background: picture('background'),
+            filter: filter === undefined ? undefined : filter === 'none' ? FilterType.NONE : (filter as FilterType),
+            bgm: bgm as string | undefined,
+            images: a['images'] === undefined ? [] : automationImagesOf(a['images']),
+            audios: a['audios'] === undefined ? [] : automationAudiosOf(a['audios']),
+          },
+          guard
+        );
       }
       case 'table_view': {
         onlyKeys(a, ['identifier', 'flat']);

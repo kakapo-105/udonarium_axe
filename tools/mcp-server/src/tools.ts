@@ -13,7 +13,15 @@ import {
   MAX_PIECES,
 } from '#mcp/piece-source.js';
 import { mapResult } from '#mcp/result-mapper.js';
-import { AudioLibrary, ImageLibrary, listTemplates, loadTemplate, type TemplateFolders } from '#mcp/template-source.js';
+import {
+  AudioLibrary,
+  audioNotes,
+  ImageLibrary,
+  listTemplates,
+  loadTemplate,
+  sameName,
+  type TemplateFolders,
+} from '#mcp/template-source.js';
 
 export interface SessionInvoker {
   invoke(
@@ -87,7 +95,7 @@ const FIELD_ATMOSPHERES = [
 function timeoutFor(command: string, args: Record<string, unknown>): number {
   if (command === 'table_create') return TABLE_CREATE_TIMEOUT_MS;
   if (command === 'room_template_load') return ROOM_TEMPLATE_TIMEOUT_MS;
-  if (command === 'bgm_play' || command === 'audio_restore') return BGM_PLAY_TIMEOUT_MS;
+  if (command === 'bgm_play' || command === 'audio_restore' || command === 'table_set') return BGM_PLAY_TIMEOUT_MS;
   if (command !== 'chat_wait') return DEFAULT_TIMEOUT_MS;
   const seconds = typeof args['waitSeconds'] === 'number' ? args['waitSeconds'] : 60;
   return seconds * 1000 + WAIT_MARGIN_MS;
@@ -454,6 +462,32 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       },
     },
     {
+      name: 'table_set',
+      read: false,
+      description:
+        "Dress a table as its settings do: surfaceFile / backgroundFile put a picture from the image folder on the table's surface or behind it (surface / background take a picture the room already holds by SHA-256, or empty to clear), filter (none, white, black) dims or lightens the picture behind so the table stands out, and bgmFile (a file in the sound folders) or bgm (a SHA-256 the room holds, stop for silence, empty to leave the music alone) is played whenever the table is chosen, at once if it is in view. Leave the surface of a generated dungeon or field alone: its floor is the map. For a battle board, the same picture on the surface and behind it with a filter reads well. Game master only; requires the prepare_room browser grant.",
+      shape: {
+        ...retry,
+        identifier: id,
+        surfaceFile: z.string().min(1).max(256).optional(),
+        backgroundFile: z.string().min(1).max(256).optional(),
+        surface: z
+          .string()
+          .regex(/^([0-9a-f]{64})?$/)
+          .optional(),
+        background: z
+          .string()
+          .regex(/^([0-9a-f]{64})?$/)
+          .optional(),
+        filter: z.enum(['none', 'white', 'black']).optional(),
+        bgmFile: z.string().min(1).max(256).optional(),
+        bgm: z
+          .string()
+          .regex(/^([0-9a-f]{64}|stop)?$/)
+          .optional(),
+      },
+    },
+    {
       name: 'table_view',
       read: false,
       description:
@@ -505,7 +539,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'room_template_list',
       read: true,
       description:
-        'List the room templates kept on this machine (rooms saved from Udonarium Axe and unzipped into the templates folder), each with the names of its tables and the description in its template.json, the sound files in the sound folders with the identifiers rooms know them by, and the pictures in the image folder with what its index.json says of each (kind: background, portrait, texture or wall; tags; note). Nothing in the room is read.',
+        'List the room templates kept on this machine (rooms saved from Udonarium Axe and unzipped into the templates folder), each with the names of its tables and the description in its template.json, the sound files in the sound folders with the identifiers rooms know them by and what the index.json of the sound folder says of each (use such as battle, town, dungeon, tension, ending; tags; note), and the pictures in the image folder with what its index.json says of each (kind: background, portrait, texture or wall; tags; note). Nothing in the room is read.',
       shape: {},
     },
     {
@@ -569,7 +603,15 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
             ok: true,
             data: {
               templates: await listTemplates(folders),
-              sounds: sounds.map((sound) => ({ file: sound.name, identifier: sound.identifier, size: sound.size })),
+              sounds: await (async () => {
+                const said = await audioNotes(folders.audio ?? []);
+                return sounds.map((sound) => ({
+                  file: sound.name,
+                  identifier: sound.identifier,
+                  size: sound.size,
+                  ...(said[sound.name.normalize('NFC')] ?? {}),
+                }));
+              })(),
               images: (await images.entries()).map(({ full: _full, ...image }) => image),
             },
           });
@@ -626,6 +668,36 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
         }
         if (tool.name === 'chat_send' && given['text'] === undefined)
           return mapResult(failure('INVALID_ARGUMENT', 'Give text or lines.'));
+        if (tool.name === 'table_set') {
+          const { surfaceFile, backgroundFile, bgmFile, ...rest } = given;
+          const pictures: unknown[] = [];
+          for (const [file, key] of [
+            [surfaceFile, 'surface'],
+            [backgroundFile, 'background'],
+          ] as const) {
+            if (file === undefined) continue;
+            if (rest[key] !== undefined)
+              return mapResult(failure('INVALID_ARGUMENT', `Give ${key} or ${key}File, not both.`));
+            const picture = await images.read(String(file));
+            if (!('identifier' in picture)) return mapResult(picture);
+            rest[key] = picture.identifier;
+            if (!pictures.some((held) => (held as { identifier: string }).identifier === picture.identifier))
+              pictures.push(picture);
+          }
+          if (pictures.length > 0) rest['images'] = pictures;
+          if (bgmFile !== undefined) {
+            if (rest['bgm'] !== undefined)
+              return mapResult(failure('INVALID_ARGUMENT', 'Give bgm or bgmFile, not both.'));
+            const entry = (await library.entries(folders.audio ?? [])).find((sound) =>
+              sameName(sound.name, String(bgmFile))
+            );
+            if (!entry)
+              return mapResult(failure('NOT_FOUND', `No sound file ${String(bgmFile)} in the sound folders.`));
+            rest['bgm'] = entry.identifier;
+            rest['audios'] = [await library.read(entry)];
+          }
+          args = rest;
+        }
         if (tool.name === 'room_audio_restore') {
           const probe = await session.invoke(
             'audio_restore',
@@ -651,7 +723,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
             const sounds = await library.entries(folders.audio ?? []);
             const entry =
               file !== undefined
-                ? sounds.find((sound) => sound.name === file)
+                ? sounds.find((sound) => sameName(sound.name, String(file)))
                 : sounds.find((sound) => sound.identifier === rest['identifier']);
             if (file !== undefined && !entry)
               return mapResult(failure('NOT_FOUND', `No sound file ${String(file)} in the sound folders.`));

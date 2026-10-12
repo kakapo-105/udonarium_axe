@@ -33,6 +33,20 @@ const AUDIO_TYPES: Record<string, string> = {
   webm: 'audio/webm',
   flac: 'audio/flac',
 };
+/**
+ * A file name as the master would type it. Names made on some systems spell a voiced kana as the
+ * kana and a separate mark (NFD), which looks the same but compares unequal, so every name is
+ * compared in its composed form.
+ */
+export function sameName(a: string, b: string): boolean {
+  return a.normalize('NFC') === b.normalize('NFC');
+}
+
+/** An index keyed by file name, with every key in its composed form. */
+function composedKeys<T>(index: Record<string, T>): Record<string, T> {
+  return Object.fromEntries(Object.entries(index).map(([key, value]) => [key.normalize('NFC'), value]));
+}
+
 const SAVED_PICTURE = /^([0-9a-f]{64})\.([a-z0-9]+)$/;
 /** Where a saved room names a sound: a table's music, a cut-in's sound and the sounds of its scene. */
 const HEARD = [
@@ -286,7 +300,7 @@ export class ImageLibrary {
         const type = IMAGE_TYPES[path.extname(file.name).slice(1).toLowerCase()];
         if (!file.isFile() || !type) continue;
         const size = (await stat(full)).size;
-        const said = index[relative] ?? {};
+        const said = index[relative.normalize('NFC')] ?? {};
         found.push({
           file: relative,
           full,
@@ -306,7 +320,7 @@ export class ImageLibrary {
   async read(file: string): Promise<TemplateImage | FacadeResult> {
     if (!this.folder)
       return failure('NOT_READY', 'No image folder is set. Start the MCP server with UDONARIUM_IMAGE_DIR.');
-    const entry = (await this.entries()).find((image) => image.file === file);
+    const entry = (await this.entries()).find((image) => sameName(image.file, file));
     if (!entry) return failure('NOT_FOUND', `No picture ${file} in the image folder.`);
     if (entry.size > MAX_IMAGE_BYTES) return failure('INVALID_ARGUMENT', `Picture ${file} is over 2 MB.`);
     const bytes = await readFile(entry.full);
@@ -321,10 +335,28 @@ export class ImageLibrary {
     try {
       const parsed: unknown = JSON.parse(await readFile(path.join(this.folder!, IMAGE_INDEX), 'utf8'));
       return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-        ? (parsed as Record<string, Record<string, unknown>>)
+        ? composedKeys(parsed as Record<string, Record<string, unknown>>)
         : {};
     } catch {
       return {};
     }
   }
+}
+
+/**
+ * What the master says of each sound, from `index.json` in the sound folders
+ * ({"<file>": {"use", "tags", "note"}}), so the model can choose music for a scene without hearing it.
+ */
+export async function audioNotes(folders: readonly string[]): Promise<Record<string, Record<string, unknown>>> {
+  const notes: Record<string, Record<string, unknown>> = {};
+  for (const folder of folders) {
+    try {
+      const parsed: unknown = JSON.parse(await readFile(path.join(folder, 'index.json'), 'utf8'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+        Object.assign(notes, composedKeys(parsed as Record<string, Record<string, unknown>>));
+    } catch {
+      // A folder with no index, or one that cannot be read, simply says nothing.
+    }
+  }
+  return notes;
 }

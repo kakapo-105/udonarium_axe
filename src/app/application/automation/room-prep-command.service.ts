@@ -1,4 +1,5 @@
 import { inject, Injectable } from '@angular/core';
+import { AutomationAudio, AutomationAudioService } from '@axe/application/automation/automation-audio.service';
 import { fail } from '@axe/application/automation/automation-contract';
 import { AutomationImage, AutomationImageService } from '@axe/application/automation/automation-image.service';
 import { MAP_GENERATOR, MapRequest } from '@axe/application/automation/map-generator';
@@ -13,7 +14,8 @@ import { ChatTabPermission } from '@axe/domain/chat/chat-tab-permission';
 import { DisclosureMode } from '@axe/domain/disclosure/disclosure';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
-import { GameTable } from '@axe/domain/tabletop/game-table';
+import { FilterType, GameTable } from '@axe/domain/tabletop/game-table';
+import { TABLE_BGM_STOP } from '@axe/domain/tabletop/table-bgm';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { TextNote } from '@axe/domain/tabletop/text-note';
 
@@ -30,6 +32,20 @@ export interface BoardRequest {
   images: readonly AutomationImage[];
   grid: boolean;
   flat: boolean;
+}
+
+/** What a table looks and sounds like; each part left out is left as it is. */
+export interface TableLook {
+  /** The picture the table's surface wears, by its SHA-256; empty clears it. */
+  surface?: string;
+  /** The picture behind the table, by its SHA-256; empty clears it. */
+  background?: string;
+  /** How the picture behind is dimmed or lightened so the table stands out. */
+  filter?: FilterType;
+  /** The music played when the table is chosen: a sound's SHA-256, `stop` for silence, or empty to leave the music alone. */
+  bgm?: string;
+  images: readonly AutomationImage[];
+  audios: readonly AutomationAudio[];
 }
 
 export interface NoteRequest {
@@ -62,6 +78,7 @@ export class RoomPrepCommandService {
   private readonly tableBgm = inject(TableBgmService);
   private readonly cutIns = inject(CutInService);
   private readonly images = inject(AutomationImageService);
+  private readonly audios = inject(AutomationAudioService);
 
   /** Every table in the room, with which one is in view. */
   list() {
@@ -154,6 +171,37 @@ export class RoomPrepCommandService {
     const table = this.store.get(identifier);
     if (!(table instanceof GameTable)) fail('NOT_FOUND', 'No table has that identifier.');
     return table;
+  }
+
+  /**
+   * Dresses a table: the picture on its surface, the picture behind it and how that is filtered, and
+   * the music chosen with it, as the table settings do. Pictures and sounds brought along are taken in
+   * first. Music set on the table in view starts at once.
+   */
+  async look(table: GameTable, look: TableLook, guard: () => void) {
+    const pictures = await this.images.check(look.images);
+    const sounds = await this.audios.check(look.audios);
+    guard();
+    await this.images.add(pictures);
+    await this.audios.add(sounds);
+    guard();
+    if (look.bgm && look.bgm !== 'stop' && !this.audios.has(look.bgm))
+      fail('NOT_FOUND', 'The room holds no such sound for the music.');
+    if (look.surface !== undefined) table.imageIdentifier = look.surface || ImageFile.Empty.identifier;
+    if (look.background !== undefined) table.backgroundImageIdentifier = look.background || ImageFile.Empty.identifier;
+    if (look.filter !== undefined) table.backgroundFilterType = look.filter;
+    if (look.bgm !== undefined) {
+      table.bgm = look.bgm === 'stop' ? TABLE_BGM_STOP : look.bgm;
+      if (this.tables.viewTableIdentifier === table.identifier) this.tableBgm.applyFor(table);
+    }
+    return {
+      identifier: table.identifier,
+      name: table.name.slice(0, 256),
+      surface: table.imageIdentifier,
+      background: table.backgroundImageIdentifier,
+      filter: table.backgroundFilterType || 'none',
+      bgm: table.bgm === TABLE_BGM_STOP ? 'stop' : table.bgm || null,
+    };
   }
 
   /** Puts a table in view for the whole room, playing its music and cut-ins as the table settings do. */

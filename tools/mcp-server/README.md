@@ -103,7 +103,7 @@ GMであっても所有物への限定は自動では外れません。ゲスト
 再読み込み・接続先・ロールの変更でも許可は解除されます。
 移動の途中で止めた場合、コマは最後に到達したマスに残ります。そこで既に発動した罠やHP変更は取り消しません。
 
-## 37のツールをIDで使う
+## 38のツールをIDで使う
 
 まず `session_get` で `sessionId` とチャットタブのIDを取得し、`scene_list` でコマのIDを調べます。
 同名のコマは複数返ります。更新対象を名前だけで決める機能はありません。
@@ -139,6 +139,7 @@ GMであっても所有物への限定は自動では外れません。ゲスト
 | `bgm_play`            | 音声フォルダの曲か部屋にある曲を、部屋全体のBGMとして流す・止める。GM のみ                 |
 | `room_audio_restore`  | 保存データから読み込んだ部屋に、卓とカットインが使う音声を音声フォルダから戻す。GM のみ    |
 | `table_view`          | 卓の 2D/3D の推奨を変える。表示設定が「自動」の人だけが従う。GM のみ                       |
+| `table_set`           | 卓の床の画像・背景画像・背景フィルタ・BGM を、卓の設定と同じように変える。GM のみ          |
 | `view_focus`          | 全員の視点を駒か座標へ寄せ、駒なら点滅させる。各自オフにできる。GM のみ                    |
 | `fog_reveal`          | 表示中の卓の矩形を探索済みにして、霧を晴らす。GM のみ                                      |
 | `terrain_list`        | 表示中の卓の扉・小物・明かりの一覧。伏せた物（隠し扉など）も含む。GM のみ                  |
@@ -325,6 +326,11 @@ Udonarium Axe で作って保存したルームを、テンプレートとして
   呼び出しの回数が減るので、トークンの消費も抑えられます
 - `chat_send` の `style` で、発言を地の文（`narration`）・場所の見出し（`location`）・場面の見出し（`scene`）として目立たせられます。
   ビジュアルノベル表示にも反映されます
+- `table_set` で卓の見た目と音を整えます。`backgroundFile` と `filter`（`black`・`white`）で地図の後ろに雰囲気の合う絵を置き、
+  `bgmFile` でその卓を選んだときに流れる BGM を決めます。戦闘の盤面は、同じ絵を `surfaceFile` と `backgroundFile` の両方に使うと見栄えがします。
+  生成したダンジョンやフィールドの床は地図そのものなので、`surfaceFile` は使いません
+- 音声フォルダに `index.json`（`{"<ファイル名>": {"use": "battle", "tags": [...], "note": "..."}}`）を置くと、`room_template_list` の `sounds` に
+  曲ごとの用途とタグが付き、AI が場面に合う曲を選べます
 - `table_view` で卓の 2D/3D の推奨を場面ごとに変えます。表示設定で視点を「自動」にしている人だけが切り替わり、自分で選んだ人はそのままです。
   `table_create` の dungeon / field にも `flat` があります
 - 一枚絵の場面は、画像フォルダの絵を `table_create(kind="board", backgroundFile=...)` で卓にして、NPC の駒を置きます。
@@ -404,7 +410,7 @@ SkyWayの実回線・認証・部屋への参加は検証対象に含めてい�
 - `automationPreset=gm` で、起動したときから GM として全部を許可した状態にできるようにしました
 - 保存したルームをテンプレートとして足す `room_template_load` と一覧の `room_template_list`、BGM を流す `bgm_play`、読み込んだ部屋に音声を戻す `room_audio_restore` を加えました。
 - 盤面での探索・描写のために、`table_view` / `view_focus` / `fog_reveal` / `terrain_list` / `door_set` / `light_place` / `vn_stage`、
-  `range_list` / `range_set`、`chat_wait` の `pieces`、`chat_send` の `style`、`table_create` の床・壁・背景の指定を加えました。画像は `UDONARIUM_IMAGE_DIR` のフォルダから渡します
+  `range_list` / `range_set` / `table_set`、`chat_wait` の `pieces`、`chat_send` の `style`、`table_create` の床・壁・背景の指定を加えました。画像は `UDONARIUM_IMAGE_DIR` のフォルダから渡します
   保存データに入らない音声は、手元のフォルダから中身の SHA-256 で探して登録します
 - `character_create` で、Udonarium Axe の駒 XML と、それが使う画像を受け付けるようにしました。画像は SHA-256 を確かめてから登録します
 - 2 画面テストの土台で、本物の接続を始めないようにしました。届かない接続先への再試行が尽きると接続終了と扱われ、長いテストの途中でAI操作が止まっていたためです
