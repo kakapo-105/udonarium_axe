@@ -688,6 +688,23 @@ describe('AutomationFacadeService', () => {
       expect((await wait()).data.timedOut).toBe(true);
     });
 
+    it('hands over a piece moved by hand even when it counts as automation’s own, but not one it moved itself', async () => {
+      // Offline, a player's piece belongs to nobody, which is what automation's own count as.
+      piece.owner = 'operator';
+      expect((await wait({ pieces: true })).data.timedOut).toBe(true);
+
+      piece.location = { ...piece.location, x: 250, y: 50 };
+      const moved = (await wait({ pieces: true })).data as unknown as { moves: { identifier: string }[] };
+      expect(moved.moves).toMatchObject([{ identifier: piece.identifier, x: 5, y: 1 }]);
+
+      const sent = move({ x: 1, y: 1 });
+      let settled = false;
+      void sent.finally(() => (settled = true));
+      for (let step = 0; step < 100 && !settled; step++) await vi.advanceTimersByTimeAsync(100);
+      expect((await sent).ok).toBe(true);
+      expect((await wait({ pieces: true })).data.timedOut).toBe(true);
+    });
+
     it('waits only on the tabs named, and refuses tabs it cannot read', async () => {
       const other = new ChatTab();
       other.name = 'Chatter';
