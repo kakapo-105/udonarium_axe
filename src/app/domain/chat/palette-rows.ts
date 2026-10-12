@@ -117,3 +117,11 @@ export function paletteCommandGroups(lines: readonly string[]): PaletteCommandGr
 
   return groups.filter((group) => group.lines.length > 0);
 }
+
+/**
+ * A palette line as it is said: each `\n` written in it becomes a real line break, so a line
+ * that casts a spell can carry its damage and its cost as commands of their own lines.
+ */
+export function paletteLineAsChat(line: string): string {
+  return line.replace(/\\n/g, '\n');
+}

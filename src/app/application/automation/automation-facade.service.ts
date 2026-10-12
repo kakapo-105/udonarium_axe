@@ -39,7 +39,7 @@ import { GameCharacter } from '@axe/domain/character/game-character';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { canRoleSpeakTab, canRoleViewTab } from '@axe/domain/chat/chat-tab-permission';
-import { PaletteRow, paletteRowsOf } from '@axe/domain/chat/palette-rows';
+import { paletteLineAsChat, PaletteRow, paletteRowsOf } from '@axe/domain/chat/palette-rows';
 import { DisclosureMode } from '@axe/domain/disclosure/disclosure';
 import { isTextureId, isWallTextureId } from '@axe/domain/media/texture-catalog';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
@@ -627,7 +627,8 @@ export class AutomationFacadeService {
           fail('CONFLICT', 'The palette line changed since it was read.');
         const targets = this.targets(a['targetIds']);
         if (a['dryRun'] === true) return { tabId: tab.identifier, text: row.text, dryRun: true };
-        return this.session.speakAs(tab, piece, row.text, targets, guard);
+        // As clicking the line does: each written \n parts it into lines, each a command of its own.
+        return this.session.speakAs(tab, piece, paletteLineAsChat(row.text), targets, guard);
       }
       case 'buff_list': {
         onlyKeys(a, ['identifier']);

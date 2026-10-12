@@ -31,7 +31,13 @@ import { ChatPalette } from '@axe/domain/chat/chat-palette';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { canRoleSpeakTab, canRoleViewTab } from '@axe/domain/chat/chat-tab-permission';
-import { PaletteHeadingNode, paletteHeadingTree, PaletteRow, paletteRowsOf } from '@axe/domain/chat/palette-rows';
+import {
+  PaletteHeadingNode,
+  paletteHeadingTree,
+  paletteLineAsChat,
+  PaletteRow,
+  paletteRowsOf,
+} from '@axe/domain/chat/palette-rows';
 import { DataElement } from '@axe/domain/data/data-element';
 import { emptyHotbarSlotDraft } from '@axe/domain/hotbar/hotbar-draft';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
@@ -366,7 +372,7 @@ export class ChatPaletteComponent {
    * clears the autocomplete highlight.
    */
   selectPalette(line: string) {
-    const multiLine = line.replace(/\\n/g, '\n');
+    const multiLine = paletteLineAsChat(line);
     this.text.set(multiLine);
     const selectObj = this.completeSelectRef()?.nativeElement;
     if (selectObj) {
@@ -405,7 +411,7 @@ export class ChatPaletteComponent {
    * within 400 ms.
    */
   clickPalette(line: string) {
-    const multiLine = line.replace(/\\n/g, '\n');
+    const multiLine = paletteLineAsChat(line);
     if (this.doubleClickTimer && this.text() === multiLine) {
       clearTimeout(this.doubleClickTimer);
       this.doubleClickTimer = null;

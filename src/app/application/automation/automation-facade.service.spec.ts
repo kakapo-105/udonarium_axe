@@ -395,7 +395,7 @@ describe('AutomationFacadeService', () => {
     let enemy: GameCharacter;
     beforeEach(() => {
       DataElement.findElementByReference(piece.rootDataElement!, '移動')!.value = 5;
-      piece.chatPalette!.setPalette('◆攻撃\n2d6+{移動} 攻撃\n//威力=3\nt:HP-{威力}');
+      piece.chatPalette!.setPalette('◆攻撃\n2d6+{移動} 攻撃\n//威力=3\nt:HP-{威力}\nボルト\\n　t:HP-{威力}\\n　:MP-5');
       enemy = GameCharacter.create('Enemy', 1, '');
       enemy.location = { name: 'table', x: 300, y: 300 };
     });
@@ -417,6 +417,7 @@ describe('AutomationFacadeService', () => {
             { lineIndex: 1, kind: 'command', text: '2d6+{移動} 攻撃' },
             { lineIndex: 2, kind: 'variable', text: '//威力=3' },
             { lineIndex: 3, kind: 'command', text: 't:HP-{威力}' },
+            { lineIndex: 4, kind: 'command', text: 'ボルト\\n　t:HP-{威力}\\n　:MP-5' },
           ],
           untrustedContent: true,
         },
@@ -444,6 +445,15 @@ describe('AutomationFacadeService', () => {
       expect((await say({ lineIndex: 3, targetIds: [enemy.identifier] })).ok).toBe(true);
 
       expect(said()).toEqual(['t:HP-3 [Enemy]']);
+    });
+
+    it('parts a line at each written \\n, as clicking it does, so a spell hits its target and is paid for', async () => {
+      policy.setScope('use_palette', true);
+      const spell = await say({ lineIndex: 4, targetIds: [enemy.identifier] });
+
+      expect(spell).toMatchObject({ ok: true });
+      expect(said()[0]).not.toContain('\\n');
+      expect(said()[0].split('\n')).toEqual(['ボルト', '　t:HP-3', '　:MP-5 [Enemy]']);
     });
 
     it('says only command lines, and refuses a line edited since it was read', async () => {
