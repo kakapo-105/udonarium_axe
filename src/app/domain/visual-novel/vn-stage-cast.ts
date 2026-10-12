@@ -20,6 +20,7 @@ export interface VnStageSource {
   vnPortraitPos: number;
   isSystemMessage: boolean;
   isDicebot: boolean;
+  /** Whether the line came from a piece still in play; nobody stands for anything else. */
   isGameCharacter: boolean;
   isDiceCommand: boolean;
   emote: VnEmote;

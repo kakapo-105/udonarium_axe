@@ -33,6 +33,7 @@ import { DataElement } from '@axe/domain/data/data-element';
 import { DiceBot } from '@axe/domain/dice/dice-bot';
 import { Jukebox } from '@axe/domain/media/jukebox';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 import { encodeVnEmote, VN_EMOTION_MARK_CHARS, vnEmoteOf, VnEmotionMark } from '@axe/domain/visual-novel/vn-emote';
 import {
   isVnPortraitPosSet,
@@ -98,6 +99,9 @@ import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { Z_VISUAL_NOVEL_PANEL, Z_VISUAL_NOVEL_PANEL_ABOVE } from '@axe/ui/z-layers';
 import { TranslocoModule } from '@jsverse/transloco';
 import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
+
+/** Where a piece that has left the scene is kept: out of sight, or in the graveyard. */
+const OFF_STAGE_LOCATIONS: ReadonlySet<string> = new Set([CONCEALED_LOCATION, 'graveyard']);
 
 const WHEEL_THROTTLE_MS = 160;
 
@@ -442,9 +446,16 @@ export class VisualNovelOverlayComponent {
     return toPortraitSlot(source.imagePos) ?? 0;
   }
 
+  /**
+   * Whether a line came from a piece still in play. One the master has put out of sight or sent to
+   * the graveyard has walked out of the scene, so it no longer stands on the stage, whatever it said.
+   */
   private isGameCharacterSender(identifier: string): boolean {
     if (identifier.length < 1) return false;
-    return this.objectStore.get(identifier) instanceof GameCharacter;
+    const character = this.objectStore.get(identifier);
+    if (!(character instanceof GameCharacter)) return false;
+    this.objectChange.versionOf(character.identifier)();
+    return !OFF_STAGE_LOCATIONS.has(character.location.name);
   }
 
   readonly activeStageCharacter = computed(
