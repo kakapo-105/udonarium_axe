@@ -550,15 +550,14 @@ export class AutomationFacadeService {
           a['tabIds'] === undefined
             ? visible
             : textsOf(a['tabIds'], 'tabIds', MAX_WAIT_TABS).map((identifier) => this.tab(identifier));
-        // The players' pieces: those in view on the table that are not automation's own.
+        // Every piece in view on the table. Who owns a piece says nothing of who moved it: offline,
+        // a player's piece belongs to nobody, which is what automation's own count as there too.
+        // What automation moves itself through piece_move is taken note of as it moves.
         const pieces = booleanOf(a['pieces'], 'pieces')
           ? () =>
               this.store
                 .getObjects<GameCharacter>(GameCharacter)
-                .filter(
-                  (piece) =>
-                    piece.location.name === 'table' && this.policy.canSee(piece) && !this.policy.isMine(piece.owner)
-                )
+                .filter((piece) => piece.location.name === 'table' && this.policy.canSee(piece))
           : undefined;
         const waited = await this.chatWait.wait(
           tabs,

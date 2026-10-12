@@ -10,7 +10,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { appUrl } from '../dist/browser-session.js';
 import { pieceSourceOrigins } from '../dist/piece-source.js';
-import { createServer } from '../dist/tools.js';
+import { createServer, lineGapMs } from '../dist/tools.js';
 
 test('the real stdio entry point lists tools and reports missing Chromium without corrupting stdout', async () => {
   const client = new Client({ name: 'stdio-contract-test', version: '1' });
@@ -590,4 +590,69 @@ test('builds scenes and maps from pictures in the image folder, which reach the 
       { templates: { images: folder } }
     );
   });
+});
+
+test('says several lines in one call, each after the one before has had time to be read', async () => {
+  const calls = [];
+  const waits = [];
+  await connected(
+    async (command, args, requestId) => {
+      calls.push([command, args, requestId]);
+      if (args.text === '失敗') return { ok: false, error: { code: 'FORBIDDEN', message: 'no' } };
+      return { ok: true, data: { identifier: `m${calls.length}` } };
+    },
+    async (client) => {
+      const result = await client.callTool({
+        name: 'chat_send',
+        arguments: {
+          sessionId: 'session',
+          requestId: 'scene',
+          tabId: 'main',
+          lines: [
+            { text: '村の広場', style: 'location' },
+            { text: '夕暮れの広場に人影はまばらだ。', style: 'narration' },
+            { text: 'よく来てくれた', characterId: 'chief' },
+          ],
+        },
+      });
+      assert.deepEqual(result.structuredContent.data.sent, [
+        { identifier: 'm1' },
+        { identifier: 'm2' },
+        { identifier: 'm3' },
+      ]);
+      assert.deepEqual(
+        calls.map(([command, args, requestId]) => [command, args, requestId]),
+        [
+          ['chat_send', { tabId: 'main', text: '村の広場', style: 'location' }, 'scene:0'],
+          ['chat_send', { tabId: 'main', text: '夕暮れの広場に人影はまばらだ。', style: 'narration' }, 'scene:1'],
+          ['chat_send', { tabId: 'main', text: 'よく来てくれた', characterId: 'chief' }, 'scene:2'],
+        ]
+      );
+      assert.deepEqual(waits, [lineGapMs('村の広場'), lineGapMs('夕暮れの広場に人影はまばらだ。')]);
+      assert.equal(lineGapMs('あ'), 1500);
+      assert.equal(lineGapMs('あ'.repeat(1000)), 15000);
+
+      calls.length = 0;
+      const stopped = await client.callTool({
+        name: 'chat_send',
+        arguments: {
+          sessionId: 'session',
+          tabId: 'main',
+          lines: [{ text: 'ひとつめ' }, { text: '失敗' }, { text: 'みっつめ' }],
+        },
+      });
+      assert.equal(stopped.structuredContent.data.sent.length, 1);
+      assert.equal(stopped.structuredContent.data.failed.index, 1);
+      assert.equal(calls.length, 2);
+
+      const both = await client.callTool({
+        name: 'chat_send',
+        arguments: { sessionId: 'session', tabId: 'main', text: 'x', lines: [{ text: 'y' }] },
+      });
+      assert.equal(both.structuredContent.error.code, 'INVALID_ARGUMENT');
+      const none = await client.callTool({ name: 'chat_send', arguments: { sessionId: 'session', tabId: 'main' } });
+      assert.equal(none.structuredContent.error.code, 'INVALID_ARGUMENT');
+    },
+    { sleep: async (ms) => void waits.push(ms) }
+  );
 });

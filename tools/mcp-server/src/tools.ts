@@ -30,6 +30,8 @@ export interface ServerOptions {
   pieceSources?: readonly string[];
   fetchText?: FetchText;
   fetchBytes?: FetchBytes;
+  /** Waits between the lines of one chat_send; replaced in tests. */
+  sleep?: (ms: number) => Promise<void>;
   /** Where room templates and sounds are kept on this machine. None, and no template can be loaded. */
   templates?: TemplateFolders;
 }
@@ -42,6 +44,17 @@ const TABLE_CREATE_TIMEOUT_MS = 130000;
 /** A template brings its pictures and sounds, which the browser checks for a minute at most. */
 const ROOM_TEMPLATE_TIMEOUT_MS = 70000;
 const BGM_PLAY_TIMEOUT_MS = 70000;
+/** At most this many lines go in one chat_send. */
+const MAX_CHAT_LINES = 20;
+
+/**
+ * How long a line is given before the next follows: novel mode shows only the newest line, so one
+ * that arrives while the last is still being typed out hides it. The wait covers typing at the slow
+ * speed (60 ms a character) and a moment to read, within bounds.
+ */
+export function lineGapMs(text: string): number {
+  return Math.min(15000, Math.max(1500, [...text].length * 60 + 1200));
+}
 /** The tools answered here from this machine's folders, without the browser. */
 const LOCAL_TOOLS = new Set(['room_template_list']);
 // The atmospheres the map generator offers (DUNGEON_ATMOSPHERE_IDS and FIELD_ATMOSPHERE_IDS in the app);
@@ -92,6 +105,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
   const folders = options.templates ?? {};
   const library = new AudioLibrary();
   const images = new ImageLibrary(folders.images);
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const limit = z.number().int().min(1).max(100).optional();
   const retry = { requestId: z.string().min(1).max(128).optional(), sessionId: id };
   const definitions = [
@@ -135,13 +149,26 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'chat_send',
       read: false,
       description:
-        'Send public chat in an allowed tab as yourself or a controllable character. BCDice expressions are supported. A single resource command on the speaking character (:HP-5, :HP-2d6, :HP-if([2d6]>=10,5,0), $1 reads the first bracketed roll again) also needs edit_resource; write it without spaces. References, targets and effect macros are excluded. style stages the line as the kinds in the chat input do, standing out in the log and in novel mode: narration (description by the narrator), location (a place heading, when the party arrives somewhere) or scene (a scene heading, when the scene changes). Requires a browser grant.',
+        'Send public chat in an allowed tab as yourself or a controllable character. BCDice expressions are supported. A single resource command on the speaking character (:HP-5, :HP-2d6, :HP-if([2d6]>=10,5,0), $1 reads the first bracketed roll again) also needs edit_resource; write it without spaces. References, targets and effect macros are excluded. style stages the line as the kinds in the chat input do, standing out in the log and in novel mode: narration (description by the narrator), location (a place heading, when the party arrives somewhere) or scene (a scene heading, when the scene changes). Give text for one line, or lines for several said in order in one call (a heading, the narration, then each NPC line as that NPC piece): each waits for the one before to be typed out and read in novel mode, so none is hidden, and the call returns once all are said (sent lists each identifier; on a failure the rest are not said and failed says which and why). Prefer lines to several calls. Requires a browser grant.',
       shape: {
         ...retry,
         tabId: id,
-        text: z.string().min(1).max(2000),
+        text: z.string().min(1).max(2000).optional(),
         characterId: id.optional(),
         style: z.enum(['normal', 'narration', 'location', 'scene']).optional(),
+        lines: z
+          .array(
+            z
+              .object({
+                text: z.string().min(1).max(2000),
+                characterId: id.optional(),
+                style: z.enum(['normal', 'narration', 'location', 'scene']).optional(),
+              })
+              .strict()
+          )
+          .min(1)
+          .max(MAX_CHAT_LINES)
+          .optional(),
         dryRun: z.boolean().optional(),
       },
     },
@@ -575,6 +602,30 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
           }
           args = rest;
         }
+        if (tool.name === 'chat_send' && given['lines'] !== undefined) {
+          const { lines, tabId, dryRun, ...rest } = given;
+          if (Object.keys(rest).length > 0)
+            return mapResult(failure('INVALID_ARGUMENT', 'Give lines, or text with characterId and style, not both.'));
+          const base = typeof requestId === 'string' ? requestId : randomUUID();
+          const said: unknown[] = [];
+          const list = lines as { text: string; characterId?: string; style?: string }[];
+          for (const [index, line] of list.entries()) {
+            if (index > 0 && dryRun !== true) await sleep(lineGapMs(list[index - 1].text));
+            const result = await session.invoke(
+              'chat_send',
+              { tabId, ...line, ...(dryRun === true ? { dryRun } : {}) },
+              `${base}:${index}`.slice(0, 128),
+              typeof sessionId === 'string' ? sessionId : undefined,
+              DEFAULT_TIMEOUT_MS
+            );
+            if (!result.ok)
+              return mapResult({ ok: true, data: { sent: said, failed: { index, error: result.error } } });
+            said.push(result.data);
+          }
+          return mapResult({ ok: true, data: { sent: said } });
+        }
+        if (tool.name === 'chat_send' && given['text'] === undefined)
+          return mapResult(failure('INVALID_ARGUMENT', 'Give text or lines.'));
         if (tool.name === 'room_audio_restore') {
           const probe = await session.invoke(
             'audio_restore',
