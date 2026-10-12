@@ -132,11 +132,16 @@ export class TabletopService {
     const viewTable = this.tableSelecter.viewTable;
     return viewTable ? viewTable.ambiences : [];
   });
-  private textNoteCache = new TabletopCache<TextNote>(() => this.objectStore.getObjects(TextNote));
+  // A note or a die put out of sight or sent to the graveyard is still in the room, but no longer drawn.
+  private textNoteCache = new TabletopCache<TextNote>(() =>
+    this.objectStore.getObjects(TextNote).filter((obj) => obj.isVisibleOnTable)
+  );
   private coinCache = new TabletopCache<Coin>(() =>
     this.objectStore.getObjects(Coin).filter((obj) => obj.isVisibleOnTable)
   );
-  private diceSymbolCache = new TabletopCache<DiceSymbol>(() => this.objectStore.getObjects(DiceSymbol));
+  private diceSymbolCache = new TabletopCache<DiceSymbol>(() =>
+    this.objectStore.getObjects(DiceSymbol).filter((obj) => obj.isVisibleOnTable)
+  );
 
   /** The characters out on the table rather than put away. */
   get characters(): GameCharacter[] {
@@ -174,11 +179,11 @@ export class TabletopService {
   get ambiences(): TableAmbience[] {
     return this.ambienceCache.objects;
   }
-  /** Every note in the room, wherever it is. */
+  /** The notes out on the table. */
   get textNotes(): TextNote[] {
     return this.textNoteCache.objects;
   }
-  /** Every die in the room, wherever it is. */
+  /** The dice out on the table. */
   get diceSymbols(): DiceSymbol[] {
     return this.diceSymbolCache.objects;
   }

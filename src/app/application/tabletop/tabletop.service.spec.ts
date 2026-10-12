@@ -6,11 +6,14 @@ import { emitXmlLoaded } from '@axe/core/event/domain-events';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { xml2element } from '@axe/core/util/xml-util';
 import { GameCharacter } from '@axe/domain/character/game-character';
+import { DiceSymbol, DiceType } from '@axe/domain/dice/dice-symbol';
 import { Party } from '@axe/domain/party/party';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 import { GameTable } from '@axe/domain/tabletop/game-table';
 import { LightSource } from '@axe/domain/tabletop/light-source';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
+import { TextNote } from '@axe/domain/tabletop/text-note';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 
 describe('TabletopService', () => {
@@ -49,6 +52,24 @@ describe('TabletopService', () => {
 
       const [character] = ObjectStore.instance.getObjects(GameCharacter);
       expect(character.partyIdentifier).toBe('');
+    });
+  });
+
+  describe('the notes and dice it draws', () => {
+    it('leaves out a note or a die put out of sight or sent to the graveyard', () => {
+      const out = TextNote.create('out', '');
+      const concealed = TextNote.create('concealed', '');
+      const buried = TextNote.create('buried', '');
+      const die = DiceSymbol.create('die', DiceType.D6, 1);
+      out.setLocation('table');
+      concealed.setLocation(CONCEALED_LOCATION);
+      buried.setLocation('graveyard');
+      die.setLocation(CONCEALED_LOCATION);
+      const service = TestBed.inject(TabletopService);
+
+      expect(service.textNotes).toEqual([out]);
+      expect(service.diceSymbols).toEqual([]);
+      for (const thing of [out, concealed, buried, die]) thing.destroy();
     });
   });
 
