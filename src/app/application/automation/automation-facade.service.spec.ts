@@ -340,7 +340,7 @@ describe('AutomationFacadeService', () => {
     expect((await move()).ok).toBe(true);
     expect(piece.location).toMatchObject({ x: 150, y: 100 });
   });
-  it('moves a piece standing up on terrain only by a strict walk, which works out the ground', async () => {
+  it('sets a piece up on terrain down on the ground by a plain move, and walks it by a strict one', async () => {
     // A block one cell high to stand on; with nothing under it, gravity would drop the piece to the floor.
     const block = Terrain.create('Block', 1, 1, 1, '', '');
     block.location = { name: 'table', x: 50, y: 50 };
@@ -348,8 +348,11 @@ describe('AutomationFacadeService', () => {
     piece.posZ = 50;
     // Config outlives each test, so a strict rule left on by another one is switched off here.
     Config.instance.moveStrict = false;
-    error(await move(), 'FORBIDDEN');
-    expect(piece.location.x).toBe(50);
+    expect((await move()).ok).toBe(true);
+    expect(piece.location).toMatchObject({ x: 150, y: 100 });
+    expect(piece.posZ).toBe(0);
+    piece.location = { ...piece.location, x: 50, y: 50 };
+    piece.posZ = 50;
     Config.instance.moveStrict = true;
     DataElement.findElementByReference(piece.rootDataElement!, '移動')!.value = 5;
     expect((await move()).ok).toBe(true);
@@ -1167,6 +1170,43 @@ describe('AutomationFacadeService', () => {
         error(await call('door_set', { identifier: piece.identifier, open: true }), 'NOT_FOUND');
       });
 
+      it('gives the ground a building covers, so a cell beside it can be picked', async () => {
+        beGameMaster();
+        const building = Terrain.create('建物', 2, 3, 2, '', '');
+        building.location = { name: 'table', x: 250, y: 200 };
+        table.appendChild(building);
+
+        const listed = (await call('terrain_list', { walls: true })) as { data: { items: Record<string, unknown>[] } };
+
+        expect(listed.data.items.find((item) => item['identifier'] === building.identifier)).toMatchObject({
+          x: 5,
+          y: 4,
+          w: 2,
+          h: 3,
+        });
+        building.destroy();
+      });
+
+      it('lists the notes on the table and those put out of sight, with the cells they cover', async () => {
+        beGameMaster();
+        const out = TextNote.create('パン屋', '', 14, 3, 1);
+        out.location = { name: 'table', x: 100, y: 150 };
+        const away = TextNote.create('古物商', '', 14, 3, 1);
+        away.location = { name: 'table', x: 300, y: 150 };
+        TestBed.inject(ConcealmentService).conceal(away);
+
+        expect(await call('scene_list')).toMatchObject({
+          ok: true,
+          data: { notes: [{ identifier: out.identifier, title: 'パン屋', x: 2, y: 3, w: 3, h: 1, unit: 'grid' }] },
+        });
+        expect(await call('scene_list', { place: 'concealed' })).toMatchObject({
+          ok: true,
+          data: { notes: [{ identifier: away.identifier, title: '古物商' }] },
+        });
+        out.destroy();
+        away.destroy();
+      });
+
       it('stands a light that everyone sees', async () => {
         beGameMaster();
 
@@ -1224,9 +1264,16 @@ describe('AutomationFacadeService', () => {
       const listening = networkMessage$.subscribe(() => undefined);
       setNetworkIsolated(true);
       try {
+        // The first wait only takes note of what is already said, so one is run before the notice.
+        await call('chat_wait', { tabIds: [tab.identifier], waitSeconds: 1 });
         const opened = await call('vn_stage', { open: true, tabId: tab.identifier });
         expect(opened).toMatchObject({ ok: true, data: { open: true, castReset: tab.identifier } });
         expect(tab.vnPortraitResetAt).toBeGreaterThan(0);
+        // The notice it leaves is automation's own, not something a player said.
+        expect(await call('chat_wait', { tabIds: [tab.identifier], waitSeconds: 1 })).toMatchObject({
+          ok: true,
+          data: { messages: [], timedOut: true },
+        });
 
         const before = tab.vnPortraitResetAt;
         const kept = await call('vn_stage', { open: false, resetCast: false, tabId: tab.identifier });

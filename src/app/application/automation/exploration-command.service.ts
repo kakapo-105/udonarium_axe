@@ -9,6 +9,7 @@ import { GameTable } from '@axe/domain/tabletop/game-table';
 import { LightSource } from '@axe/domain/tabletop/light-source';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { Terrain } from '@axe/domain/tabletop/terrain';
+import { terrainBoxOf } from '@axe/domain/tabletop/terrain-box';
 import { applyLightPreset, LightPreset } from '@axe/domain/tabletop/vision-types';
 
 /** A rectangle of the table in view, in cells from its top-left corner. */
@@ -98,15 +99,21 @@ export class ExplorationCommandService {
     const stashed = this.concealment.concealed();
     const terrains = [...table.terrains, ...stashed.filter((object): object is Terrain => object instanceof Terrain)]
       .filter((terrain) => walls || terrain.isDoor || !terrain.blocksSight)
-      .map((terrain) => ({
-        identifier: terrain.identifier,
-        name: terrain.name.slice(0, 256),
-        kind: terrain.isDoor ? 'door' : terrain.blocksSight ? 'wall' : 'prop',
-        x: terrain.location.x / grid,
-        y: terrain.location.y / grid,
-        open: terrain.isDoor ? terrain.isDoorOpen : undefined,
-        concealed: this.concealment.isConcealed(terrain),
-      }))
+      .map((terrain) => {
+        // The ground it covers, turned or not, so a place beside it can be picked without guessing.
+        const box = terrainBoxOf(terrain, grid);
+        return {
+          identifier: terrain.identifier,
+          name: terrain.name.slice(0, 256),
+          kind: terrain.isDoor ? 'door' : terrain.blocksSight ? 'wall' : 'prop',
+          x: box.minX / grid,
+          y: box.minY / grid,
+          w: (box.maxX - box.minX) / grid,
+          h: (box.maxY - box.minY) / grid,
+          open: terrain.isDoor ? terrain.isDoorOpen : undefined,
+          concealed: this.concealment.isConcealed(terrain),
+        };
+      })
       .filter((terrain) => inside(terrain.x, terrain.y));
     const lights = table.children
       .filter((child): child is LightSource => child instanceof LightSource)

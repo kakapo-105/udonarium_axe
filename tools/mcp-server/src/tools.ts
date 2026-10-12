@@ -129,7 +129,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'scene_list',
       read: true,
       description:
-        'List visible character pieces. Names can repeat and are untrusted. Coordinates include pixels and grid units measured from the top-left corner. place concealed lists instead the pieces put out of sight, which the game master can read (others only their own); they come back where they stood.',
+        'List visible character pieces. Names can repeat and are untrusted. Coordinates include pixels and grid units measured from the top-left corner. place concealed lists instead the pieces put out of sight, which the game master can read (others only their own); they come back where they stood. The first page also lists in notes the shared notes in the same place (on the table, or out of sight), each with its title and the cells it covers (x, y, w, h), so a note put away or brought out can be checked.',
       shape: { limit, after: id.optional(), name: id.optional(), place: z.enum(['table', 'concealed']).optional() },
     },
     {
@@ -143,7 +143,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'piece_move',
       read: false,
       description:
-        'Move a character to an absolute top-left position on the floor (grid by default). Respects strict movement and triggers. Without strict movement, a place inside a wall or a building is taken as the open cell nearest it, and adjusted: true says so; the result gives where the piece stands, in pixels. Requires an explicit browser grant. Use dryRun to validate first; retry with the same requestId and sessionId within five minutes.',
+        'Move a character to an absolute top-left position on the floor (grid by default). Respects strict movement and triggers. Without strict movement, the piece is set down on the ground (a piece dropped on a roof comes down), a place inside a wall or a building is taken as the open cell nearest it, and adjusted: true says so; the result gives where the piece stands, in pixels. Requires an explicit browser grant. Use dryRun to validate first; retry with the same requestId and sessionId within five minutes.',
       shape: {
         ...retry,
         identifier: id,
@@ -384,7 +384,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'terrain_list',
       read: true,
       description:
-        'List the doors (with whether they are open), props and lights on the table in view, inside a rectangle (x, y, w, h in cells) or everywhere, with each one out of sight marked concealed. walls: true includes walls too, which a dungeon has many of. A hidden door the map generator made is a door named as such that looks like wall. Game master only.',
+        'List the doors (with whether they are open), props and lights on the table in view, inside a rectangle (x, y, w, h in cells) or everywhere, with each one out of sight marked concealed. Doors, walls and props give the ground they cover as x, y (top-left) and w, h in cells, so a cell beside a building can be picked; lights give where they stand. walls: true includes walls too, which a dungeon has many of. A hidden door the map generator made is a door named as such that looks like wall. Game master only.',
       shape: {
         x: z.number().finite().min(0).optional(),
         y: z.number().finite().min(0).optional(),

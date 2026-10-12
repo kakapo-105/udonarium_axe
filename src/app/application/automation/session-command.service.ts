@@ -100,9 +100,7 @@ export class SessionCommandService {
     }
     const strict = !!this.store.get<Config>('Config')?.moveStrict;
     // A strict walk works out the ground under each step, so a piece up on terrain can walk from there.
-    // A plain move only sets x and y, which would leave such a piece floating at its old height.
-    if (!strict && piece.posZ !== 0)
-      fail('FORBIDDEN', 'Without strict movement only pieces at ground level can be moved.');
+    // A plain move sets the piece down on the ground, so one dropped on a roof comes down off it.
     const scale = destination.unit === 'grid' ? table.gridSize : 1;
     const x = destination.x * scale;
     const y = destination.y * scale;
@@ -178,7 +176,7 @@ export class SessionCommandService {
     const next = this.destination(piece, destination);
     const adjusted = next.adjusted ? { adjusted: true } : {};
     if (dryRun) return { identifier: piece.identifier, x: next.x, y: next.y, unit: 'px', ...adjusted, dryRun: true };
-    if (piece.location.x === next.x && piece.location.y === next.y)
+    if (piece.location.x === next.x && piece.location.y === next.y && piece.posZ === 0)
       return { identifier: piece.identifier, version: piece.version };
     if (next.planned && next.centre) {
       if (!this.plan.begin(piece)) fail('CONFLICT', 'Could not open a move.');
@@ -195,6 +193,7 @@ export class SessionCommandService {
       this.triggers.pickedUp(piece);
       GameObject.batch(() => {
         piece.location = { ...piece.location, x: next.x, y: next.y, surface: 'floor' };
+        piece.posZ = 0;
       });
       this.triggers.putDown(piece);
     }

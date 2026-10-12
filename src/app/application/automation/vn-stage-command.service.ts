@@ -1,6 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { fail } from '@axe/application/automation/automation-contract';
 import { AutomationImage, AutomationImageService } from '@axe/application/automation/automation-image.service';
+import { ChatWaitService } from '@axe/application/automation/chat-wait.service';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { encodeI18nMessage } from '@axe/application/i18n/i18n-message';
 import { networkSend } from '@axe/core/network/network-messaging';
@@ -31,6 +32,7 @@ export class VnStageCommandService {
   private readonly store = inject(ObjectStore);
   private readonly images = inject(AutomationImageService);
   private readonly chat = inject(ChatMessageService);
+  private readonly chatWait = inject(ChatWaitService);
 
   async set(request: VnStageRequest, guard: () => void) {
     const stage = this.store.get<VnStage>('VnStage');
@@ -54,12 +56,17 @@ export class VnStageCommandService {
   /** Draws the line the stage's reset button draws: nothing said before it stands any more. */
   private resetCast(tab: ChatTab) {
     const cursor = PeerCursor.myCursor;
-    const notice = this.chat.sendSystemMessageToTab(
-      tab,
-      encodeI18nMessage('feature.visualNovel.stageResetBy', { user: cursor?.name?.trim() || cursor?.identifier || '' }),
-      undefined,
-      cursor?.userId,
-      true
+    // Said by automation itself, so a wait does not hand it back as if a player had spoken.
+    const notice = this.chatWait.said(() =>
+      this.chat.sendSystemMessageToTab(
+        tab,
+        encodeI18nMessage('feature.visualNovel.stageResetBy', {
+          user: cursor?.name?.trim() || cursor?.identifier || '',
+        }),
+        undefined,
+        cursor?.userId,
+        true
+      )
     );
     tab.vnPortraitResetAt = notice.placedAt;
   }

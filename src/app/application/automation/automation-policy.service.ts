@@ -66,7 +66,7 @@ export class AutomationPolicyService {
    * Whether a piece put out of sight may be read: by the game master, as the out-of-sight tab lists
    * them, or by whoever owns it.
    */
-  canSeeConcealed(piece: GameCharacter): boolean {
+  canSeeConcealed(piece: { location: { name: string }; owner: string }): boolean {
     if (piece.location.name !== CONCEALED_LOCATION) return false;
     return this.role.canSeeHidden || this.isMine(piece.owner);
   }

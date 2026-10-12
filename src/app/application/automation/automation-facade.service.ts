@@ -48,6 +48,7 @@ import { FilterType } from '@axe/domain/tabletop/game-table';
 import { MapMaterial } from '@axe/domain/tabletop/map-blocks';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { TabletopObject } from '@axe/domain/tabletop/tabletop-object';
+import { TextNote } from '@axe/domain/tabletop/text-note';
 import { VN_MESSAGE_KINDS, VnMessageKind } from '@axe/domain/visual-novel/vn-emote';
 import { VN_STAGE_TRANSITIONS, VnStageTransition } from '@axe/domain/visual-novel/vn-stage';
 
@@ -96,6 +97,8 @@ const RESOURCE_COMMAND =
 const MAX_PALETTE_LINES = 500;
 const MAX_TARGETS = 50;
 const MAX_BUFF_PIECES = 100;
+/** At most this many notes come with a listing of the pieces. */
+const MAX_LISTED_NOTES = 60;
 const MAX_BUFF_COMMANDS = 20;
 /** One buff command as chat takes it: `&`, `t&`, `s&` or `st&` and the rest with no space in it. */
 const BUFF_COMMAND = /^[sSｓＳ]?[tTｔＴ]?[&＆]\S+$/u;
@@ -495,7 +498,24 @@ export class AutomationFacadeService {
           .map((p) => this.describe(p))
           .filter((p) => p.identifier > after && (!name || p.name.includes(name)))
           .sort((l, r) => (l.identifier < r.identifier ? -1 : l.identifier > r.identifier ? 1 : 0));
-        return { objects: pieces.slice(0, limit), next: pieces.length > limit ? pieces[limit - 1].identifier : null };
+        // Notes stand on the table as pieces do and are put out of sight the same way; they come with
+        // the first page, so whether one is out or put away can be read back.
+        const notes =
+          after.length > 0
+            ? undefined
+            : this.store
+                .getObjects<TextNote>(TextNote)
+                .filter((note) =>
+                  place === 'table' ? note.location.name === 'table' : this.policy.canSeeConcealed(note)
+                )
+                .filter((note) => !name || note.title.includes(name))
+                .slice(0, MAX_LISTED_NOTES)
+                .map((note) => this.describeNote(note));
+        return {
+          objects: pieces.slice(0, limit),
+          next: pieces.length > limit ? pieces[limit - 1].identifier : null,
+          ...(notes ? { notes } : {}),
+        };
       }
       case 'object_get':
         onlyKeys(a, ['identifier']);
@@ -1017,6 +1037,19 @@ export class AutomationFacadeService {
       fail('NOT_FOUND', 'Visible tab not found.');
     if (speak && !canRoleSpeakTab(tab, PeerCursor.myRole)) fail('FORBIDDEN', 'You cannot speak in this tab.');
     return tab;
+  }
+  /** A note as scene_list gives it: its title, and the cells it covers from the top-left. */
+  private describeNote(note: TextNote) {
+    const grid = this.tables.viewTable?.gridSize || 50;
+    return {
+      identifier: note.identifier,
+      title: note.title.slice(0, 256),
+      x: note.location.x / grid,
+      y: note.location.y / grid,
+      w: note.width,
+      h: note.height,
+      unit: 'grid',
+    };
   }
   private describe(piece: GameCharacter) {
     const gridSize = this.tables.viewTable!.gridSize;
