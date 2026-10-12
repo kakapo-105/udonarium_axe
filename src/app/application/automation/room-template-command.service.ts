@@ -178,7 +178,17 @@ export class RoomTemplateCommandService {
    * Plays a sound as the room's music for everyone, taking it in first when it is brought along, or
    * stops the music when given none.
    */
-  async play(identifier: string | null, loop: boolean, audios: readonly AutomationAudio[], guard: () => void) {
+  /**
+   * Plays a sound for the room, round and round as music, or once through as a jingle. A jingle
+   * goes back to `then` when it ends, or, with none given, to the music it was played over.
+   */
+  async play(
+    identifier: string | null,
+    loop: boolean,
+    audios: readonly AutomationAudio[],
+    guard: () => void,
+    then?: string
+  ) {
     const jukebox = this.store.get<Jukebox>('Jukebox');
     if (!jukebox) fail('NOT_READY', 'The room has no jukebox.');
     if (identifier === null) {
@@ -190,7 +200,18 @@ export class RoomTemplateCommandService {
     await this.audios.add(sounds);
     guard();
     if (!this.audios.has(identifier)) fail('NOT_FOUND', 'The room holds no such sound.');
-    jukebox.play(identifier, loop);
-    return { playing: identifier, loop };
+    if (then && !this.audios.has(then)) fail('NOT_FOUND', 'The room holds no such sound to go back to.');
+    if (loop) {
+      jukebox.play(identifier, loop);
+      return { playing: identifier, loop };
+    }
+    const playingOver = jukebox.isPlaying
+      ? jukebox.playsOnce === true
+        ? jukebox.afterOnce
+        : jukebox.audioIdentifier
+      : '';
+    const after = then ?? playingOver;
+    jukebox.playOnce(identifier, after);
+    return { playing: identifier, loop, then: jukebox.afterOnce || null };
   }
 }

@@ -54,6 +54,15 @@ export class Jukebox extends GameObject {
    */
   @SyncVar() seekCount: number = 0;
 
+  /**
+   * Whether the room's track is played to its end only once, as a jingle is, whatever the repeat
+   * mode says. Only `true` counts; an older version sends nothing.
+   */
+  @SyncVar() playsOnce: boolean = false;
+
+  /** The track the room goes back to when a track played once ends. Empty, and the music stops. */
+  @SyncVar() afterOnce: string = '';
+
   /** The track the room is set to, or null when none is set or its file is not in this peer's storage. */
   get audio(): AudioFile | null {
     return AudioStorage.instance.get(this.audioIdentifier);
@@ -88,6 +97,11 @@ export class Jukebox extends GameObject {
   get playOrder(): string[] {
     const queue = this.queue;
     return this.shuffles ? shuffledOrder(queue, Number(this.shuffleSeed) || 0, this.shuffleLead ?? '') : queue;
+  }
+
+  /** Whether this peer plays the room's track round and round. */
+  private get loops(): boolean {
+    return this.repeatMode === 'one' && this.playsOnce !== true;
   }
 
   private audioPlayer: AudioPlayer = new AudioPlayer();
@@ -157,7 +171,7 @@ export class Jukebox extends GameObject {
     const modes: RepeatMode[] = ['none', 'all', 'one'];
     const next = (modes.indexOf(this.repeatMode) + 1) % modes.length;
     this.repeatMode = modes[next];
-    this.audioPlayer.loop = this.repeatMode === 'one';
+    this.audioPlayer.loop = this.loops;
   }
 
   /**
@@ -275,7 +289,8 @@ export class Jukebox extends GameObject {
    *
    * A sound tagged SE is played once over the music on every peer, leaving the track alone.
    * Anything else becomes the room's track. Nothing happens when the file is missing or not
-   * ready yet. The loop argument is ignored; the repeat mode decides.
+   * ready yet. The loop argument is ignored; the repeat mode decides, and `playOnce` plays
+   * one through only once.
    */
   play(identifier: string, _isLoop: boolean = false) {
     const audio = AudioStorage.instance.get(identifier);
@@ -290,6 +305,25 @@ export class Jukebox extends GameObject {
       this.startTime = 0;
       this.audioIdentifier = identifier;
       this.isPlaying = true;
+      this.playsOnce = false;
+      this.afterOnce = '';
+    });
+    this._play();
+  }
+
+  /**
+   * Plays a track for the room once through, as a jingle, then goes back to `then` - the music
+   * that was playing, say - or falls silent when that is empty. The repeat mode is left alone.
+   */
+  playOnce(identifier: string, then: string = '') {
+    const audio = AudioStorage.instance.get(identifier);
+    if (!audio || !audio.isReady) return;
+    GameObject.batch(() => {
+      this.startTime = 0;
+      this.audioIdentifier = identifier;
+      this.isPlaying = true;
+      this.playsOnce = true;
+      this.afterOnce = then === identifier ? '' : then;
     });
     this._play();
   }
@@ -319,7 +353,7 @@ export class Jukebox extends GameObject {
     }
     const isSE = AudioTag.get(this.audioIdentifier)?.tag === 'SE';
     this.audioPlayer.volumeType = isSE ? VolumeType.SE : VolumeType.MASTER;
-    this.audioPlayer.loop = !isSE && this.repeatMode === 'one';
+    this.audioPlayer.loop = !isSE && this.loops;
     this.audioPlayer.onEnded = isSE ? null : () => this.onTrackNaturallyEnded();
     this.audioPlayer.play(this.audio);
     if (startAt > 0) this.audioPlayer.seekTo(startAt);
@@ -329,6 +363,8 @@ export class Jukebox extends GameObject {
   stop() {
     this.audioIdentifier = '';
     this.isPlaying = false;
+    this.playsOnce = false;
+    this.afterOnce = '';
     this._stop();
   }
 
@@ -371,7 +407,7 @@ export class Jukebox extends GameObject {
     const isSE = AudioTag.get(this.audioIdentifier)?.tag === 'SE';
     const newPlayer = new AudioPlayer();
     newPlayer.volumeType = isSE ? VolumeType.SE : VolumeType.MASTER;
-    newPlayer.loop = !isSE && this.repeatMode === 'one';
+    newPlayer.loop = !isSE && this.loops;
     newPlayer.onEnded = isSE ? null : () => this.onTrackNaturallyEnded();
     newPlayer.volume = 0;
     newPlayer.play(this.audio);
@@ -394,7 +430,7 @@ export class Jukebox extends GameObject {
       this.unregisterEvent();
       const isSE = AudioTag.get(this.audioIdentifier)?.tag === 'SE';
       this.audioPlayer.volumeType = isSE ? VolumeType.SE : VolumeType.MASTER;
-      this.audioPlayer.loop = !isSE && this.repeatMode === 'one';
+      this.audioPlayer.loop = !isSE && this.loops;
       this.audioPlayer.onEnded = isSE ? null : () => this.onTrackNaturallyEnded();
       this.audioPlayer.play(this.audio);
       if (startAt > 0) this.audioPlayer.seekTo(startAt);
@@ -407,9 +443,15 @@ export class Jukebox extends GameObject {
    * Every peer gets here on its own and works out the same next track, so they agree without
    * waiting for each other. Going round from the last track to the first happens only on repeat,
    * and while shuffled the next time round is mixed afresh, with the track just heard kept off the
-   * top.
+   * top. A track played once hands over to the one it was played over, or to silence.
    */
   private onTrackNaturallyEnded() {
+    if (this.playsOnce === true) {
+      const then = this.afterOnce;
+      if (then && AudioStorage.instance.get(then)?.isReady) this.play(then);
+      else this.stop();
+      return;
+    }
     if (this.repeatMode === 'one') return;
     const { identifier, wrapped } = trackAfter(this.playOrder, this.audioIdentifier);
     if (!identifier || (wrapped && this.repeatMode !== 'all')) {

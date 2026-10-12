@@ -964,4 +964,69 @@ describe('Jukebox', () => {
       });
     });
   });
+
+  describe('playing a jingle once', () => {
+    function endTrack(jukebox: Jukebox): void {
+      (jukebox as unknown as { onTrackNaturallyEnded(): void }).onTrackNaturallyEnded();
+    }
+
+    function playerOf(jukebox: Jukebox): AudioPlayer {
+      return (jukebox as unknown as { audioPlayer: AudioPlayer }).audioPlayer;
+    }
+
+    function makeJukebox(): Jukebox {
+      const jukebox = new Jukebox();
+      jukebox.initialize();
+      return jukebox;
+    }
+
+    beforeEach(() => {
+      stubAudioPlayerPlay();
+      stubAudioPlayerStop();
+      for (const identifier of ['town', 'jingle']) AudioStorage.instance.add(makeReadyAudio(identifier));
+    });
+
+    it('does not loop it, though the room repeats one track', () => {
+      const jukebox = makeJukebox();
+      jukebox.repeatMode = 'one';
+
+      jukebox.playOnce('jingle', 'town');
+
+      expect(jukebox.audioIdentifier).toBe('jingle');
+      expect(playerOf(jukebox).loop).toBe(false);
+    });
+
+    it('goes back to the music it was played over when it ends, looping that again', () => {
+      const jukebox = makeJukebox();
+      jukebox.repeatMode = 'one';
+      jukebox.playOnce('jingle', 'town');
+
+      endTrack(jukebox);
+
+      expect(jukebox.audioIdentifier).toBe('town');
+      expect(jukebox.isPlaying).toBe(true);
+      expect(jukebox.playsOnce).toBe(false);
+      expect(playerOf(jukebox).loop).toBe(true);
+    });
+
+    it('falls silent when it ends with nothing to go back to', () => {
+      const jukebox = makeJukebox();
+      jukebox.playOnce('jingle');
+
+      endTrack(jukebox);
+
+      expect(jukebox.isPlaying).toBe(false);
+      expect(jukebox.audioIdentifier).toBe('');
+    });
+
+    it('is forgotten when the room plays a track as music', () => {
+      const jukebox = makeJukebox();
+      jukebox.playOnce('jingle', 'town');
+
+      jukebox.play('town');
+
+      expect(jukebox.playsOnce).toBe(false);
+      expect(jukebox.afterOnce).toBe('');
+    });
+  });
 });
