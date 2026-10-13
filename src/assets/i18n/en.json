@@ -2778,7 +2778,9 @@
         "confirmOnline": "Go online? The page reloads and connects.",
         "offlineNote": "Saving and loading a room still works. Switch to Online to play with others.",
         "samplePieces": "Set out the sample pieces when the app opens",
-        "samplePiecesHint": "Takes effect from the next load. Samples already in the room can be sent to the graveyard from the inventory and deleted there."
+        "samplePiecesHint": "Takes effect from the next load. Samples already in the room can be sent to the graveyard from the inventory and deleted there.",
+        "voiceTranscriber": "Receive voice transcripts",
+        "voiceTranscriberHint": "Posts what is said on the call, as transcribed by sw25-voice running on this PC, into the chat. Remembered in this browser."
       },
       "lobby": {
         "title": "Lobby",

@@ -209,6 +209,11 @@
       />
       <span>{{ 'feature.lobby.peerMenu.showDetail' | transloco }}</span>
     </label>
+    <label class="flex cursor-pointer items-center gap-2">
+      <input type="checkbox" data-testid="voice-transcriber" [checked]="voice.enabled()" (change)="setVoice($event)" />
+      <span>{{ 'feature.lobby.peerMenu.voiceTranscriber' | transloco }}</span>
+    </label>
+    <p class="m-0 text-[11px]">{{ 'feature.lobby.peerMenu.voiceTranscriberHint' | transloco }}</p>
   </div>
 
   @for (context of networkService.peerContexts; track context) {

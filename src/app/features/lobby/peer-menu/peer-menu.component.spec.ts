@@ -5,6 +5,7 @@ import {
   SAMPLE_PIECES_STORAGE_KEY,
   SamplePiecesPreferenceService,
 } from '@axe/application/ui/sample-pieces-preference.service';
+import { VOICE_STORAGE_KEY, VoicePreferenceService } from '@axe/application/voice/voice-preference.service';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
 import { PeerMenuComponent } from '@axe/features/lobby/peer-menu/peer-menu.component';
@@ -67,6 +68,21 @@ describe('PeerMenuComponent', () => {
     expect(TestBed.inject(SamplePiecesPreferenceService).enabled()).toBe(false);
     expect(localStorage.getItem(SAMPLE_PIECES_STORAGE_KEY)).toBe('0');
     localStorage.removeItem(SAMPLE_PIECES_STORAGE_KEY);
+  });
+
+  it('turns the voice transcriber on in this browser at once', () => {
+    PeerCursor.createMyCursor();
+    fixture.detectChanges();
+    const box = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
+      '[data-testid="voice-transcriber"]'
+    )!;
+    expect(box.checked).toBe(false);
+
+    box.click();
+
+    expect(TestBed.inject(VoicePreferenceService).enabled()).toBe(true);
+    expect(localStorage.getItem(VOICE_STORAGE_KEY)).toBe('1');
+    localStorage.removeItem(VOICE_STORAGE_KEY);
   });
 
   it('leaves the private connection controls out', () => {

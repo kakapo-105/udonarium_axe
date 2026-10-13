@@ -1,6 +1,6 @@
 import { DestroyRef, inject, Injectable, signal } from '@angular/core';
 import { PAGE_ADDRESS } from '@axe/application/ui/page-address.token';
-import { voiceEndpoint } from '@axe/application/voice/voice-request';
+import { DEFAULT_VOICE_ENDPOINT, voiceEndpoint } from '@axe/application/voice/voice-request';
 import { parseVoiceSay, VoiceTranscriptService } from '@axe/application/voice/voice-transcript.service';
 
 export type VoiceBridgeStatus = 'connecting' | 'open' | 'closed' | 'replaced';
@@ -18,13 +18,16 @@ const RETRY_MAX_MS = 30000;
  * started first. Each line is answered with an `ack`, so the transcriber can keep and resend what
  * did not arrive.
  *
+ * Provided by the status badge, so it lives as long as the badge is shown: turning the transcriber
+ * off in the peer menu takes the badge away and hangs up.
+ *
  * The transcriber talks to one page at a time, the one that dialled last. A page it lets go of for
  * a newer one stays away: dialling back would take the line from the newer page, and the two would
  * take turns, each line landing in whichever room happened to hold it.
  */
-@Injectable({ providedIn: 'root' })
+@Injectable()
 export class VoiceBridge {
-  readonly endpoint = voiceEndpoint(inject(PAGE_ADDRESS)());
+  readonly endpoint = voiceEndpoint(inject(PAGE_ADDRESS)()) ?? DEFAULT_VOICE_ENDPOINT;
   readonly status = signal<VoiceBridgeStatus>('closed');
   readonly posted = signal(0);
   private readonly transcripts = inject(VoiceTranscriptService);
@@ -34,7 +37,6 @@ export class VoiceBridge {
   private stopped = false;
 
   constructor() {
-    if (!this.endpoint) return;
     this.connect(this.endpoint);
     inject(DestroyRef).onDestroy(() => {
       this.stopped = true;

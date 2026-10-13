@@ -12,6 +12,7 @@ import { ModalService } from '@axe/application/ui/modal.service';
 import { PanelService } from '@axe/application/ui/panel.service';
 import { SamplePiecesPreferenceService } from '@axe/application/ui/sample-pieces-preference.service';
 import { transientSignal } from '@axe/application/ui/transient-signal';
+import { VoicePreferenceService } from '@axe/application/voice/voice-preference.service';
 import { Network } from '@axe/core/index';
 import { Logger } from '@axe/core/logging/logger';
 import { saveIdentity } from '@axe/core/storage/identity-storage';
@@ -49,6 +50,7 @@ export class PeerMenuComponent {
   private readonly modalService = inject(ModalService);
   private readonly localModePreference = inject(LocalModePreferenceService);
   protected readonly samplePieces = inject(SamplePiecesPreferenceService);
+  protected readonly voice = inject(VoicePreferenceService);
 
   private readonly confirm = inject(ConfirmService);
 
@@ -85,6 +87,11 @@ export class PeerMenuComponent {
   /** Whether this browser sets out the sample pieces from the next load, from the box's change event. */
   setSamplePieces(event: Event): void {
     this.samplePieces.set((event.target as HTMLInputElement).checked);
+  }
+
+  /** Turns the voice transcriber on or off in this browser; it dials or hangs up at once. */
+  setVoice(event: Event): void {
+    this.voice.set((event.target as HTMLInputElement).checked);
   }
 
   protected reload(): void {

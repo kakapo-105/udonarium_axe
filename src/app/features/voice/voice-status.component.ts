@@ -4,12 +4,14 @@ import { TranslocoModule } from '@jsverse/transloco';
 
 /**
  * Shows whether the page is taking lines from the voice transcriber. Built only for a page opened
- * with `voice=`, and building it is what starts the bridge.
+ * with `voice=` or one whose browser has the transcriber turned on, and it holds the bridge:
+ * building it dials, taking it away hangs up.
  */
 @Component({
   selector: 'voice-status',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [TranslocoModule],
+  providers: [VoiceBridge],
   template: `
     <div
       class="border-ui-border-panel bg-ui-panel text-ui-text fixed bottom-3 left-3 z-300 rounded-lg border px-3 py-1 text-xs shadow-lg select-none"

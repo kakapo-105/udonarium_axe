@@ -17,6 +17,8 @@ export function voiceEndpoint(href: string): string | null {
   } catch {
     return null;
   }
+  // An address put together by hand can leave a slash behind, as in `?voice=1/#join?...`.
+  asked = asked?.replace(/\/+$/, '') ?? null;
   if (!asked || asked === '0') return null;
   if (asked === '1') return DEFAULT_VOICE_ENDPOINT;
   try {
