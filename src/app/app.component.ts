@@ -45,6 +45,7 @@ import { ThemeService } from '@axe/application/ui/theme.service';
 import { ViewportService } from '@axe/application/ui/viewport.service';
 import { WIDGET_FAB } from '@axe/application/ui/widget-place';
 import { WidgetVisibilityService } from '@axe/application/ui/widget-visibility.service';
+import { VoicePreferenceService } from '@axe/application/voice/voice-preference.service';
 import { voiceEndpoint } from '@axe/application/voice/voice-request';
 import { automationRequested } from '@axe/composition/automation/automation-request';
 import { Network } from '@axe/core/network/network';
@@ -189,10 +190,12 @@ export class AppComponent {
    */
   readonly automationAvailable = automationRequested(inject(PAGE_ADDRESS)());
   /**
-   * Whether this page was opened to post what the voice transcriber hears, with `voice=` in its
-   * address. Only such a page loads the bridge to it.
+   * Whether this page posts what the voice transcriber hears: opened with `voice=` in its address,
+   * or turned on in this browser's peer menu. Only then is the bridge to it loaded.
    */
-  readonly voiceAvailable = voiceEndpoint(inject(PAGE_ADDRESS)()) !== null;
+  private readonly voiceAsked = voiceEndpoint(inject(PAGE_ADDRESS)()) !== null;
+  private readonly voicePreference = inject(VoicePreferenceService);
+  readonly voiceAvailable = computed(() => this.voiceAsked || this.voicePreference.enabled());
   // Built with the shell, whether or not anything shows them: each dresses the page in this
   // seat's setting as it starts, before the first screen is drawn.
   private readonly theme = inject(ThemeService);

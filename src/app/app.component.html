@@ -3,7 +3,7 @@
     <automation-control />
   }
 }
-@if (voiceAvailable) {
+@if (voiceAvailable()) {
   @defer (on immediate) {
     <voice-status />
   }

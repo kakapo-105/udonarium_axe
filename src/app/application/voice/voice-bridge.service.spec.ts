@@ -27,7 +27,11 @@ describe('VoiceBridge', () => {
     vi.useFakeTimers();
     vi.stubGlobal('WebSocket', FakeSocket);
     TestBed.configureTestingModule({
-      providers: [...TEST_PROVIDERS, { provide: PAGE_ADDRESS, useValue: () => 'http://localhost:4200/?voice=1' }],
+      providers: [
+        ...TEST_PROVIDERS,
+        VoiceBridge,
+        { provide: PAGE_ADDRESS, useValue: () => 'http://localhost:4200/?voice=1' },
+      ],
     });
   });
 

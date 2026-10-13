@@ -7,6 +7,9 @@ describe('voiceEndpoint()', () => {
       'ws://127.0.0.1:8770/'
     );
     expect(voiceEndpoint('http://localhost:4200/?voice=1')).toBe(DEFAULT_VOICE_ENDPOINT);
+    expect(voiceEndpoint('https://example.github.io/udonarium_axe/?voice=1/#join?r=abc&n=room')).toBe(
+      DEFAULT_VOICE_ENDPOINT
+    );
   });
 
   it('takes nothing when not asked, or when asked to dial anywhere else', () => {
