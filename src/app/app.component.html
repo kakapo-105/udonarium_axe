@@ -3,6 +3,11 @@
     <automation-control />
   }
 }
+@if (voiceAvailable) {
+  @defer (on immediate) {
+    <voice-status />
+  }
+}
 @if (overlayMode.active()) {
   @defer (on immediate) {
     <streaming-overlay />

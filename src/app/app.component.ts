@@ -45,6 +45,7 @@ import { ThemeService } from '@axe/application/ui/theme.service';
 import { ViewportService } from '@axe/application/ui/viewport.service';
 import { WIDGET_FAB } from '@axe/application/ui/widget-place';
 import { WidgetVisibilityService } from '@axe/application/ui/widget-visibility.service';
+import { voiceEndpoint } from '@axe/application/voice/voice-request';
 import { automationRequested } from '@axe/composition/automation/automation-request';
 import { Network } from '@axe/core/network/network';
 import { FileArchiver } from '@axe/core/storage/file-archiver';
@@ -102,6 +103,7 @@ import { ImageDropEventHandlerService } from '@axe/features/tabletop/image-drop/
 import { MovePlanEventHandlerService } from '@axe/features/tabletop/table-move-range-overlay/move-plan-event-handler.service';
 import { VisualNovelModeService } from '@axe/features/visual-novel/visual-novel-mode.service';
 import { VisualNovelOverlayComponent } from '@axe/features/visual-novel/visual-novel-overlay/visual-novel-overlay.component';
+import { VoiceStatusComponent } from '@axe/features/voice/voice-status.component';
 import { VoteEventHandlerService } from '@axe/features/vote/vote-event-handler.service';
 import { VoteWidgetComponent } from '@axe/features/vote/vote-widget/vote-widget.component';
 import { CompassComponent } from '@axe/features/widgets/compass/compass.component';
@@ -142,6 +144,7 @@ const FAB_MARGIN_PX = 12;
   templateUrl: './app.component.html',
   imports: [
     AutomationControlComponent,
+    VoiceStatusComponent,
     CharacterRosterComponent,
     GameTableComponent,
     NetworkIndicatorComponent,
@@ -185,6 +188,11 @@ export class AppComponent {
    * so a player's page carries none of it.
    */
   readonly automationAvailable = automationRequested(inject(PAGE_ADDRESS)());
+  /**
+   * Whether this page was opened to post what the voice transcriber hears, with `voice=` in its
+   * address. Only such a page loads the bridge to it.
+   */
+  readonly voiceAvailable = voiceEndpoint(inject(PAGE_ADDRESS)()) !== null;
   // Built with the shell, whether or not anything shows them: each dresses the page in this
   // seat's setting as it starts, before the first screen is drawn.
   private readonly theme = inject(ThemeService);

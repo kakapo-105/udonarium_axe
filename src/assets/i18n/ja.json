@@ -159,6 +159,12 @@
       "empty": "卓に表示できるキャラクターがいません",
       "hideFromRoster": "キャラクター一覧に表示しない"
     },
+    "voice": {
+      "connecting": "音声：接続待ち",
+      "open": "音声：接続中",
+      "closed": "音声：未接続",
+      "replaced": "音声：別のページに切り替わりました"
+    },
     "automation": {
       "active": "AI操作：有効",
       "inactive": "AI操作：停止中",

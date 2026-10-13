@@ -159,6 +159,12 @@
       "empty": "No characters on the table to show",
       "hideFromRoster": "Keep out of the character list"
     },
+    "voice": {
+      "connecting": "Voice: connecting",
+      "open": "Voice: connected",
+      "closed": "Voice: disconnected",
+      "replaced": "Voice: taken over by another page"
+    },
     "automation": {
       "active": "AI control: active",
       "inactive": "AI control: stopped",
