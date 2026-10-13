@@ -360,6 +360,30 @@ export class ChatMessageService {
     return chat;
   }
 
+  /**
+   * Posts a line someone said aloud, as the transcriber heard it.
+   *
+   * Nothing in it is acted on: speech that mentions "2D6" is not a roll, and nothing reaches a
+   * piece's resources. Given a character, the line wears that character's portrait and colour;
+   * otherwise it goes under the name alone. Who this reader last spoke as is left alone, since the
+   * reader did not say it.
+   */
+  sendTranscript(chatTab: ChatTab, text: string, name: string, character?: GameCharacter | null): ChatMessage {
+    const chatMessage: ChatMessageContext = {
+      from: Network.peerContext.userId,
+      name,
+      imageIdentifier: character ? this.findImageIdentifier(character.identifier, character.selectedPortraitIndex) : '',
+      timestamp: this.calcTimeStamp(chatTab),
+      tag: '',
+      text,
+      imagePos: character ? this.findImagePos(character.identifier) : -1,
+      messColor: resolveMessageColor(character?.chatColorCode[0], '#000000'),
+      sendFrom: character?.identifier ?? '',
+      senderRole: PeerCursor.myRole,
+    };
+    return chatTab.addMessage(chatMessage);
+  }
+
   private resolveAttachmentImageReferences(
     text: string,
     sendFrom: string,

@@ -159,6 +159,11 @@
       "empty": "탁자에 표시할 캐릭터가 없습니다",
       "hideFromRoster": "캐릭터 목록에 표시하지 않음"
     },
+    "voice": {
+      "connecting": "음성: 연결 대기",
+      "open": "음성: 연결됨",
+      "closed": "음성: 연결 안 됨"
+    },
     "automation": {
       "active": "AI 조작: 활성",
       "inactive": "AI 조작: 중지",
