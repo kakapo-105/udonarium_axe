@@ -162,7 +162,8 @@
     "voice": {
       "connecting": "음성: 연결 대기",
       "open": "음성: 연결됨",
-      "closed": "음성: 연결 안 됨"
+      "closed": "음성: 연결 안 됨",
+      "replaced": "음성: 다른 페이지로 전환됨"
     },
     "automation": {
       "active": "AI 조작: 활성",

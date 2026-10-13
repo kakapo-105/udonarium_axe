@@ -162,7 +162,8 @@
     "voice": {
       "connecting": "Voice: connecting",
       "open": "Voice: connected",
-      "closed": "Voice: disconnected"
+      "closed": "Voice: disconnected",
+      "replaced": "Voice: taken over by another page"
     },
     "automation": {
       "active": "AI control: active",
