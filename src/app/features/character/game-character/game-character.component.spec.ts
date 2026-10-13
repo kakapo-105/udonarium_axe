@@ -1,6 +1,8 @@
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { ChatMessageService } from '@axe/application/chat/chat-message.service';
+import { SPEECH_BUBBLE_WAIT_MS, SpeechBubbleService } from '@axe/application/chat/speech-bubble.service';
 import { EffectPlaybackService } from '@axe/application/effect/effect-playback.service';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
@@ -16,10 +18,14 @@ import { PieceOverlayPreferenceService } from '@axe/application/ui/piece-overlay
 import { TabletopOverlapService } from '@axe/application/ui/tabletop-overlap.service';
 import { UiSignalService } from '@axe/application/ui/ui-signal.service';
 import { ViewModePreferenceService } from '@axe/application/ui/view-mode-preference.service';
+import { VolumeType } from '@axe/core/storage/audio-player';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { PERF_HEX_PEDESTAL_OUTLINE, perfCounters } from '@axe/core/util/perf-counters';
+import { BUFF_BADGES_PER_ROW } from '@axe/domain/character/buff-badge';
 import { GameCharacter } from '@axe/domain/character/game-character';
+import { ChatTab } from '@axe/domain/chat/chat-tab';
+import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { DataElement, DataElementAttribute, DataElementType } from '@axe/domain/data/data-element';
 import { DisclosureMode } from '@axe/domain/disclosure/disclosure';
 import { EffectPreset } from '@axe/domain/effect/effect-preset';
@@ -31,6 +37,7 @@ import { GameTable, GridType } from '@axe/domain/tabletop/game-table';
 import { Terrain } from '@axe/domain/tabletop/terrain';
 import { SlopeSide } from '@axe/domain/tabletop/terrain-slope';
 import { GameCharacterComponent } from '@axe/features/character/game-character/game-character.component';
+import { PieceFigureHeightsService } from '@axe/features/character/game-character/piece-figure-heights.service';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 import { MovableDirective } from '@axe/ui/directives/movable.directive';
 
@@ -94,6 +101,134 @@ describe('GameCharacterComponent', () => {
     fixture.detectChanges();
 
     expect((fixture.nativeElement as HTMLElement).style.zIndex).toBe('4');
+  });
+
+  it('says by its name how many ride a mount', async () => {
+    const horse = GameCharacter.create('馬', 2, '');
+    horse.mountable = '1';
+    fixture.componentRef.setInput('gameCharacter', horse);
+    fixture.detectChanges();
+    const riders = () => (fixture.nativeElement as HTMLElement).querySelector('[data-testid="piece-riders"]');
+    expect(riders()).toBeNull();
+
+    const rider = GameCharacter.create('騎士', 1, '');
+    rider.ridingOn = horse.identifier;
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(riders()?.textContent).toContain('1');
+  });
+
+  describe('the riding label', () => {
+    function ride(): { horse: GameCharacter; knight: GameCharacter; squire: GameCharacter } {
+      const horse = GameCharacter.create('馬', 2, '');
+      horse.setLocation('table');
+      horse.mountable = '1';
+      const knight = GameCharacter.create('騎士', 1, '');
+      knight.setLocation('table');
+      knight.ridingOn = horse.identifier;
+      const squire = GameCharacter.create('従者', 1, '');
+      squire.setLocation('table');
+      squire.ridingOn = horse.identifier;
+      squire.rideSeat = 'passenger';
+      return { horse, knight, squire };
+    }
+
+    async function draw(of: ComponentFixture<GameCharacterComponent>): Promise<HTMLElement> {
+      of.detectChanges();
+      await of.whenStable();
+      return of.nativeElement as HTMLElement;
+    }
+
+    it('draws a mount ridden as one card, those riding it over the mount and the one in front lowest', async () => {
+      const { horse } = ride();
+      fixture.componentRef.setInput('gameCharacter', horse);
+
+      const element = await draw(fixture);
+      const card = element.querySelector('[data-testid="riding-label"]')!;
+      const names = [...card.querySelectorAll('[data-testid="riding-label-name"], [data-testid="piece-name"]')].map(
+        (name) => name.textContent?.replace(/\s+/g, ' ').trim()
+      );
+
+      expect(names).toEqual(['group 従者', 'upgrade 騎士', '馬 person2']);
+      expect(card.querySelectorAll('[data-testid="riding-label-piece"]')).toHaveLength(3);
+      expect(card.querySelectorAll('[data-testid="piece-gauge"]').length).toBeGreaterThan(0);
+      expect(element.querySelectorAll('[data-testid="piece-name"]')).toHaveLength(1);
+      expect(element.querySelectorAll('[data-testid="piece-gauge"]').length).toBe(
+        card.querySelectorAll('[data-testid="piece-gauge"]').length
+      );
+    });
+
+    it('stands the card over the tallest picture on the mount, and draws a rider in front of its mount', async () => {
+      const { horse, knight } = ride();
+      fixture.componentRef.setInput('gameCharacter', horse);
+      await draw(fixture);
+      type Riding = { ridingCardRise(): number; figureHeightPx(): number };
+      const riding = component as unknown as Riding;
+      expect(riding.ridingCardRise()).toBe(0);
+
+      knight.posZ = horse.posZ + 50;
+      TestBed.inject(PieceFigureHeightsService).set(knight.identifier, riding.figureHeightPx() + 20);
+      await draw(fixture);
+      expect(riding.ridingCardRise()).toBe(70);
+
+      fixture.componentRef.setInput('gameCharacter', knight);
+      await draw(fixture);
+      const facing = (component as unknown as { pieceImageFacing(): (rotation: null) => string }).pieceImageFacing();
+      expect(facing(null)).toContain('translateZ(3px)');
+    });
+
+    it('draws no labels of its own over a piece riding a mount, and its labels again once it is off', async () => {
+      const { knight } = ride();
+      fixture.componentRef.setInput('gameCharacter', knight);
+
+      let element = await draw(fixture);
+      expect(element.querySelector('[data-testid="piece-name"]')).toBeNull();
+      expect(element.querySelector('[data-testid="piece-gauge"]')).toBeNull();
+
+      knight.ridingOn = '';
+      element = await draw(fixture);
+      expect(element.querySelector('[data-testid="piece-name"]')?.textContent).toContain('騎士');
+    });
+
+    it('names those riding a mount in its curved name from above, and draws no ring of their own', async () => {
+      const { horse, knight } = ride();
+      TestBed.inject(ViewModePreferenceService).choose('flat');
+      TestBed.inject(TabletopService).currentTable.multiAngleEnabled = true;
+      fixture.componentRef.setInput('gameCharacter', horse);
+      await draw(fixture);
+
+      expect(component.multiAngleLabelText()).toBe('騎士／従者／馬');
+
+      fixture.componentRef.setInput('gameCharacter', knight);
+      await draw(fixture);
+      expect(component.multiAngleOrbitVisible()).toBe(false);
+    });
+
+    it('leaves out the name of a rider hiding it, and its buffs where it hides them', async () => {
+      const { horse, knight } = ride();
+      knight.hideName = true;
+      knight.buffs.addRound('加護', '', 2);
+      fixture.componentRef.setInput('gameCharacter', horse);
+      const cursor = new PeerCursor();
+      cursor.userId = 'me';
+      cursor.role = PeerRole.Player;
+      cursor.initialize();
+      PeerCursor.myCursor = cursor;
+      onTestFinished(() => {
+        PeerCursor.myCursor = null!;
+      });
+
+      let element = await draw(fixture);
+      const names = () =>
+        [...element.querySelectorAll('[data-testid="riding-label-name"]')].map((name) => name.textContent?.trim());
+      expect(names()).toEqual(['group 従者']);
+      expect(element.querySelectorAll('[data-testid="riding-label-piece"] [data-testid="buff-badge"]').length).toBe(1);
+
+      knight.hideBuff = true;
+      element = await draw(fixture);
+      expect(element.querySelectorAll('[data-testid="riding-label-piece"] [data-testid="buff-badge"]').length).toBe(0);
+    });
   });
 
   describe('standing on a slope', () => {
@@ -215,6 +350,28 @@ describe('GameCharacterComponent', () => {
 
       movableOf().ondragend.emit({} as PointerEvent);
       expect(moveRange.range()).toBeNull();
+    });
+
+    it('carries those riding a mount put down to where it was let go, not where the hand last wrote it', () => {
+      const horse = pieceThatWalks(2);
+      horse.size = 3;
+      horse.mountable = '1';
+      const knight = GameCharacter.create('騎士', 1, '');
+      knight.setLocation('table');
+      knight.location = { name: 'table', x: horse.location.x + 50, y: horse.location.y + 50 };
+      knight.ridingOn = horse.identifier;
+      fixture.componentRef.setInput('gameCharacter', horse);
+      fixture.detectChanges();
+      const movable = movableOf();
+      movable.ondragstart.emit({} as PointerEvent);
+
+      movable.posX = 300;
+      movable.posY = 200;
+      movable.ondragend.emit({} as PointerEvent);
+      movable.onend.emit({} as PointerEvent);
+
+      expect([horse.location.x, horse.location.y]).toEqual([300, 200]);
+      expect([knight.location.x, knight.location.y]).toEqual([350, 250]);
     });
 
     it('takes it away when the pointer is let go without a drop', () => {
@@ -452,6 +609,26 @@ describe('GameCharacterComponent', () => {
         '#ff3b30',
       ]);
       table.gridType = GridType.SQUARE;
+    });
+
+    it('cuts the hex pedestal out of the handle that turns the piece, and nothing out of the square one', async () => {
+      type Grab = { pedestalGrabStyle(): Record<string, string> };
+      fixture.componentRef.setInput('gameCharacter', GameCharacter.create('コマ', 1, ''));
+      fixture.detectChanges();
+      expect((component as unknown as Grab).pedestalGrabStyle()['clipPath']).toBeUndefined();
+
+      const table = TestBed.inject(TabletopService).currentTable;
+      table.gridType = GridType.HEX_VERTICAL;
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      try {
+        const clipPath = (component as unknown as Grab).pedestalGrabStyle()['clipPath'];
+        expect(clipPath).toMatch(/^path\(evenodd, "M 0 [\d.]+ A /);
+        expect(clipPath.match(/ Z/g)).toHaveLength(2);
+      } finally {
+        table.gridType = GridType.SQUARE;
+      }
     });
 
     it('keeps the ring it cut while the piece walks about', async () => {
@@ -1004,6 +1181,30 @@ describe('GameCharacterComponent', () => {
       }
     });
 
+    it('lays the buff icons out in as many columns as the panel is reckoned by', () => {
+      const character = GameCharacter.create('バフ', 1, '');
+      character.addExtendData();
+      character.location = { name: 'table', x: 0, y: 0 };
+      fixture.componentRef.setInput('gameCharacter', character);
+      const container = DataElement.create('バフ', '', {});
+      character.buffDataElement!.appendChild(container);
+      for (let index = 0; index < 7; index++) {
+        container.appendChild(DataElement.create(`加護${index}`, 2, { type: DataElementType.NUMBER_RESOURCE }));
+      }
+      TestBed.inject(ObjectChangeService).notifyChanged(character.buffDataElement!.identifier);
+
+      try {
+        fixture.detectChanges();
+        const grid = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(
+          '[data-testid="buff-badge"]'
+        )?.parentElement;
+
+        expect(grid?.style.gridTemplateColumns).toBe(`repeat(${BUFF_BADGES_PER_ROW}, minmax(0, 1fr))`);
+      } finally {
+        character.destroy();
+      }
+    });
+
     it('leaves its bars alone when data is added to another piece', () => {
       const character = GameCharacter.create('こちら', 1, '');
       const other = GameCharacter.create('あちら', 1, '');
@@ -1400,8 +1601,10 @@ describe('GameCharacterComponent', () => {
       const objectChange = TestBed.inject(ObjectChangeService);
       const hp = DataElement.findElementByReference(character.rootDataElement!, 'HP')!;
       const played: string[] = [];
-      vi.spyOn(SoundEffect, 'playLocal').mockImplementation((arg) => {
+      const kinds: (VolumeType | undefined)[] = [];
+      vi.spyOn(SoundEffect, 'playLocal').mockImplementation((arg, kind) => {
         played.push(typeof arg === 'string' ? arg : arg.identifier);
+        kinds.push(kind);
       });
 
       try {
@@ -1420,6 +1623,7 @@ describe('GameCharacterComponent', () => {
         await fixture.whenStable();
 
         expect(played).toEqual([PresetSound.damageSmall, PresetSound.damageMedium, PresetSound.damageLarge]);
+        expect(kinds).toEqual([VolumeType.EFFECT, VolumeType.EFFECT, VolumeType.EFFECT]);
       } finally {
         character.destroy();
       }
@@ -1549,6 +1753,109 @@ describe('GameCharacterComponent', () => {
 
   it('computes whether it is targeted', () => {
     expect(typeof component.isTargeted).toBe('function');
+  });
+
+  describe('the ring on the piece everyone is looking out of', () => {
+    const ringOf = () => fixture.nativeElement.querySelector('[data-testid="shared-view-ring"]');
+
+    let table: GameTable;
+
+    beforeEach(() => {
+      table = new GameTable();
+      table.width = 12;
+      table.height = 12;
+      table.gridSize = 50;
+      table.initialize();
+    });
+
+    afterEach(() => table.destroy());
+
+    function shareView(identifier: string): void {
+      table.sharedViewPiece = identifier;
+      TestBed.inject(ObjectChangeService).notifyChanged(table.identifier);
+      fixture.detectChanges();
+    }
+
+    it('marks the piece the table names, and lets it go again', () => {
+      const character = GameCharacter.create('共有コマ', 1, '');
+      fixture.componentRef.setInput('gameCharacter', character);
+
+      try {
+        fixture.detectChanges();
+        expect(ringOf()).toBeNull();
+
+        shareView(character.identifier);
+        expect(ringOf()).toBeTruthy();
+
+        shareView('');
+        expect(ringOf()).toBeNull();
+      } finally {
+        character.destroy();
+      }
+    });
+
+    it('leaves every other piece unmarked', () => {
+      const character = GameCharacter.create('よそのコマ', 1, '');
+      fixture.componentRef.setInput('gameCharacter', character);
+
+      try {
+        fixture.detectChanges();
+        shareView('somebody-else');
+
+        expect(ringOf()).toBeNull();
+      } finally {
+        character.destroy();
+      }
+    });
+  });
+
+  describe('what the character says', () => {
+    let tab: ChatTab;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      ChatTabList.instance.initialize();
+      tab = new ChatTab();
+      tab.initialize();
+      ChatTabList.instance.appendChild(tab);
+      vi.spyOn(TestBed.inject(ChatMessageService), 'getTime').mockImplementation(() => Date.now());
+    });
+
+    afterEach(() => {
+      TestBed.inject(SpeechBubbleService).clear();
+      for (const chatTab of [...ChatTabList.instance.chatTabs]) chatTab.destroy();
+      localStorage.removeItem('ui-piece-overlay');
+      vi.useRealTimers();
+    });
+
+    const bubbleOf = () => fixture.nativeElement.querySelector('[data-testid="speech-bubble"]') as HTMLElement | null;
+
+    it('shows over the piece, kept from a screen reader, and not while this seat hides it', () => {
+      const character = GameCharacter.create('話者', 1, '');
+      fixture.componentRef.setInput('gameCharacter', character);
+
+      try {
+        fixture.detectChanges();
+        tab.addMessage({
+          from: 'me',
+          sendFrom: character.identifier,
+          name: '話者',
+          text: '手を振る。「やあ」',
+          timestamp: Date.now(),
+        });
+        vi.advanceTimersByTime(SPEECH_BUBBLE_WAIT_MS);
+        fixture.detectChanges();
+
+        expect(bubbleOf()?.textContent?.trim()).toBe('やあ');
+        expect(bubbleOf()?.closest('[aria-hidden="true"]')).toBeTruthy();
+
+        TestBed.inject(PieceOverlayPreferenceService).toggleSpeech();
+        fixture.detectChanges();
+        expect(bubbleOf()).toBeNull();
+      } finally {
+        character.destroy();
+      }
+    });
   });
 
   describe('the target marker', () => {
@@ -2069,6 +2376,53 @@ describe('GameCharacterComponent', () => {
         expect(root.querySelector('[data-testid="multi-angle-name-orbit"]')).toBeNull();
         expect(root.querySelectorAll('[data-testid="piece-name"]')).toHaveLength(1);
       } finally {
+        character.destroy();
+      }
+    });
+
+    it('draws no name while this seat has names switched off from the toolbar', () => {
+      const tabletopService = TestBed.inject(TabletopService);
+      tabletopService.currentTable.mode2d = true;
+      tabletopService.currentTable.multiAngleEnabled = false;
+      const character = GameCharacter.create('名札', 1, '');
+      fixture.componentRef.setInput('gameCharacter', character);
+      const overlay = TestBed.inject(PieceOverlayPreferenceService);
+      const root = fixture.nativeElement as HTMLElement;
+
+      try {
+        fixture.detectChanges();
+        expect(root.querySelectorAll('[data-testid="piece-name"]')).toHaveLength(1);
+
+        overlay.toggleNames();
+        fixture.detectChanges();
+        expect(root.querySelectorAll('[data-testid="piece-name"]')).toHaveLength(0);
+
+        overlay.toggleNames();
+        fixture.detectChanges();
+        expect(root.querySelectorAll('[data-testid="piece-name"]')).toHaveLength(1);
+      } finally {
+        localStorage.removeItem('ui-piece-overlay');
+        character.destroy();
+      }
+    });
+
+    it('draws no name round the orbit either while names are switched off', () => {
+      const tabletopService = TestBed.inject(TabletopService);
+      tabletopService.currentTable.mode2d = true;
+      tabletopService.currentTable.multiAngleEnabled = true;
+      const character = GameCharacter.create('周回名札', 1, '');
+      fixture.componentRef.setInput('gameCharacter', character);
+      const root = fixture.nativeElement as HTMLElement;
+
+      try {
+        TestBed.inject(PieceOverlayPreferenceService).toggleNames();
+        fixture.detectChanges();
+
+        expect(component.multiAngleNameOrbitEnabled()).toBe(true);
+        expect(root.querySelector('[data-testid="multi-angle-name-orbit"]')).toBeNull();
+        expect(root.querySelectorAll('[data-testid="piece-name"]')).toHaveLength(0);
+      } finally {
+        localStorage.removeItem('ui-piece-overlay');
         character.destroy();
       }
     });

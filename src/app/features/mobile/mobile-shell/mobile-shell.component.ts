@@ -252,6 +252,8 @@ export class MobileShellComponent {
         return 'fileStorage';
       case 'jukebox':
         return 'jukebox';
+      case 'soundSettings':
+        return 'soundSettings';
       case 'cutIn':
         return 'cutInList';
       case 'effect':

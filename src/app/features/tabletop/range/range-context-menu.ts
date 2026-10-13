@@ -11,6 +11,7 @@ import { buildAltitudeAction, buildLockToggleAction } from '@axe/application/ui/
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
 import { RangeArea } from '@axe/domain/tabletop/range';
+import { COVERED_RANGE_TYPES } from '@axe/domain/tabletop/range-coverage';
 
 export interface RangeContextMenuModel {
   actions: ContextMenuAction[];
@@ -28,7 +29,8 @@ export function buildRangeContextMenu(
   onDockingWindowOpen: () => void,
   onEdit: (r: RangeArea) => void,
   t: TranslateFn,
-  onEditCells?: (r: RangeArea) => void
+  onEditCells?: (r: RangeArea) => void,
+  onTargetInside?: (r: RangeArea) => void
 ): ContextMenuAction[] {
   return buildRangeContextMenuModel(
     range,
@@ -40,7 +42,8 @@ export function buildRangeContextMenu(
     onDockingWindowOpen,
     onEdit,
     t,
-    onEditCells
+    onEditCells,
+    onTargetInside
   ).actions;
 }
 
@@ -61,7 +64,8 @@ export function buildRangeContextMenuModel(
   onDockingWindowOpen: () => void,
   onEdit: (r: RangeArea) => void,
   t: TranslateFn,
-  onEditCells?: (r: RangeArea) => void
+  onEditCells?: (r: RangeArea) => void,
+  onTargetInside?: (r: RangeArea) => void
 ): RangeContextMenuModel {
   const altitudeAction = buildAltitudeAction(range, t, {
     keepPosZ: true,
@@ -75,6 +79,10 @@ export function buildRangeContextMenuModel(
     name: t('feature.tabletop.contextMenu.rangeEdit'),
     action: () => onEdit(range),
   };
+  const targetActions: ContextMenuAction[] =
+    onTargetInside && COVERED_RANGE_TYPES.includes(range.type)
+      ? [{ name: t('feature.tabletop.contextMenu.rangeTargetInside'), action: () => onTargetInside(range) }]
+      : [];
   const copyAction: ContextMenuAction = {
     name: t('feature.tabletop.contextMenu.copy'),
     action: () => {
@@ -100,7 +108,7 @@ export function buildRangeContextMenuModel(
   };
 
   const positionActions = [altitudeAction, lockAction, ...(followAction ? [followAction] : [])];
-  const shapeActions = [shapeAction, ...customActions];
+  const shapeActions = [shapeAction, ...customActions, ...targetActions];
   const actions: ContextMenuAction[] = [
     ...positionActions,
     ContextMenuSeparator,
@@ -146,7 +154,7 @@ function buildFollowAction(
   onDockingWindowOpen: () => void,
   t: TranslateFn
 ): ContextMenuAction | null {
-  if (!['CIRCLE', 'SQUARE', 'TRIANGLE', 'PENTAGON', 'HEXAGON'].includes(range.type)) return null;
+  if (!['CIRCLE', 'SQUARE', 'RHOMBUS', 'TRIANGLE', 'PENTAGON', 'HEXAGON'].includes(range.type)) return null;
   return objectStore.get(range.followingCharacterIdentifier) != null
     ? {
         name: t('feature.tabletop.contextMenu.unfollow'),
@@ -161,27 +169,38 @@ function buildFollowAction(
       };
 }
 
+/**
+ * The shapes a range can be switched to, the current one ticked. The square opens onto drawing its
+ * four corners on the diagonals, as a diamond, or square to the grid.
+ */
 function buildShapeAction(range: RangeArea, t: TranslateFn): ContextMenuAction {
-  const shapes = [
-    ['LINE', 'shapeLine'],
-    ['CORN', 'shapeCorn'],
-    ['TRIANGLE', 'shapeTriangle'],
-    ['SQUARE', 'shapeSquare'],
-    ['PENTAGON', 'shapePentagon'],
-    ['HEXAGON', 'shapeHexagon'],
-    ['CIRCLE', 'shapeCircle'],
-    ['CUSTOM', 'shapeCustom'],
-  ] as const;
+  const pick = (type: string, label: string): ContextMenuAction => ({
+    name: (range.type === type ? '✔ ' : '') + t(`feature.tabletop.contextMenu.${label}`),
+    action: () => {
+      range.type = type;
+      SoundEffect.play(PresetSound.sweep);
+    },
+  });
+  const quadrilateral: ContextMenuAction = {
+    name:
+      (range.type === 'SQUARE' || range.type === 'RHOMBUS' ? '✔ ' : '') +
+      t('feature.tabletop.contextMenu.shapeSquareFamily'),
+    action: undefined,
+    subActions: [pick('RHOMBUS', 'shapeAsDiamond'), pick('SQUARE', 'shapeAsSquare')],
+  };
   return {
     name: t('feature.tabletop.contextMenu.shape'),
     action: undefined,
-    subActions: shapes.map(([type, label]) => ({
-      name: (range.type === type ? '✔ ' : '') + t(`feature.tabletop.contextMenu.${label}`),
-      action: () => {
-        range.type = type;
-        SoundEffect.play(PresetSound.sweep);
-      },
-    })),
+    subActions: [
+      pick('LINE', 'shapeLine'),
+      pick('CORN', 'shapeCorn'),
+      pick('TRIANGLE', 'shapeTriangle'),
+      quadrilateral,
+      pick('PENTAGON', 'shapePentagon'),
+      pick('HEXAGON', 'shapeHexagon'),
+      pick('CIRCLE', 'shapeCircle'),
+      pick('CUSTOM', 'shapeCustom'),
+    ],
   };
 }
 

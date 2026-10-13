@@ -25,10 +25,12 @@ function makeTerrain(opts: {
   posZ?: number;
   identifier?: string;
   surface?: TableSurface;
+  rotate?: number;
 }): DrawnEntry {
   const terrain = Terrain.create('t', opts.w, opts.d, opts.h, '', '', opts.identifier ?? `terrain_${opts.x}_${opts.y}`);
   terrain.location.x = opts.x;
   terrain.location.y = opts.y;
+  terrain.rotate = opts.rotate ?? 0;
   if (opts.surface) terrain.location.surface = opts.surface;
   terrain.posZ = opts.posZ ?? 0;
   void terrain.altitude;
@@ -134,6 +136,13 @@ describe('GravityService.findSupportZ', () => {
     const target = makeTerrain({ x: 50, y: 50, w: 1, d: 1, h: 1, identifier: 'target', posZ: 200 });
     const z = GravityService.findSupportZ(target, [low, high, target], 50);
     expect(z).toBe(3 * 50);
+  });
+
+  it('reads a turned block where it is drawn', () => {
+    const beam = makeTerrain({ x: 0, y: 0, w: 4, d: 1, h: 2, identifier: 'beam', rotate: 90 });
+
+    expect(GravityService.findSupportZ(makeCharacter({ x: 75, y: 75, posZ: 300 }), [beam], 50)).toBe(100);
+    expect(GravityService.findSupportZ(makeCharacter({ x: 0, y: 0, posZ: 300 }), [beam], 50)).toBe(0);
   });
 
   it('ignores a footprint the centre falls outside of', () => {
@@ -289,6 +298,27 @@ describe('applying gravity through the spatial index', () => {
     expect(char.object.posZ).toBe(0);
   });
 
+  it('drops a character onto a turned block where the block is drawn', () => {
+    // Four cells by one, turned a quarter round about its middle at 100, 25.
+    const beam = makeTerrain({ x: 0, y: 0, w: 4, d: 1, h: 2, identifier: 'beam', rotate: 90 });
+    const char = makeCharacter({ x: 75, y: 75, posZ: 300 });
+    const svc = setup([beam, char]);
+
+    applyNow(svc);
+
+    expect(char.object.posZ).toBe(2 * 50);
+  });
+
+  it('drops a character to the floor where a turned block lay before it was turned', () => {
+    const beam = makeTerrain({ x: 0, y: 0, w: 4, d: 1, h: 2, identifier: 'beam', rotate: 90 });
+    const char = makeCharacter({ x: 0, y: 0, posZ: 300 });
+    const svc = setup([beam, char]);
+
+    applyNow(svc);
+
+    expect(char.object.posZ).toBe(0);
+  });
+
   it('leaves distant terrain out, since the index never offers it', () => {
     const base = makeTerrain({ x: 0, y: 0, w: 1, d: 1, h: 2, identifier: 'base' });
     const char = makeCharacter({ x: 2000, y: 2000, posZ: 300 });
@@ -346,6 +376,35 @@ describe('applying gravity through the spatial index', () => {
     applyNow(svc);
 
     expect(flying.object.posZ).toBe(100);
+  });
+
+  it('stands a piece riding a mount on the mount, at the height its riders stand, wherever the mount is', () => {
+    const base = makeTerrain({ x: 0, y: 0, w: 4, d: 4, h: 1, identifier: 'base' });
+    const horse = makeCharacter({ x: 0, y: 0, size: 2, posZ: 300 });
+    const rider = makeCharacter({ x: 25, y: 25 });
+    const mount = horse.object as GameCharacter;
+    mount.mountable = '1';
+    (rider.object as GameCharacter).ridingOn = mount.identifier;
+    const svc = setup([base, horse, rider]);
+
+    applyNow(svc);
+    expect(horse.object.posZ).toBe(50);
+    expect(rider.object.posZ).toBe(50 + 50);
+
+    mount.mountSeatHeight = '0.5';
+    applyNow(svc);
+    expect(rider.object.posZ).toBe(50 + 25);
+  });
+
+  it('lets a piece riding nothing it can stand on come down to what is under it', () => {
+    const horse = makeCharacter({ x: 0, y: 0, size: 2 });
+    const rider = makeCharacter({ x: 25, y: 25, posZ: 200 });
+    (rider.object as GameCharacter).ridingOn = horse.object.identifier;
+    const svc = setup([horse, rider]);
+
+    applyNow(svc);
+
+    expect(rider.object.posZ).toBe(0);
   });
 
   it('forces no reflow under a crowd of objects', () => {

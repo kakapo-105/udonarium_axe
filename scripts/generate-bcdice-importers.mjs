@@ -1,7 +1,7 @@
-// BCDice のゲームシステムと翻訳を 1 つずつ読み込むための import 表を生成する。
-// bcdice 同梱の DynamicLoader は実行時に組み立てたパスを require に渡すため、バンドラが追えずブラウザで落ちる。
-// 全システムをまとめて読むと 11MB を超えるので、ここで game_system_list.json と i18n_list.json から
-// パスを書き出した動的 import の一覧を作り、システムごとに別チャンクで読めるようにする。
+// BCDiceのゲームシステムと翻訳を1つずつ読み込むためのimport表を生成する。
+// bcdice同梱のDynamicLoaderは実行時に組み立てたパスをrequireに渡すため、バンドラが追えずブラウザで落ちる。
+// 全システムをまとめて読むと11MBを超えるので、ここでgame_system_list.jsonとi18n_list.jsonから
+// パスを書き出した動的importの一覧を作り、システムごとに別チャンクで読めるようにする。
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import * as prettier from 'prettier';
 
@@ -59,5 +59,5 @@ ${translationEntries}
 const prettierConfig = await prettier.resolveConfig(OUTPUT_PATH);
 writeFileSync(OUTPUT_PATH, await prettier.format(source, { ...prettierConfig, filepath: OUTPUT_PATH }));
 console.log(
-  `[generate-bcdice-importers] システム ${classNames.length} 件と翻訳 ${translations.length} 件を ${OUTPUT_PATH} に出力しました`
+  `[generate-bcdice-importers] システム${classNames.length}件と翻訳${translations.length}件を${OUTPUT_PATH}に出力しました`
 );

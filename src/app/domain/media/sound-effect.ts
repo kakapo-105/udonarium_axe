@@ -1,11 +1,12 @@
 import { callSoundEffect, sendMessage$, soundEffect$ } from '@axe/core/event/domain-events';
 import { AudioFile } from '@axe/core/storage/audio-file';
-import { AudioPlayer } from '@axe/core/storage/audio-player';
+import { AudioPlayer, VolumeType } from '@axe/core/storage/audio-player';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { SyncObject } from '@axe/core/sync/decorator';
 import { GameObject } from '@axe/core/sync/game-object';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { ChatMessage } from '@axe/domain/chat/chat-message';
+import { presetSoundKind } from '@axe/domain/media/preset-sound-kinds';
 
 export class PresetSound {
   static dicePick: string = '';
@@ -121,15 +122,15 @@ export class SoundEffect extends GameObject {
 
   // GameObject Lifecycle
   /**
-   * Starts listening: a sound sent over the network is played at half volume, and a dice roll
-   * this peer sends through the dice bot plays one of the two rolling sounds.
+   * Starts listening: a sound sent over the network is played at half volume through the channel of
+   * its kind, and a dice roll this peer sends through the dice bot plays one of the two rolling sounds.
    */
   override onStoreAdded() {
     super.onStoreAdded();
     this.cleanups.push(
       soundEffect$.subscribe((identifier) => {
         const audio = AudioStorage.instance.get(identifier);
-        if (audio) AudioPlayer.play(audio, 0.5);
+        if (audio) AudioPlayer.play(audio, 0.5, SoundEffect.kindOf(identifier));
       })
     );
     this.cleanups.push(
@@ -169,12 +170,30 @@ export class SoundEffect extends GameObject {
     SoundEffect._play(identifier);
   }
 
-  /** Plays a sound on this peer alone, at half volume. Nothing happens for an empty identifier or a missing file. */
-  static playLocal(arg: string | AudioFile): void {
+  /**
+   * Plays a sound on this peer alone, at half volume, through the channel of the kind given or, with
+   * none given, of the kind the sound is. Nothing happens for an empty identifier or a missing file.
+   */
+  static playLocal(arg: string | AudioFile, kind?: VolumeType): void {
     const identifier = typeof arg === 'string' ? arg : arg.identifier;
     if (identifier.length < 1) return;
     const audio = AudioStorage.instance.get(identifier);
-    if (audio) AudioPlayer.play(audio, 0.5);
+    if (audio) AudioPlayer.play(audio, 0.5, kind ?? SoundEffect.kindOf(identifier));
+  }
+
+  /**
+   * The channel a sound plays through when nothing says otherwise: a built-in sound by what it is,
+   * and any other sound, one somebody added to the room, as a sound effect.
+   *
+   * Only the sound itself travels over the network, so each peer works out its kind on its own and
+   * a peer of an older version still hears the same sound.
+   */
+  static kindOf(identifier: string): VolumeType {
+    if (identifier.length < 1) return VolumeType.SE;
+    for (const [key, held] of Object.entries(PresetSound)) {
+      if (held === identifier) return presetSoundKind(key);
+    }
+    return VolumeType.SE;
   }
 
   private static _play(identifier: string) {

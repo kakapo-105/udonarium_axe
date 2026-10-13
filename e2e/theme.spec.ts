@@ -9,7 +9,7 @@ test.describe('テーマ切り替え', () => {
 
   test('FAB の「表示」の小窓に、今のテーマのアイコンが出ること', async ({ page }) => {
     const panel = await openSeatDisplay(page);
-    // 起動時は theme='auto'。
+    // 起動時はtheme='auto'。
     const theme = panel.getByTestId('seat-theme');
     await expect(theme).toHaveAttribute('data-label', 'テーマ: 自動');
     await expect(theme.locator('i.material-icons')).toHaveText('brightness_auto');

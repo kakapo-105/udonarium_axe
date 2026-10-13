@@ -4,6 +4,13 @@ import { SyncObject, SyncVar } from '@axe/core/sync/decorator';
 import { ObjectNode } from '@axe/core/sync/object-node';
 import { ObjectStore } from '@axe/core/sync/object-store';
 
+/**
+ * The tag of a sound that loops underneath the music as a background sound, such as rain or a crowd.
+ *
+ * It is kept the same in every language and shown translated, as 環境音 in Japanese.
+ */
+export const AUDIO_TAG_BGS = 'BGS';
+
 @SyncObject('audio-tag')
 export class AudioTag extends ObjectNode {
   @SyncVar() audioIdentifier: string = '';
@@ -21,6 +28,11 @@ export class AudioTag extends ObjectNode {
       .filter((tag) => tag.containsWords(searchWords))
       .map((tag) => AudioStorage.instance.get(tag.audioIdentifier))
       .filter((audio): audio is AudioFile => audio !== null);
+  }
+
+  /** Whether a sound is tagged to play as a background sound. */
+  static isBackgroundSound(audioIdentifier: string): boolean {
+    return AudioTag.get(audioIdentifier)?.tag === AUDIO_TAG_BGS;
   }
 
   /** The tag of a sound. Despite the type, it is null when the sound has never been tagged. */

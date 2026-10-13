@@ -3,6 +3,7 @@ import { exportChatLog } from '@axe/domain/chat/chat-log-export';
 import { ChatLogExporter, ChatLogLine, ChatLogTab } from '@axe/domain/chat/chat-log-exporter';
 import { renderRichChatLog } from '@axe/domain/chat/chat-log-rich';
 import { CHAT_LOG_THEME_CSS } from '@axe/domain/chat/chat-log-theme-css';
+import { DEFAULT_RUBY_DISPLAY, RubyDisplay, rubyDisplayCss } from '@axe/domain/chat/ruby-display';
 import type { DiceRollDetail } from '@axe/domain/dice/dice-roll-detail';
 
 const MINUTE = 60 * 1000;
@@ -34,6 +35,7 @@ function line(overrides: Partial<ChatLogLine> = {}): ChatLogLine {
     isDicebot: false,
     rollDetail: null,
     isOutOfStory: false,
+    isPseudoDeleted: false,
     ...overrides,
   };
 }
@@ -208,6 +210,41 @@ describe('renderRichChatLog', () => {
     expect(html).toContain('<span class="ed">編集済</span>');
   });
 
+  it('keeps a deleted line in the log, marked under the label given, and does not quote it', () => {
+    const deleted = line({ text: '言い間違い', isPseudoDeleted: true });
+    const answer = line({ text: '返事', replyTo: 'x', replyToMessage: deleted as never });
+
+    const html = renderRichChatLog('washi', 'tab', [tab('メイン', [deleted, answer])], {
+      labels: { pseudoDeleted: 'Deleted' },
+    });
+
+    expect(html).toContain('<span class="ed">Deleted</span>');
+    expect(html.split('言い間違い')).toHaveLength(2);
+  });
+
+  it('does not quote a whisper in the log of somebody it was not whispered to', () => {
+    const whisper = line({ text: '内緒の話', from: 'user-A', to: 'user-C' });
+    const answer = line({ text: '返事', replyTo: 'x', replyToMessage: whisper as never });
+
+    expect(renderRichChatLog('washi', 'tab', [tab('メイン', [answer])], { userId: 'user-B' })).not.toContain(
+      '内緒の話'
+    );
+    expect(renderRichChatLog('washi', 'tab', [tab('メイン', [answer])], { userId: 'user-C' })).toContain('内緒の話');
+  });
+
+  it('quotes a secret roll by what stands in for it in the log of anybody but the one who rolled it', () => {
+    const secret = roll('DiceBot : (1d100) → 3', '', {
+      isSecret: true,
+      isSentBy: (userId: string) => userId === 'roller',
+    });
+    const answer = line({ text: '返事', replyTo: 'x', replyToMessage: secret as never });
+
+    const toOthers = renderRichChatLog('washi', 'tab', [tab('メイン', [answer])], { userId: 'someone' });
+    expect(toOthers).toContain('<span class="rt">シークレットダイス</span>');
+    expect(toOthers).not.toContain('→ 3');
+    expect(renderRichChatLog('washi', 'tab', [tab('メイン', [answer])], { userId: 'roller' })).toContain('→ 3');
+  });
+
   it('keeps a colour it cannot trust out of the style attribute', () => {
     const html = renderRichChatLog('neon', 'tab', [
       tab('メイン', [line({ messColor: 'red;background:url(https://example.com/x)' })]),
@@ -325,23 +362,58 @@ describe('renderRichChatLog', () => {
 describe('exportChatLog', () => {
   const tabs = [tab('メイン', [line({ text: '開始' })])];
 
+  /** A page of the log as it is saved: with the style sheet its ruby is drawn by, before its head ends. */
+  const withRubyStyle = (html: string, display: RubyDisplay = DEFAULT_RUBY_DISPLAY) =>
+    html.replace('</head>', `<style>${rubyDisplayCss(display)}</style></head>`);
+
   it('writes the older plain layout for the standard style', () => {
-    expect(exportChatLog('standard', 'tab', tabs)).toBe(ChatLogExporter.exportTabHtml(tabs[0]));
+    expect(exportChatLog('standard', 'tab', tabs)).toBe(withRubyStyle(ChatLogExporter.exportTabHtml(tabs[0])));
     expect(exportChatLog('standard', 'all', tabs, { showTime: true })).toBe(
-      ChatLogExporter.exportAllTabsHtml(tabs, true)
+      withRubyStyle(ChatLogExporter.exportAllTabsHtml(tabs, true))
     );
   });
 
   it('writes the other older layout for its style', () => {
-    expect(exportChatLog('coc', 'tab', tabs)).toBe(ChatLogExporter.exportTabHtmlCoc(tabs[0]));
-    expect(exportChatLog('coc', 'all', tabs)).toBe(ChatLogExporter.exportAllTabsHtmlCoc(tabs));
+    expect(exportChatLog('coc', 'tab', tabs)).toBe(withRubyStyle(ChatLogExporter.exportTabHtmlCoc(tabs[0])));
+    expect(exportChatLog('coc', 'all', tabs)).toBe(withRubyStyle(ChatLogExporter.exportAllTabsHtmlCoc(tabs)));
   });
 
   it('dresses the log in a theme for any other style', () => {
-    expect(exportChatLog('washi', 'tab', tabs)).toBe(renderRichChatLog('washi', 'tab', tabs));
+    expect(exportChatLog('washi', 'tab', tabs)).toBe(withRubyStyle(renderRichChatLog('washi', 'tab', tabs)));
+  });
+
+  it('draws the ruby of a saved page as the reader saving it has ruby drawn', () => {
+    const display: RubyDisplay = { show: 'over', align: 'start', spacing: 'even', size: 'half' };
+
+    const page = exportChatLog('washi', 'tab', tabs, { ruby: display });
+
+    expect(page).toContain('ruby.chat-ruby{ruby-align:start;ruby-position:over}');
+    expect(page).toContain('font-size:0.5em');
+    expect(page).toBe(withRubyStyle(renderRichChatLog('washi', 'tab', tabs, { ruby: display }), display));
   });
 
   it('writes an empty log rather than failing when there is no tab', () => {
     expect(() => exportChatLog('standard', 'tab', [])).not.toThrow();
+  });
+
+  it('lists the stamps put on a line under it, each with how many, and none on a sealed roll', () => {
+    const reactionsOf = (id: string) =>
+      id === 'line-1'
+        ? [
+            { label: 'ゾワッ', count: 2 },
+            { label: '了解', count: 1 },
+          ]
+        : [];
+    const answered = line({ identifier: 'line-1' });
+    const sealed = roll('(1D100) → 3', '', { identifier: 'line-1', isSecret: true, isSentBy: () => false });
+
+    const html = renderRichChatLog('washi', 'tab', [tab('メイン', [answered])], { reactionsOf });
+    expect(html).toContain(
+      '<div class="rx" aria-label="リアクション"><span>ゾワッ <b>2</b></span><span>了解 <b>1</b></span></div>'
+    );
+
+    expect(
+      renderRichChatLog('washi', 'tab', [tab('メイン', [sealed])], { reactionsOf, userId: 'someone' })
+    ).not.toContain('class="rx"');
   });
 });

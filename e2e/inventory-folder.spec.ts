@@ -1,6 +1,6 @@
 import { expect, Page, test } from '@playwright/test';
 
-import { createCharacter, openPanel, waitAppReady } from './helpers';
+import { createCharacter, openPanel, revealMenuEntry, waitAppReady } from './helpers';
 
 function items(page: Page) {
   return page.locator('game-object-inventory [data-testid="inventory-item"]');
@@ -31,7 +31,7 @@ async function putFirstInFolder(page: Page, folderName: string) {
 }
 
 test.describe('インベントリの検索とフォルダ', () => {
-  // フォルダはテーブルタブには効かないので、共有タブに 1 体だけ置いた状態から始める。
+  // フォルダはテーブルタブでは使えないので、共有タブに1体だけ置いた状態から始める。
   const listed = 1;
 
   test.beforeEach(async ({ page }) => {
@@ -44,7 +44,7 @@ test.describe('インベントリの検索とフォルダ', () => {
     await items(page).first().click({ button: 'right' });
     const menu = page.locator('context-menu');
     await expect(menu.locator('li').first()).toBeVisible({ timeout: 5000 });
-    await menu.getByText('共有イベントリに移動').click();
+    await (await revealMenuEntry(page, menu, '共有イベントリに移動')).click();
 
     await page.locator('game-object-inventory form[name="game-object-inventory"] > label').nth(1).click();
     await expect(items(page)).toHaveCount(listed, { timeout: 5000 });
@@ -88,7 +88,7 @@ test.describe('インベントリの検索とフォルダ', () => {
     const search = page.locator('inventory-filter-panel input[name="inventory-search"]');
     await expect(search).toBeVisible({ timeout: 5000 });
 
-    // 一括で流し込むと ngModel が拾わないので、読み手と同じように打ち込む。
+    // 一括で流し込むとngModelが拾わないので、人と同じように打ち込む。
     await search.click();
     await search.pressSequentially('該当しないはずの名前zzz');
     await expect(items(page)).toHaveCount(0);

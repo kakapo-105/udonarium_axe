@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, ComponentRef, ViewContainerRef } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ComponentRef, signal, ViewContainerRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { OverlayLayers } from '@axe/application/ui/overlay-layers';
 import { PanelFrame, PanelOption } from '@axe/application/ui/panel.service';
+import { ViewportService } from '@axe/application/ui/viewport.service';
 import { AttachedDocuments } from '@axe/domain/ui/attached-documents';
 import { PanelWindowRequest, PanelWindowService } from '@axe/features/panels/panel-window.service';
 
@@ -54,6 +55,44 @@ describe('PanelWindowService', () => {
     };
     return opened as unknown as Window;
   }
+
+  describe('where a panel may be let out', () => {
+    function on(screen: { isCompact: boolean; isTouch: boolean; hasFinePointer: boolean }): PanelWindowService {
+      TestBed.configureTestingModule({
+        providers: [
+          {
+            provide: ViewportService,
+            useValue: {
+              isCompact: signal(screen.isCompact),
+              isTouch: signal(screen.isTouch),
+              hasFinePointer: signal(screen.hasFinePointer),
+            },
+          },
+        ],
+      });
+      return TestBed.inject(PanelWindowService);
+    }
+
+    it('lets a panel out on a wide screen with a mouse', () => {
+      expect(on({ isCompact: false, isTouch: false, hasFinePointer: true }).isSupported).toBe(true);
+    });
+
+    it('keeps it in on a phone, where a window is only another tab', () => {
+      expect(on({ isCompact: true, isTouch: true, hasFinePointer: false }).isSupported).toBe(false);
+    });
+
+    it('keeps it in on a tablet too', () => {
+      expect(on({ isCompact: false, isTouch: true, hasFinePointer: false }).isSupported).toBe(false);
+    });
+
+    it('lets a panel out on a PC whose touch screen counts as its main pointer, as it has a mouse too', () => {
+      expect(on({ isCompact: false, isTouch: true, hasFinePointer: true }).isSupported).toBe(true);
+    });
+
+    it('lets a panel out of a PC window made narrow, where the app is laid out as on a phone', () => {
+      expect(on({ isCompact: true, isTouch: false, hasFinePointer: true }).isSupported).toBe(true);
+    });
+  });
 
   describe('a window that has really opened', () => {
     let opened: Window;

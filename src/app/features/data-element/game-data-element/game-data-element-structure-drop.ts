@@ -109,3 +109,37 @@ export function resolveDropPosition(
   if (offsetY >= hostRect.height - edgeSize) return 'after';
   return canDropInside(targetElement) ? 'inside' : 'after';
 }
+
+/** A group or section an element could be moved into, with the path that names it on the sheet. */
+export interface MoveTarget {
+  element: DataElement;
+  /** The names from the section down to the target, as a picker lists it. */
+  path: string[];
+}
+
+/**
+ * The groups and sections an element could be moved into, other than the one it is in, in the order
+ * they stand on the sheet.
+ *
+ * Only an element on a sheet's `detail` has anywhere to go; a target is offered where a drop inside
+ * it would be allowed.
+ */
+export function listMoveTargets(element: DataElement): MoveTarget[] {
+  let root: DataElement | null = element.parent instanceof DataElement ? element.parent : null;
+  while (root && root.name !== 'detail') root = root.parent instanceof DataElement ? root.parent : null;
+  if (!root) return [];
+
+  const targets: MoveTarget[] = [];
+  const walk = (node: DataElement, path: string[]) => {
+    for (const child of node.children) {
+      if (!(child instanceof DataElement) || child === element || child.fieldRole === DataElementRole.FIELD) continue;
+      const childPath = [...path, child.name];
+      if (child !== element.parent && canDropStructureElement(element, child, 'inside', getElementDepth(child))) {
+        targets.push({ element: child, path: childPath });
+      }
+      walk(child, childPath);
+    }
+  };
+  walk(root, []);
+  return targets;
+}

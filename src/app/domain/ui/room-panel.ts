@@ -27,6 +27,7 @@ export const ROOM_PANELS = [
   'replay',
   'tabletopDisplay',
   'skin',
+  'soundSettings',
   'menuEditor',
 ] as const;
 
@@ -66,6 +67,7 @@ const LABEL_KEYS: Record<PanelName, string> = {
   replay: 'common.panel.replay',
   tabletopDisplay: 'feature.tabletop.displaySetting.title',
   skin: 'feature.skin.title',
+  soundSettings: 'common.panel.soundSettings',
   menuEditor: 'feature.menuEditor.title',
 };
 

@@ -1,9 +1,12 @@
+import { backgroundSoundLevel } from '@axe/domain/media/background-sound-level';
 import { type ReplayEvent, ReplayEventKind } from '@axe/domain/replay/replay-event';
 import type { ReplayStoryboard } from '@axe/domain/replay/replay-storyboard';
 
 export const REPLAY_SE_GAIN = 0.9;
 export const REPLAY_BGM_GAIN = 0.45;
 export const REPLAY_BGM_FADE_MS = 600;
+export const REPLAY_BGS_GAIN = 0.45;
+export const REPLAY_BGS_FADE_MS = 1500;
 
 export interface ReplaySoundCue {
   audioIdentifier: string;
@@ -36,8 +39,9 @@ export const DEFAULT_REPLAY_SOUND_CHOICE: ReplaySoundChoice = { withEffects: tru
  * The sound effects and music of a replay video, timed on the clock of its storyboard or timeline.
  *
  * Events the storyboard does not reach are passed over. Each change of music ends the track
- * before it, and a track still playing runs to the end. Empty when the storyboard has no length
- * or both kinds of sound are left out.
+ * before it, and a track still playing runs to the end. Background sounds go with the music but
+ * overlap it and one another, each running from its start to its stop at the room volume it was
+ * started at. Empty when the storyboard has no length or both kinds of sound are left out.
  */
 export function buildReplaySoundtrack(
   events: readonly ReplayEvent[],
@@ -50,6 +54,7 @@ export function buildReplaySoundtrack(
   const effects: ReplaySoundCue[] = [];
   const music: ReplayBgmCue[] = [];
   let playing: ReplayBgmCue | null = null;
+  const backgrounds = new Map<string, ReplayBgmCue>();
 
   for (const event of events) {
     const startMs = storyboard.timeOfSeq.get(event.seq);
@@ -61,6 +66,28 @@ export function buildReplaySoundtrack(
       if (audioIdentifier.length > 0) {
         effects.push({ audioIdentifier, startMs, offsetMs: 0, gain: REPLAY_SE_GAIN });
       }
+      continue;
+    }
+
+    if (event.kind === ReplayEventKind.MediaBackgroundSound) {
+      if (!choice.withMusic) continue;
+      const audioIdentifier = (event.targetId ?? '').trim();
+      if (audioIdentifier.length < 1) continue;
+      const running = backgrounds.get(audioIdentifier);
+      if (running) {
+        running.endMs = startMs;
+        if (running.endMs > running.startMs) music.push(running);
+        backgrounds.delete(audioIdentifier);
+      }
+      if (event.detail['isPlaying'] !== true) continue;
+      backgrounds.set(audioIdentifier, {
+        audioIdentifier,
+        startMs,
+        offsetMs: 0,
+        gain: REPLAY_BGS_GAIN * backgroundSoundLevel(event.detail['volume']),
+        endMs: storyboard.totalMs,
+        fadeMs: REPLAY_BGS_FADE_MS,
+      });
       continue;
     }
 
@@ -86,6 +113,7 @@ export function buildReplaySoundtrack(
   }
 
   if (playing && playing.endMs > playing.startMs) music.push(playing);
+  for (const running of backgrounds.values()) if (running.endMs > running.startMs) music.push(running);
 
   return { effects, music, totalMs: storyboard.totalMs };
 }

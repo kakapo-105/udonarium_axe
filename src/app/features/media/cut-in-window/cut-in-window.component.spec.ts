@@ -1,6 +1,7 @@
 import { ChangeDetectorRef } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CutInSoundService } from '@axe/application/media/cut-in-sound.service';
+import { PersonalVolumeService } from '@axe/application/media/personal-volume.service';
 import { PanelService } from '@axe/application/ui/panel.service';
 import { AudioFile } from '@axe/core/storage/audio-file';
 import { AudioPlayer, VolumeType } from '@axe/core/storage/audio-player';
@@ -117,6 +118,24 @@ describe('CutInWindowComponent', () => {
       expect(component.videoVolume).toBe(50);
     });
 
+    it('follows the listener’s own cut-in volume, counting from the half it starts at', () => {
+      vi.spyOn(AudioPlayer, 'setChannelVolume').mockImplementation(() => {});
+      const volumes = TestBed.inject(PersonalVolumeService);
+      const cutIn = new CutIn('personal-volume-test');
+      cutIn.initialize();
+      cutIn.videoVolume = 60;
+      component.cutIn = cutIn;
+
+      volumes.set('cutIn', 0.25);
+      expect(component.videoVolume).toBe(30);
+
+      volumes.set('cutIn', 1);
+      expect(component.videoVolume).toBe(100);
+
+      volumes.setMuted('cutIn', true);
+      expect(component.videoVolume).toBe(0);
+    });
+
     it('mutes a replicated face that does not own the audio', () => {
       const cutIn = new CutIn('muted-replica-test');
       cutIn.initialize();
@@ -129,7 +148,7 @@ describe('CutInWindowComponent', () => {
   });
 
   describe('which volume a cut-in plays through', () => {
-    it('plays a sound-effect-tagged cut-in through the effects volume', () => {
+    it('plays a sound-effect-tagged cut-in through the cut-in volume, not the effects', () => {
       vi.spyOn(AudioPlayer.prototype, 'play').mockImplementation(() => {});
       vi.spyOn(AudioPlayer.prototype, 'stop').mockImplementation(() => {});
       AudioStorage.instance.add(makeReadyAudio('cutin-se'));
@@ -143,10 +162,10 @@ describe('CutInWindowComponent', () => {
 
       component.startCutIn();
 
-      expect(component.audioPlayer.volumeType).toBe(VolumeType.SE);
+      expect(component.audioPlayer.volumeType).toBe(VolumeType.CUT_IN);
     });
 
-    it('plays any other through the master volume', () => {
+    it('plays any other through the cut-in volume, not the music', () => {
       vi.spyOn(AudioPlayer.prototype, 'play').mockImplementation(() => {});
       vi.spyOn(AudioPlayer.prototype, 'stop').mockImplementation(() => {});
       AudioStorage.instance.add(makeReadyAudio('cutin-bgm'));
@@ -158,7 +177,7 @@ describe('CutInWindowComponent', () => {
 
       component.startCutIn();
 
-      expect(component.audioPlayer.volumeType).toBe(VolumeType.MASTER);
+      expect(component.audioPlayer.volumeType).toBe(VolumeType.CUT_IN);
     });
 
     it('does not play attached audio on a replicated face', () => {
@@ -202,6 +221,7 @@ describe('CutInWindowComponent', () => {
 
     component.startCutIn();
     component.onPlayerReady({ target });
+    component.onPlayerStateChange({ data: 5, target });
 
     expect(target.seekTo).not.toHaveBeenCalled();
     expect(target.playVideo).toHaveBeenCalled();
@@ -220,9 +240,27 @@ describe('CutInWindowComponent', () => {
     component.startCutIn(9_500);
     vi.setSystemTime(10_500);
     component.onPlayerReady({ target });
+    component.onPlayerStateChange({ data: 5, target });
 
     expect(target.seekTo).toHaveBeenCalledWith(13, true);
     vi.useRealTimers();
+  });
+
+  it('waits for the video to be cued before starting it, and starts it once', () => {
+    const cutIn = new CutIn('cued-video-test');
+    cutIn.initialize();
+    cutIn.isVideoCutIn = true;
+    cutIn.videoUrl = 'https://youtu.be/abcdefghijk';
+    component.cutIn = cutIn;
+    const target = { setVolume: vi.fn(), seekTo: vi.fn(), playVideo: vi.fn() };
+
+    component.startCutIn();
+    component.onPlayerReady({ target });
+    expect(target.playVideo).not.toHaveBeenCalled();
+
+    component.onPlayerStateChange({ data: 5, target });
+    component.onPlayerStateChange({ data: 5, target });
+    expect(target.playVideo).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a prepared YouTube face paused until the coordinated start', () => {
@@ -234,10 +272,73 @@ describe('CutInWindowComponent', () => {
     const target = { setVolume: vi.fn(), seekTo: vi.fn(), playVideo: vi.fn() };
 
     component.onPlayerReady({ target });
+    component.onPlayerStateChange({ data: 5, target });
     expect(target.playVideo).not.toHaveBeenCalled();
 
     component.startCutIn();
     expect(target.playVideo).toHaveBeenCalledTimes(1);
+  });
+
+  describe('the YouTube player it shows', () => {
+    const borrowed = new BorrowedGlobals();
+    let made: FakeYouTubePlayer[];
+
+    class FakeYouTubePlayer {
+      private readonly listeners = new Map<string, (event: unknown) => void>();
+      readonly setVolume = vi.fn();
+      readonly playVideo = vi.fn();
+      readonly seekTo = vi.fn();
+      readonly cueVideoById = vi.fn(() => this.listeners.get('onStateChange')?.({ data: 5, target: this }));
+      readonly setSize = vi.fn();
+      readonly setPlaybackQuality = vi.fn();
+      readonly destroy = vi.fn();
+
+      constructor() {
+        made.push(this);
+      }
+
+      addEventListener(name: string, listener: (event: unknown) => void): void {
+        this.listeners.set(name, listener);
+      }
+
+      removeEventListener(): void {}
+
+      getPlayerState(): number {
+        return -1;
+      }
+
+      /** Says the player is ready, as YouTube's script does once the frame has loaded. */
+      becomeReady(): void {
+        this.listeners.get('onReady')?.({ target: this });
+      }
+    }
+
+    beforeEach(() => {
+      made = [];
+      borrowed.lend('YT', { Player: FakeYouTubePlayer });
+    });
+
+    afterEach(() => borrowed.giveBack());
+
+    it('makes its player at once rather than showing a placeholder that waits for a click, and plays it as the cut-in starts', async () => {
+      const cutIn = new CutIn('youtube-player-test');
+      cutIn.initialize();
+      cutIn.isVideoCutIn = true;
+      cutIn.videoUrl = 'https://youtu.be/abcdefghijk';
+      component.cutIn = cutIn;
+
+      component.startCutIn();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(made).toHaveLength(1);
+      made[0].becomeReady();
+
+      const [cued] = made[0].cueVideoById.mock.invocationCallOrder;
+      const [played] = made[0].playVideo.mock.invocationCallOrder;
+      expect(cued).toBeDefined();
+      expect(played).toBeGreaterThan(cued);
+    });
   });
 
   describe('ngOnDestroy', () => {

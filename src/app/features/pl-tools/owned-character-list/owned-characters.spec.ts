@@ -1,8 +1,8 @@
 import { GameCharacter } from '@axe/domain/character/game-character';
 import {
-  isControllableByUser,
   isOnTable,
   isOwnedByUser,
+  selectClaimableCharacters,
   selectControllableCharacters,
   selectOwnedCharacters,
 } from '@axe/features/pl-tools/owned-character-list/owned-characters';
@@ -51,24 +51,6 @@ describe('owned-characters', () => {
     });
   });
 
-  describe('isControllableByUser', () => {
-    it('takes your own piece and one nobody has claimed', () => {
-      expect(isControllableByUser(makeCharacter('me', 'table'), 'me')).toBe(true);
-      expect(isControllableByUser(makeCharacter('', 'table'), 'me')).toBe(true);
-    });
-
-    it('leaves the piece of another, and anything buried, alone', () => {
-      expect(isControllableByUser(makeCharacter('other', 'table'), 'me')).toBe(false);
-      expect(isControllableByUser(makeCharacter('', 'graveyard'), 'me')).toBe(false);
-      expect(isControllableByUser(makeCharacter('me', 'graveyard'), 'me')).toBe(false);
-    });
-
-    it('still offers an unclaimed piece to someone the room does not know yet', () => {
-      expect(isControllableByUser(makeCharacter('', 'table'), '')).toBe(true);
-      expect(isControllableByUser(makeCharacter('me', 'table'), '')).toBe(false);
-    });
-  });
-
   describe('selectControllableCharacters', () => {
     it('keeps yours and the unclaimed, in the order they were in', () => {
       const mine = makeCharacter('me', 'table');
@@ -84,6 +66,20 @@ describe('owned-characters', () => {
     it('is true only for one on the table', () => {
       expect(isOnTable(makeCharacter('me', 'table'))).toBe(true);
       expect(isOnTable(makeCharacter('me', 'common'))).toBe(false);
+    });
+  });
+
+  describe('selectClaimableCharacters', () => {
+    it('offers the unclaimed ones on the table, and none owned or off it', () => {
+      const free = makeCharacter('', 'table');
+      const characters = [
+        free,
+        makeCharacter('me', 'table'),
+        makeCharacter('', 'common'),
+        makeCharacter('', 'graveyard'),
+      ];
+
+      expect(selectClaimableCharacters(characters)).toEqual([free]);
     });
   });
 });

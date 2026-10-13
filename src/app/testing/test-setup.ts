@@ -14,7 +14,10 @@ import { basename, join, resolve } from 'path';
 
 Logger.setLevel(LogLevel.NONE);
 
+import { CHAT_PERSONAL_BOOKMARKS_STORAGE_KEY } from '@axe/application/chat/chat-personal-bookmark.store';
+import { PERSONAL_VOLUME_STORAGE_KEY } from '@axe/application/media/personal-volumes';
 import { COMPASS_FACE_STORAGE_KEY } from '@axe/application/ui/compass-face.service';
+import { FIRST_PERSON_PIECE_STORAGE_KEY } from '@axe/application/ui/first-person-preference.service';
 import { LOCAL_MODE_STORAGE_KEY } from '@axe/application/ui/local-mode-preference.service';
 import { PIECE_OVERLAY_STORAGE_KEY } from '@axe/application/ui/piece-overlay-preference.service';
 import { TABLETOP_DISPLAY_STORAGE_KEY } from '@axe/application/ui/tabletop-display-preference.service';
@@ -104,6 +107,12 @@ if (typeof globalThis.AudioContext === 'undefined') {
     setTargetAtTime() {
       return this;
     }
+    linearRampToValueAtTime() {
+      return this;
+    }
+    cancelScheduledValues() {
+      return this;
+    }
   }
   class FakeGainNode {
     readonly gain = new FakeAudioParam();
@@ -122,6 +131,19 @@ if (typeof globalThis.AudioContext === 'undefined') {
       return this;
     }
   }
+  class FakeBufferSource {
+    buffer: unknown = null;
+    loop = false;
+    onended: (() => void) | null = null;
+    connect() {
+      return this;
+    }
+    disconnect() {
+      return this;
+    }
+    start() {}
+    stop() {}
+  }
   class FakeAudioContext {
     currentTime = 0;
     destination: object = {};
@@ -139,6 +161,12 @@ if (typeof globalThis.AudioContext === 'undefined') {
     }
     createMediaElementSource() {
       return new FakeMediaElementSource();
+    }
+    createBufferSource() {
+      return new FakeBufferSource();
+    }
+    decodeAudioData(_data: ArrayBuffer, resolve: (buffer: object) => void) {
+      resolve({ duration: 1, length: 44100, numberOfChannels: 2 });
     }
   }
   (globalThis as unknown as Record<string, unknown>)['AudioContext'] = FakeAudioContext;
@@ -353,15 +381,18 @@ function forgetMyCursor(): void {
 // asks for a flat screen must not leave the next one's otherwise ordinary table lying down. The
 // same goes for what a seat shows: a spec that puts a toolbar away, folds one or hides the bars
 // over the pieces writes that choice to the browser, and the file after it builds its services
-// from whatever is left there.
+// from whatever is left there. A reader's own bookmarks on chat lines are kept there too.
 function forgetSeatPreferences(): void {
   localStorage.removeItem(TABLETOP_DISPLAY_STORAGE_KEY);
   localStorage.removeItem(VIEW_MODE_STORAGE_KEY);
   localStorage.removeItem(LOCAL_MODE_STORAGE_KEY);
+  localStorage.removeItem(FIRST_PERSON_PIECE_STORAGE_KEY);
   localStorage.removeItem(WIDGET_VISIBILITY_STORAGE_KEY);
   localStorage.removeItem(TOOLBAR_FOLD_STORAGE_KEY);
   localStorage.removeItem(PIECE_OVERLAY_STORAGE_KEY);
   localStorage.removeItem(COMPASS_FACE_STORAGE_KEY);
+  localStorage.removeItem(PERSONAL_VOLUME_STORAGE_KEY);
+  localStorage.removeItem(CHAT_PERSONAL_BOOKMARKS_STORAGE_KEY);
 }
 
 beforeAll(async () => {

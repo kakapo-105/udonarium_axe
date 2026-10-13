@@ -44,7 +44,7 @@ test.describe('チャットパレット', () => {
       palette.locator('input[name^="chat-tab"]:checked').evaluate((input) => input.parentElement!.textContent!.trim());
     const first = await checkedName();
 
-    // パレットは右クリックした位置に開き、ツールバーの下に重なることがあるので、帯へ直接回す。
+    // パレットは右クリックした位置に開き、ツールバーの下に重なることがあるので、タブの帯へホイールを直接送る。
     await pills
       .first()
       .evaluate((pill) =>
@@ -76,7 +76,7 @@ test.describe('チャットパレット', () => {
     const picker = page.locator('chat-palette portrait-picker');
     const label = picker.locator('button[aria-haspopup="listbox"]');
     await expect(label).toHaveText('通常');
-    // 4 文字の名前が省略されずに読める幅があること。
+    // 4文字の名前が省略されずに読める幅があること。
     expect((await label.boundingBox())!.width).toBeGreaterThanOrEqual(40);
 
     // シートがパレットに重なって開くので、ボタンへは直接押下を送る。
@@ -93,7 +93,7 @@ test.describe('チャットパレット', () => {
     await palette.getByTestId('palette-search').fill('判定');
     await expect(palette.getByTestId('palette-search-results')).toBeVisible();
 
-    // パネルは開くときに動くので、3 つの位置は同じ瞬間に測る。
+    // パネルは開くときに動くので、3つの位置は同時に測る。
     const edges = await palette.evaluate((root) => {
       const rectOf = (selector: string) => root.querySelector(selector)!.getBoundingClientRect();
       return {
@@ -115,7 +115,7 @@ test.describe('チャット色設定モーダル', () => {
       .getByRole('button', { name: /色設定/ })
       .click();
     await expect(page.locator('chat-color-setting')).toBeVisible({ timeout: 5000 });
-    // 編集中の色ぶんのカラーピッカーが居る (name="chat-color-<番号>")。
+    // 編集中の色ぶんのカラーピッカーがある（name="chat-color-<番号>"）。
     await expect(page.locator('chat-color-setting input[type="color"]').first()).toBeAttached();
   });
 });

@@ -15,6 +15,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActiveChatTabService } from '@axe/application/chat/active-chat-tab.service';
+import { ChatBookmarkService } from '@axe/application/chat/chat-bookmark.service';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { ChatPreferencesService } from '@axe/application/chat/chat-preferences.service';
 import { ChatSpeakerService } from '@axe/application/chat/chat-speaker.service';
@@ -36,11 +37,14 @@ import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { canRoleSpeakTab, canRoleViewTab } from '@axe/domain/chat/chat-tab-permission';
 import { DiceBot } from '@axe/domain/dice/dice-bot';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { ChatBookmarkListComponent } from '@axe/features/chat/chat-bookmark/chat-bookmark-list.component';
 import { ChatComposeService } from '@axe/features/chat/chat-compose.service';
 import { ChatInputComponent } from '@axe/features/chat/chat-input/chat-input.component';
 import { editsTextInPlace } from '@axe/features/chat/chat-input/chat-input-helpers';
 import { ChatMessageSettingComponent } from '@axe/features/chat/chat-message-setting/chat-message-setting.component';
 import { ChatPortraitComponent } from '@axe/features/chat/chat-portrait/chat-portrait.component';
+import { isChatSearchShortcut } from '@axe/features/chat/chat-search/chat-search';
+import { ChatSearchBarComponent } from '@axe/features/chat/chat-search/chat-search-bar.component';
 import { ChatStreamPanelService } from '@axe/features/chat/chat-stream/chat-stream-panel.service';
 import { ChatTabComponent } from '@axe/features/chat/chat-tab/chat-tab.component';
 import { ChatTabSettingComponent } from '@axe/features/chat/chat-tab-setting/chat-tab-setting.component';
@@ -72,12 +76,17 @@ const AT_BOTTOM_THRESHOLD_PX = 8;
     SafePipe,
     TranslocoModule,
     ChatTabStripComponent,
+    ChatSearchBarComponent,
+    ChatBookmarkListComponent,
   ],
   host: {
     class: 'block h-full min-h-0 min-w-0',
     tabindex: '-1',
     '(keydown.control.arrowleft)': 'switchTabByKey($event, -1)',
     '(keydown.control.arrowright)': 'switchTabByKey($event, 1)',
+    '(keydown)': 'onWindowKeydown($event)',
+    '(pointerenter)': 'listenForSearchWhileHovered()',
+    '(pointerleave)': 'stopListeningForSearch()',
   },
   // One of these to a window, so answering a line in this one puts the caret in this one.
   providers: [ChatComposeService],
@@ -97,6 +106,7 @@ export class ChatWindowComponent {
   private readonly tabletopService = inject(TabletopService);
   private readonly chatTickerSelection = inject(ChatTickerSelectionService);
   private readonly chatSpeaker = inject(ChatSpeakerService);
+  private readonly chatBookmarks = inject(ChatBookmarkService);
   private readonly t = inject(TRANSLATE_FN);
   private readonly hostElement = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
@@ -142,6 +152,119 @@ export class ChatWindowComponent {
 
   private readonly logScroll = viewChild.required<ElementRef<HTMLDivElement>>('logScroll');
   readonly chatTabRef = viewChild(ChatTabComponent);
+  private readonly searchBar = viewChild(ChatSearchBarComponent);
+  private readonly bookmarkList = viewChild(ChatBookmarkListComponent);
+
+  /** Whether the box that finds words in the tab is open. */
+  readonly searchOpen = signal(false);
+
+  /** Whether the list of the room's marks on chat lines is open. */
+  readonly bookmarksOpen = signal(false);
+
+  /** How many marks this reader can see, shown on the button that opens their list. */
+  readonly bookmarkCount = computed(() => this.chatBookmarks.entries().length);
+
+  /** Brings a line the search lands on into view, through the tab drawing the log. */
+  readonly revealLine = (message: ChatMessage): Promise<HTMLElement | null> =>
+    this.chatTabRef()?.reveal(message) ?? Promise.resolve(null);
+
+  /**
+   * Ctrl+F (⌘F on a Mac) inside the window opens its search in place of the browser's find, which
+   * cannot see the lines of a long log that are not drawn.
+   */
+  onWindowKeydown(event: KeyboardEvent): void {
+    if (!isChatSearchShortcut(event)) return;
+    event.preventDefault();
+    this.openSearch();
+  }
+
+  /** Opens the search, or puts the caret back in it with what is typed picked out. */
+  openSearch(): void {
+    this.bookmarksOpen.set(false);
+    const bar = this.searchBar();
+    if (bar) {
+      bar.focus();
+      return;
+    }
+    this.searchOpen.set(true);
+    afterNextRender(() => this.searchBar()?.focus(), { injector: this.injector });
+  }
+
+  /** Closes the search, takes its marks away, and hands the keyboard back to the chat input. */
+  closeSearch(): void {
+    this.searchOpen.set(false);
+    const host = this.hostElement.nativeElement;
+    (host.querySelector<HTMLElement>('textarea.chat-input') ?? host).focus();
+  }
+
+  /** Opens the search from its button, or closes it when it is open. */
+  toggleSearch(): void {
+    if (this.searchOpen()) this.closeSearch();
+    else this.openSearch();
+  }
+
+  /** Opens the list of marks from its button, in place of the search, or closes it when it is open. */
+  toggleBookmarks(): void {
+    if (this.bookmarksOpen()) {
+      this.closeBookmarks();
+      return;
+    }
+    this.searchOpen.set(false);
+    this.bookmarksOpen.set(true);
+    afterNextRender(() => this.bookmarkList()?.focus(), { injector: this.injector });
+  }
+
+  /** Closes the list of marks and hands the keyboard back to the chat input. */
+  closeBookmarks(): void {
+    this.bookmarksOpen.set(false);
+    const host = this.hostElement.nativeElement;
+    (host.querySelector<HTMLElement>('textarea.chat-input') ?? host).focus();
+  }
+
+  /**
+   * Goes to the line a mark is on: the window turns to its tab, the log is drawn around it however
+   * far up it is, and the line is flashed. The list closes, so it does not stand over the line.
+   */
+  async jumpToBookmark(message: ChatMessage): Promise<void> {
+    this.bookmarksOpen.set(false);
+    const tab = message.parent;
+    if (!(tab instanceof ChatTab)) return;
+    if (this.chatTabidentifier !== tab.identifier) {
+      this.chatTabidentifier = tab.identifier;
+      // Turning to a tab sends the log to its foot a task later; the line is sought after that.
+      await new Promise<void>((resolve) => setTimeout(resolve));
+      await new Promise<void>((resolve) => afterNextRender(() => resolve(), { injector: this.injector }));
+    }
+    const line = await this.revealLine(message);
+    if (line) this.chatTabRef()?.flash(message);
+  }
+
+  private searchKeysDocument: Document | null = null;
+
+  /**
+   * While the pointer is over the window, Ctrl+F opens its search even though the keyboard is
+   * elsewhere, as it is after a click on the table. The window's own key handler sees it first when
+   * the keyboard is in the window.
+   */
+  listenForSearchWhileHovered(): void {
+    const document = this.hostElement.nativeElement.ownerDocument;
+    if (this.searchKeysDocument === document) return;
+    this.stopListeningForSearch();
+    document.addEventListener('keydown', this.onHoveredKeydown);
+    this.searchKeysDocument = document;
+  }
+
+  /** Leaves Ctrl+F to the browser again once the pointer has left the window. */
+  stopListeningForSearch(): void {
+    this.searchKeysDocument?.removeEventListener('keydown', this.onHoveredKeydown);
+    this.searchKeysDocument = null;
+  }
+
+  private readonly onHoveredKeydown = (event: KeyboardEvent): void => {
+    if (event.defaultPrevented || !isChatSearchShortcut(event)) return;
+    event.preventDefault();
+    this.openSearch();
+  };
 
   /**
    * Bound to the window rather than to the input: a tab nobody may speak in renders no textarea,
@@ -307,6 +430,7 @@ export class ChatWindowComponent {
     });
     this.panelService.activated$.subscribe(() => this.onPanelShown(), this.destroyRef);
     this.destroyRef.onDestroy(() => {
+      this.stopListeningForSearch();
       if (this.scrollListener && this.panelService.scrollablePanel) {
         this.panelService.scrollablePanel.removeEventListener('scroll', this.scrollListener);
       }
@@ -519,11 +643,14 @@ export class ChatWindowComponent {
    * is sent once for each targeted piece on the table, filled in against that piece and tagged with
    * its name, with the parts that change the speaker's own resources or buffs taken out after the
    * first copy so they apply once; with nothing targeted, the line says so. Nothing is sent when
-   * the reader may not speak in the tab. A line marked for the ticker is also shown there.
+   * the reader may not speak in the tab. A line marked for the ticker is also shown there. A stamp
+   * with nothing said goes as a line of its own, with nothing read out of the words standing in for
+   * it; a stamp with words goes under them, the line going through all the rest as any line does.
    */
   sendChat(value: ChatOutgoing) {
     const tab = this.chatTab();
     if (tab && !canRoleSpeakTab(tab, PeerCursor.myRole)) return;
+    if (tab && this.chatMessageService.sendLoneStamp(tab, value)) return;
     if (tab) {
       let outtext = '';
       let objects: GameCharacter[];
@@ -594,7 +721,9 @@ export class ChatWindowComponent {
         attachmentImageIdentifiers,
         value.replyTo,
         value.quoteOf,
-        { light: value.messBubbleLight ?? '', dark: value.messBubbleDark ?? '' }
+        { light: value.messBubbleLight ?? '', dark: value.messBubbleDark ?? '' },
+        undefined,
+        value.stamp
       );
       if (value.toTicker) this.chatTickerSelection.showMessage(sent.identifier);
     }

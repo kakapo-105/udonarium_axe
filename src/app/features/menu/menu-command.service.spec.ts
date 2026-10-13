@@ -1,11 +1,16 @@
 import { TestBed } from '@angular/core/testing';
+import { FirstPersonService } from '@axe/application/tabletop/first-person.service';
 import { ButtonGuideService } from '@axe/application/ui/button-guide.service';
+import { ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { PieceOverlayPreferenceService } from '@axe/application/ui/piece-overlay-preference.service';
 import { WidgetVisibilityService } from '@axe/application/ui/widget-visibility.service';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
+import { FirstPersonSeat } from '@axe/domain/tabletop/first-person/first-person-seats';
+import { defaultMenuLayout } from '@axe/domain/ui/builtin-menu-layouts';
 import { MenuCommand, menuCommandOf } from '@axe/domain/ui/menu-command';
-import { MenuCommandService } from '@axe/features/menu/menu-command.service';
+import { menuItemsOf } from '@axe/domain/ui/menu-layout';
+import { MenuCommandService, MenuGroupView } from '@axe/features/menu/menu-command.service';
 import { RoomPanelService } from '@axe/features/panels/room-panel.service';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 
@@ -164,6 +169,92 @@ describe('MenuCommandService', () => {
     });
   });
 
+  describe('the first-person view from the drawer', () => {
+    let firstPerson: FirstPersonService;
+    let seats: FirstPersonSeat[];
+    let showing: boolean;
+    let forced: boolean;
+
+    beforeEach(() => {
+      seatAs(PeerRole.Player);
+      firstPerson = TestBed.inject(FirstPersonService);
+      seats = [];
+      showing = false;
+      forced = false;
+      vi.spyOn(firstPerson, 'seats').mockImplementation(() => seats);
+      vi.spyOn(firstPerson, 'showing').mockImplementation(() => showing);
+      vi.spyOn(firstPerson, 'forced').mockImplementation(() => forced);
+    });
+
+    it('sits among the table tools in the drawer', () => {
+      const table = commands.viewOf(defaultMenuLayout('fab')).find((node) => node.id === 'table') as MenuGroupView;
+
+      expect(table.entries.map((entry) => entry.command.key)).toContain('firstPersonView');
+    });
+
+    it('takes up the view at once from the one piece there is to look out of', () => {
+      seats = [{ identifier: 'only', name: 'ひとり' }];
+      const enter = vi.spyOn(firstPerson, 'enterSeat').mockImplementation(() => {});
+      const command = commandOf('firstPersonView');
+
+      expect(commands.labelKeyOf(command)).toBe('app.fab.firstPersonEnter');
+      expect(commands.run(command)).toBe('done');
+      expect(enter).toHaveBeenCalledWith('only');
+    });
+
+    it('offers the pieces in a menu where there are several, and looks out of the one picked', () => {
+      seats = [
+        { identifier: 'a', name: 'アル' },
+        { identifier: 'b', name: 'ベル' },
+      ];
+      const enter = vi.spyOn(firstPerson, 'enterSeat').mockImplementation(() => {});
+      const open = vi.spyOn(TestBed.inject(ContextMenuService), 'open').mockImplementation(() => {});
+      const command = commandOf('firstPersonView');
+
+      expect(commands.labelKeyOf(command)).toBe('app.fab.firstPersonChoose');
+      commands.run(command);
+
+      const actions = open.mock.calls[0][1];
+      expect(actions.map((action) => action.name)).toEqual(['アル', 'ベル']);
+      actions[1].action!();
+      expect(enter).toHaveBeenCalledWith('b');
+    });
+
+    it('leaves the view it stands in, and reads as lit while it does', () => {
+      showing = true;
+      const exit = vi.spyOn(firstPerson, 'exitSeat').mockImplementation(() => {});
+      const command = commandOf('firstPersonView');
+
+      expect(commands.labelKeyOf(command)).toBe('app.fab.firstPersonExit');
+      expect(commands.litOf(command)).toBe(true);
+      commands.run(command);
+      expect(exit).toHaveBeenCalled();
+    });
+
+    it('cannot be pressed with no piece to look out of, nor while the master shares a view', () => {
+      const command = commandOf('firstPersonView');
+      expect(commands.disabledOf(command)).toBe(true);
+      expect(commands.labelKeyOf(command)).toBe('app.fab.firstPersonNoSeat');
+
+      seats = [{ identifier: 'only', name: 'ひとり' }];
+      showing = true;
+      forced = true;
+      const exit = vi.spyOn(firstPerson, 'exitSeat').mockImplementation(() => {});
+      expect(commands.disabledOf(command)).toBe(true);
+      expect(commands.labelKeyOf(command)).toBe('app.fab.firstPersonShared');
+      commands.run(command);
+      expect(exit).not.toHaveBeenCalled();
+    });
+
+    it('is offered to the master and the players, not to those watching', () => {
+      const command = commandOf('firstPersonView');
+      seatAs(PeerRole.GameMaster);
+      expect(commands.offers(command)).toBe(true);
+      seatAs(PeerRole.Guest);
+      expect(commands.offers(command)).toBe(false);
+    });
+  });
+
   describe('how it reads now', () => {
     it('says which way a switch stands', () => {
       seatAs(PeerRole.Player);
@@ -191,6 +282,40 @@ describe('MenuCommandService', () => {
 
       expect(commands.labelKeyOf(buffs)).toBe(shown ? 'app.fab.buffsShown' : 'app.fab.buffsHidden');
       expect(commands.iconOf(buffs)).toBe(shown ? 'auto_fix_high' : 'auto_fix_off');
+    });
+
+    it('switches what the characters say over their pieces, and names it by whether it is drawn', () => {
+      seatAs(PeerRole.Guest);
+      const overlay = TestBed.inject(PieceOverlayPreferenceService);
+      const speech = commandOf('speechBubbles');
+      const shown = overlay.speech();
+
+      expect(commands.labelKeyOf(speech)).toBe(shown ? 'app.fab.speechShown' : 'app.fab.speechHidden');
+      commands.run(speech);
+      expect(overlay.speech()).toBe(!shown);
+      expect(commands.litOf(speech)).toBe(!shown);
+      expect(commands.iconOf(speech)).toBe(shown ? 'speaker_notes_off' : 'chat_bubble');
+      commands.run(speech);
+    });
+
+    it('switches the names over the pieces, and names it by whether they are drawn', () => {
+      seatAs(PeerRole.Guest);
+      const overlay = TestBed.inject(PieceOverlayPreferenceService);
+      const names = commandOf('nameLabels');
+      const shown = overlay.names();
+
+      expect(commands.labelKeyOf(names)).toBe(shown ? 'app.fab.namesShown' : 'app.fab.namesHidden');
+      commands.run(names);
+      expect(overlay.names()).toBe(!shown);
+      expect(commands.litOf(names)).toBe(!shown);
+      expect(commands.iconOf(names)).toBe(shown ? 'label_off' : 'label');
+      commands.run(names);
+    });
+
+    it('puts the names switch on both toolbars from the start', () => {
+      for (const surface of ['gmToolbar', 'plToolbar'] as const) {
+        expect(menuItemsOf(defaultMenuLayout(surface)).map((held) => held.command)).toContain('nameLabels');
+      }
     });
 
     it('writes the language out rather than drawing a mark for it', () => {

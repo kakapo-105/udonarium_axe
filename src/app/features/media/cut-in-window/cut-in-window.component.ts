@@ -12,6 +12,8 @@ import {
 } from '@angular/core';
 import { YouTubePlayer } from '@angular/youtube-player';
 import { type CutInSoundHandle, CutInSoundService } from '@axe/application/media/cut-in-sound.service';
+import { PersonalVolumeService } from '@axe/application/media/personal-volume.service';
+import { DEFAULT_PERSONAL_VOLUMES } from '@axe/application/media/personal-volumes';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { ModalService } from '@axe/application/ui/modal.service';
 import { PanelService } from '@axe/application/ui/panel.service';
@@ -20,12 +22,13 @@ import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { ImageFile } from '@axe/core/storage/image-file';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
-import { AudioTag } from '@axe/domain/media/audio-tag';
 import { CutIn, cutInPanelChrome } from '@axe/domain/media/cut-in';
 import { CutInLauncher } from '@axe/domain/media/cut-in-launcher';
 import { CutInLayer } from '@axe/domain/media/cut-in-layer';
 import { cutInPlaybackMs } from '@axe/domain/media/cut-in-playback-window';
 import { CutInScene } from '@axe/domain/media/cut-in-scene';
+import type { CutInSpeaker } from '@axe/domain/media/cut-in-speaker';
+import { Config } from '@axe/domain/peer/config';
 import { CutInStageComponent } from '@axe/features/media/cut-in-stage/cut-in-stage.component';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 
@@ -49,6 +52,7 @@ export class CutInWindowComponent {
   private readonly imageStorage = inject(ImageStorage);
   private readonly objectChange = inject(ObjectChangeService);
   private readonly cutInSound = inject(CutInSoundService);
+  private readonly personalVolumes = inject(PersonalVolumeService);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly cutInArea = viewChild<ElementRef<HTMLDivElement>>('cutInArea');
@@ -75,6 +79,8 @@ export class CutInWindowComponent {
     this.resolveFirstRender = resolve;
   });
   private readyVideoTarget: CutInVideoTarget | null = null;
+  private isVideoCued = false;
+  private isVideoStarted = false;
   private destroyed = false;
 
   constructor() {
@@ -186,6 +192,8 @@ export class CutInWindowComponent {
   protected readonly playbackStarted = signal(false);
 
   cutIn: CutIn | null = null;
+  /** Who the cut-in is played for: whose portrait and name its layers show, where they ask. */
+  speaker: CutInSpeaker | null = null;
   playListId = '';
 
   private _naturalWidth = 0;
@@ -258,8 +266,7 @@ export class CutInWindowComponent {
 
     const audio = this.cutIn.audio;
     if (audio && this.audioEnabled) {
-      const isSE = AudioTag.get(this.cutIn.audioIdentifier)?.tag === 'SE';
-      this.audioPlayer.volumeType = isSE ? VolumeType.SE : VolumeType.MASTER;
+      this.audioPlayer.volumeType = VolumeType.CUT_IN;
       this.audioPlayer.loop = this.cutIn.isLoop;
       if (!this.cutIn.videoId) {
         this.audioPlayer.play(audio);
@@ -273,7 +280,7 @@ export class CutInWindowComponent {
     }
 
     this.playbackStarted.set(true);
-    if (this.readyVideoTarget) this.startVideo(this.readyVideoTarget);
+    if (this.readyVideoTarget && this.isVideoCued) this.startVideo(this.readyVideoTarget);
 
     const playbackMs = cutInPlaybackMs(this.cutIn, this.cutIn.scene);
     if (playbackMs > 0) {
@@ -347,9 +354,21 @@ export class CutInWindowComponent {
     return this._videoId;
   }
 
+  /**
+   * The volume the video plays at, from 0 to 100: the cut-in's own, scaled by the listener's cut-in
+   * volume and the room's volumes for cut-ins, and 0 while this window's sound is off.
+   *
+   * The video plays in a frame of its own that the audio channels never reach, so the volumes are
+   * applied here instead. The listener's volume counts from the half it starts at, so a listener who
+   * has not touched it hears the video as the cut-in sets it.
+   */
   readonly videoVolumeSig = computed(() => {
     if (this.cutIn) this.objectChange.versionOf(this.cutIn.identifier)();
-    return this.audioEnabledState() ? (this.cutIn?.videoVolume ?? 50) : 0;
+    this.objectChange.versionOf('Config')();
+    if (!this.audioEnabledState()) return 0;
+    const roomScale = this.objectStore.get<Config>('Config')?.roomScaleFor(VolumeType.CUT_IN) ?? 1;
+    const scale = (this.personalVolumes.levelOf('cutIn') / DEFAULT_PERSONAL_VOLUMES.cutIn) * roomScale;
+    return Math.min(100, Math.round((this.cutIn?.videoVolume ?? 50) * scale));
   });
 
   /** The volume the video plays at, which is 0 while this window's sound is off. */
@@ -382,19 +401,20 @@ export class CutInWindowComponent {
   }
 
   /**
-   * Takes hold of the YouTube player once it is ready, starting the video straight away if playback
-   * has already begun and otherwise only setting its volume.
+   * Takes hold of the YouTube player once it is ready and sets its volume.
+   *
+   * The video is not started here: the player component cues the video once it has told its
+   * listeners it is ready, and a video started before the cue has finished stays at its first
+   * frame. It starts when the player says the video is cued, or when playback begins after that.
    */
   onPlayerReady($event: { target: CutInVideoTarget }) {
     this.readyVideoTarget = $event.target;
-    if (this.playbackStarted()) {
-      this.startVideo($event.target);
-    } else {
-      $event.target.setVolume(this.videoVolume);
-    }
+    $event.target.setVolume(this.videoVolume);
   }
 
   private startVideo(target: CutInVideoTarget): void {
+    if (this.isVideoStarted) return;
+    this.isVideoStarted = true;
     target.setVolume(this.videoVolume);
     if (this.playbackStartedAtMs !== null && target.seekTo) {
       const elapsedSeconds = Math.max(0, Date.now() - this.playbackStartedAtMs) / 1000;
@@ -406,9 +426,9 @@ export class CutInWindowComponent {
   /**
    * Follows the YouTube player's state.
    *
-   * Playing, pausing and cueing each mark a short transition. When the video ends, a looping
-   * cut-in plays again from its start time unless looping is forced off, and otherwise the window
-   * closes.
+   * Playing, pausing and cueing each mark a short transition. Once the video is cued it starts, if
+   * playback has begun. When the video ends, a looping cut-in plays again from its start time unless
+   * looping is forced off, and otherwise the window closes.
    */
   onPlayerStateChange($event: {
     data: number;
@@ -430,6 +450,8 @@ export class CutInWindowComponent {
       }, 200);
     }
     if (state == 5) {
+      this.isVideoCued = true;
+      if (this.playbackStarted() && this.readyVideoTarget) this.startVideo(this.readyVideoTarget);
       this.videoStateTransition = true;
       this._timeoutIdVideo = setTimeout(() => {
         this.videoStateTransition = false;

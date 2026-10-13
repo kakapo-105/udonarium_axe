@@ -64,12 +64,26 @@ describe('ChatLogExporter', () => {
 
     it('turns the ruby notation into ruby markup', () => {
       const result = ChatLogExporter.escapeHtml('|漢字《かんじ》');
-      expect(result).toContain('<ruby>漢字<rt>かんじ</rt></ruby>');
+      expect(result).toContain('<ruby class="chat-ruby"><rb>漢字</rb><rt>かんじ</rt></ruby>');
+    });
+
+    it('writes a reading split over the letters of its word one part over each letter', () => {
+      const result = ChatLogExporter.escapeHtml('|漢字《かん|じ》と|明日《あ|し|た》');
+      expect(result).toBe(
+        '<ruby class="chat-ruby"><rb>漢</rb><rt>かん</rt><rb>字</rb><rt>じ</rt></ruby>と' +
+          '<ruby class="chat-ruby"><rb>明日</rb><rt>あした</rt></ruby>'
+      );
+    });
+
+    it('escapes what stands in a word and its reading', () => {
+      expect(ChatLogExporter.escapeHtml('|<b>《&》')).toBe(
+        '<ruby class="chat-ruby"><rb>&lt;b&gt;</rb><rt>&amp;</rt></ruby>'
+      );
     });
 
     it('reads a full-width bar in that notation too', () => {
       const result = ChatLogExporter.escapeHtml('｜熟語《じゅくご》');
-      expect(result).toContain('<ruby>熟語<rt>じゅくご</rt></ruby>');
+      expect(result).toContain('<ruby class="chat-ruby"><rb>熟語</rb><rt>じゅくご</rt></ruby>');
     });
 
     it('renders anything that is not text as text', () => {
@@ -332,6 +346,27 @@ describe('ChatLogExporter', () => {
       expect(result).toContain('<span class="bn">');
     });
 
+    it('quotes a secret roll by what stands in for it to anybody but the one who rolled it', () => {
+      const target = {
+        identifier: 'q',
+        name: '<Secret-BCDice：相手>',
+        text: 'DiceBot : (1d100) → 3',
+        to: '',
+        isSecret: true,
+        isPseudoDeleted: false,
+        isSentBy: (userId: string) => userId === 'roller',
+      } as unknown as ChatMessage;
+      const msg = createMockMessage({
+        quoteOf: 'q',
+        quoteOfMessage: target,
+      } as Partial<ChatMessage> & { quoteOfMessage: ChatMessage });
+
+      const toOthers = ChatLogExporter.formatMessageStandard(false, '', msg, 'someone');
+      expect(toOthers).toContain('（シークレットダイス）');
+      expect(toOthers).not.toContain('→ 3');
+      expect(ChatLogExporter.formatMessageStandard(false, '', msg, 'roller')).toContain('→ 3');
+    });
+
     it('gives the attached picture and its wrapper their own', () => {
       const msg = createMockMessage({
         attachmentImages: [{ identifier: 'img-1', name: 'test.png', url: 'blob:test' }],
@@ -461,6 +496,66 @@ describe('ChatLogExporter', () => {
     });
   });
 
+  describe('an after-the-fact whisper', () => {
+    const whisperedAfterwards = (overrides: Partial<ChatMessage> = {}) =>
+      createMockMessage({ from: 'user-A', to: 'user-C', text: 'あの人にだけ', ...overrides });
+
+    it('reaches the logs of its speaker and the one it was whispered to alone', () => {
+      const line = whisperedAfterwards();
+
+      expect(ChatLogExporter.isVisibleMessage(line, 'user-A')).toBe(true);
+      expect(ChatLogExporter.isVisibleMessage(line, 'user-C')).toBe(true);
+      expect(ChatLogExporter.isVisibleMessage(line, 'user-B')).toBe(false);
+    });
+
+    it('is not quoted in the log of somebody it was not whispered to', () => {
+      const answer = createMockMessage({
+        text: '返事',
+        replyTo: 'w',
+        replyToMessage: whisperedAfterwards(),
+        quoteOf: 'w',
+        quoteOfMessage: whisperedAfterwards(),
+      } as Partial<ChatMessage>);
+
+      const outsider = ChatLogExporter.formatMessageStandard(false, '', answer, 'user-B');
+      expect(outsider).not.toContain('あの人にだけ');
+      expect(outsider).not.toContain('<blockquote');
+      expect(ChatLogExporter.formatMessageStandard(false, '', answer, 'user-C')).toContain('あの人にだけ');
+    });
+  });
+
+  describe('a deleted line', () => {
+    const deleted = () => createMockMessage({ text: '言い間違い', isPseudoDeleted: true } as Partial<ChatMessage>);
+
+    it('is in everybody’s log, marked in both layouts', () => {
+      expect(ChatLogExporter.isVisibleMessage(deleted(), 'user-B')).toBe(true);
+      expect(ChatLogExporter.formatMessageStandard(false, '', deleted())).toContain('言い間違い (削除済)');
+      expect(ChatLogExporter.formatMessageCoc('メイン', deleted())).toContain('(削除済)');
+    });
+
+    it('is left out of tabs asked to be without such lines, leaving the rest and the tab as they were', () => {
+      const kept = createMockMessage({ text: '残る発言' });
+      const tab = { name: 'メイン', isSystemTab: false, chatMessages: [kept, deleted()] };
+
+      const [result] = ChatLogExporter.withoutDeleted([tab]);
+
+      expect(result.name).toBe('メイン');
+      expect(result.isSystemTab).toBe(false);
+      expect(result.chatMessages).toEqual([kept]);
+      expect(tab.chatMessages).toHaveLength(2);
+    });
+
+    it('is not quoted in the lines that answer it', () => {
+      const answer = createMockMessage({
+        text: '返事',
+        quoteOf: 'd',
+        quoteOfMessage: deleted(),
+      } as Partial<ChatMessage>);
+
+      expect(ChatLogExporter.formatMessageStandard(false, '', answer)).not.toContain('言い間違い');
+    });
+  });
+
   describe('exportTabHtml', () => {
     it('writes the log out', () => {
       const msg = createMockMessage({ name: 'GM', text: '開始' });
@@ -579,6 +674,41 @@ describe('ChatLogExporter', () => {
     it('leaves a bracket it cannot read alone', () => {
       const tab = createMockTab('メイン', [createMockMessage({ text: 'メモ 〔重要〕' })]);
       expect(ChatLogExporter.exportTabHtml(tab)).toContain('重要');
+    });
+  });
+
+  describe('the stamps put on a line', () => {
+    const reactionsOf = (id: string) =>
+      id === 'line-1'
+        ? [
+            { label: 'ゾワッ', count: 2 },
+            { label: '了解', count: 1 },
+          ]
+        : [];
+
+    it('are listed after the words of a line in the standard layout, each with how many', () => {
+      const msg = createMockMessage({ identifier: 'line-1' } as Partial<ChatMessage>);
+
+      expect(
+        ChatLogExporter.formatMessageStandard(false, '', msg, undefined, undefined, undefined, reactionsOf)
+      ).toContain('テストメッセージ 〔ゾワッ×2 了解×1〕');
+      expect(ChatLogExporter.formatMessageStandard(false, '', msg)).not.toContain('〔');
+    });
+
+    it('are left off a line nobody answered, and off a secret roll the reader may not see', () => {
+      const plain = createMockMessage({ identifier: 'line-2' } as Partial<ChatMessage>);
+      const sealed = createMockMessage({
+        identifier: 'line-1',
+        isSecret: true,
+        isSendFromSelf: false,
+      } as Partial<ChatMessage>);
+
+      expect(
+        ChatLogExporter.formatMessageStandard(false, '', plain, undefined, undefined, undefined, reactionsOf)
+      ).not.toContain('〔');
+      expect(
+        ChatLogExporter.formatMessageStandard(false, '', sealed, undefined, undefined, undefined, reactionsOf)
+      ).not.toContain('ゾワッ');
     });
   });
 });

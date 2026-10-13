@@ -1,13 +1,16 @@
 import { computed, inject, Injectable } from '@angular/core';
 import { LanguageService } from '@axe/application/i18n/language.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
+import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
+import { FirstPersonService } from '@axe/application/tabletop/first-person.service';
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { TurnOrderService } from '@axe/application/turn/turn-order.service';
 import { BuffViewPreferenceService } from '@axe/application/ui/buff-view-preference.service';
 import { ButtonGuideService } from '@axe/application/ui/button-guide.service';
 import { ConfirmService } from '@axe/application/ui/confirm.service';
+import { ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { MobileLayoutService } from '@axe/application/ui/mobile-layout.service';
 import { MotionService, MotionSetting } from '@axe/application/ui/motion.service';
 import { NpcBarService } from '@axe/application/ui/npc-bar.service';
@@ -132,6 +135,9 @@ export class MenuCommandService {
   private readonly overlay = inject(PieceOverlayPreferenceService);
   private readonly widgets = inject(WidgetVisibilityService);
   private readonly buttonGuide = inject(ButtonGuideService);
+  private readonly firstPerson = inject(FirstPersonService);
+  private readonly contextMenu = inject(ContextMenuService);
+  private readonly pointer = inject(PointerDeviceService);
 
   private readonly viewMode = inject(ViewModePreferenceService);
   private readonly theme = inject(ThemeService);
@@ -269,8 +275,12 @@ export class MenuCommandService {
           return this.darknessEnabled() ? 'bedtime' : 'bedtime_off';
         case 'fog':
           return this.fogEnabled() ? 'foggy' : 'filter_drama';
+        case 'nameLabels':
+          return this.overlay.names() ? 'label' : 'label_off';
         case 'buffs':
           return this.overlay.buffs() ? 'auto_fix_high' : 'auto_fix_off';
+        case 'speechBubbles':
+          return this.overlay.speech() ? 'chat_bubble' : 'speaker_notes_off';
         default:
           return command.icon;
       }
@@ -297,16 +307,21 @@ export class MenuCommandService {
           return command.labelKey;
       }
     }
+    if (action.kind === 'act' && action.act === 'firstPersonView') return this.firstPersonLabelKey();
     if (action.kind === 'toggle') {
       switch (action.toggle) {
         case 'darkness':
           return this.darknessEnabled() ? 'app.fab.darknessOn' : 'app.fab.darknessOff';
         case 'fog':
           return this.fogEnabled() ? 'app.fab.fogOn' : 'app.fab.fogOff';
+        case 'nameLabels':
+          return this.overlay.names() ? 'app.fab.namesShown' : 'app.fab.namesHidden';
         case 'resourceBars':
           return this.overlay.resourceBars() ? 'app.fab.resourceBarsShown' : 'app.fab.resourceBarsHidden';
         case 'buffs':
           return this.overlay.buffs() ? 'app.fab.buffsShown' : 'app.fab.buffsHidden';
+        case 'speechBubbles':
+          return this.overlay.speech() ? 'app.fab.speechShown' : 'app.fab.speechHidden';
         default:
           return command.labelKey;
       }
@@ -333,6 +348,7 @@ export class MenuCommandService {
   /** Whether a switch stands on, or null for what has no off. */
   litOf(command: MenuCommand): boolean | null {
     const action = command.action;
+    if (action.kind === 'act' && action.act === 'firstPersonView') return this.firstPerson.showing();
     if (action.kind !== 'toggle') return null;
     switch (action.toggle) {
       case 'visualNovel':
@@ -343,10 +359,14 @@ export class MenuCommandService {
         return this.darknessEnabled();
       case 'fog':
         return this.fogEnabled();
+      case 'nameLabels':
+        return this.overlay.names();
       case 'resourceBars':
         return this.overlay.resourceBars();
       case 'buffs':
         return this.overlay.buffs();
+      case 'speechBubbles':
+        return this.overlay.speech();
       case 'npcBar':
         return this.npcBar.isOpen();
       case 'widgetPlToolbar':
@@ -376,7 +396,43 @@ export class MenuCommandService {
     if (action.kind !== 'act') return false;
     if (action.act === 'save') return this.host?.isSaving() ?? false;
     if (action.act === 'zipLoad' || action.act === 'importCharacter') return !this.canEditTabletop();
+    if (action.act === 'firstPersonView') {
+      return this.firstPerson.forced() || (!this.firstPerson.showing() && this.firstPerson.seats().length < 1);
+    }
     return false;
+  }
+
+  /** What the first-person entry is called, by whether there is a view to leave or a piece to take one from. */
+  private firstPersonLabelKey(): string {
+    if (this.firstPerson.forced()) return 'app.fab.firstPersonShared';
+    if (this.firstPerson.showing()) return 'app.fab.firstPersonExit';
+    const seats = this.firstPerson.seats().length;
+    if (seats < 1) return 'app.fab.firstPersonNoSeat';
+    return seats > 1 ? 'app.fab.firstPersonChoose' : 'app.fab.firstPersonEnter';
+  }
+
+  /**
+   * Leaves first person, or takes it up: at once from the one piece there is to look out of, or from
+   * the piece picked in a menu opened where the entry was pressed. A view the master is sharing is
+   * not this seat's to leave.
+   */
+  private toggleFirstPerson(): void {
+    if (this.firstPerson.forced()) return;
+    if (this.firstPerson.showing()) {
+      this.firstPerson.exitSeat();
+      return;
+    }
+    const seats = this.firstPerson.seats();
+    if (seats.length === 1) {
+      this.firstPerson.enterSeat(seats[0].identifier);
+      return;
+    }
+    if (seats.length < 1) return;
+    this.contextMenu.open(
+      { x: this.pointer.pointerX, y: this.pointer.pointerY },
+      seats.map((seat) => ({ name: seat.name, action: () => this.firstPerson.enterSeat(seat.identifier) })),
+      this.t('app.fab.firstPersonChoose')
+    );
   }
 
   /**
@@ -424,11 +480,17 @@ export class MenuCommandService {
       case 'fog':
         this.flipTable('fogEnabled');
         return;
+      case 'nameLabels':
+        this.overlay.toggleNames();
+        return;
       case 'resourceBars':
         this.overlay.toggleResourceBars();
         return;
       case 'buffs':
         this.overlay.toggleBuffs();
+        return;
+      case 'speechBubbles':
+        this.overlay.toggleSpeech();
         return;
       case 'npcBar':
         this.npcBar.toggle();
@@ -516,6 +578,9 @@ export class MenuCommandService {
         return 'done';
       case 'manual':
         window.open(manualUrl(document.baseURI), '_blank', 'noopener');
+        return 'done';
+      case 'firstPersonView':
+        this.toggleFirstPerson();
         return 'done';
     }
   }

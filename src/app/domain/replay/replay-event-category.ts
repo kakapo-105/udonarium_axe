@@ -34,6 +34,7 @@ const STORY_KINDS: ReadonlySet<ReplayEventKind> = new Set([
   ReplayEventKind.VoteFinish,
   ReplayEventKind.MediaCutIn,
   ReplayEventKind.MediaBgm,
+  ReplayEventKind.MediaBackgroundSound,
   ReplayEventKind.VnScene,
 ]);
 

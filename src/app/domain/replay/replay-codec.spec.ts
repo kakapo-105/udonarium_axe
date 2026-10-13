@@ -69,6 +69,27 @@ describe('encodeReplayEvents() / decodeReplayEvents()', () => {
     expect(decoded).toEqual([moveEvent, chatEvent]);
   });
 
+  it('makes the round trip with a background sound started', () => {
+    const started: ReplayEvent = {
+      seq: 9,
+      at: 1_700_000_002_000,
+      t: 6_200,
+      kind: ReplayEventKind.MediaBackgroundSound,
+      actorId: 'alice',
+      targetId: 'rain',
+      detail: { isPlaying: true, volume: 0.5 },
+      patch: {
+        identifier: 'bgs_rain',
+        aliasName: 'background-sound',
+        before: {},
+        after: { audioIdentifier: 'rain', isPlaying: true, volume: 0.5 },
+      },
+      visibility: PUBLIC_VISIBILITY,
+    };
+
+    expect(decodeReplayEvents(encodeReplayEvents([started]))).toEqual([started]);
+  });
+
   it('grows no field that was left out', () => {
     const decoded = decodeReplayEvents(encodeReplayEvents([chatEvent]));
     expect('targetId' in decoded[0]).toBe(false);

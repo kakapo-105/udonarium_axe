@@ -1,10 +1,10 @@
 import { expect, Page, test } from '@playwright/test';
 
-import { openTableContextMenu, waitAppReady } from './helpers';
+import { openTableContextMenu, revealMenuEntry, waitAppReady } from './helpers';
 
 async function createCardStack(page: Page) {
   const menu = await openTableContextMenu(page);
-  await menu.getByText('トランプの山札を作成').click();
+  await (await revealMenuEntry(page, menu, 'トランプの山札を作成')).click();
   await expect(page.locator('card-stack').first()).toBeAttached({ timeout: 10000 });
 }
 
@@ -35,7 +35,7 @@ test.describe('カードスタックの追加コンテキスト操作', () => {
   });
 
   test('「山札を人数分に分割する」がクラッシュせずに card-stack 数を維持/増加させること', async ({ page }) => {
-    // 自分のみの場合は Network.peerIds.length === 1 で実質ノーオペ。
+    // 自分のみの場合はNetwork.peerIds.length === 1で実質ノーオペ。
     // 複数人の場合は人数分の山に分割される。どちらにせよクラッシュしないことだけ確認。
     const before = await page.locator('card-stack').count();
     const menu = await openCardStackMenu(page);

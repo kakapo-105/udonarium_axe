@@ -1,4 +1,3 @@
-import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
@@ -12,13 +11,14 @@ import { RolePermissionService } from '@axe/application/permission/role-permissi
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { UiSignalService } from '@axe/application/ui/ui-signal.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
-import { CHAT_SOUND_TYPES, ChatSoundSetting, ChatSoundType } from '@axe/domain/chat/chat-sound';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { canRoleViewTab } from '@axe/domain/chat/chat-tab-permission';
+import { RUBY_ALIGNS, RUBY_SHOWS, RUBY_SIZES, RUBY_SPACINGS, RubyDisplay } from '@axe/domain/chat/ruby-display';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
-import { ChatSoundEventHandlerService } from '@axe/features/chat/chat-sound-event-handler.service';
 import { SystemAvatarMenuService } from '@axe/features/chat/system-avatar-menu.service';
+import { RoomPanelService } from '@axe/features/panels/room-panel.service';
+import { UiChatSoundSettingsComponent } from '@axe/ui/components/chat-sound-settings/chat-sound-settings.component';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
 
@@ -26,7 +26,7 @@ import { TranslocoModule } from '@jsverse/transloco';
   selector: 'chat-message-setting',
   templateUrl: './chat-message-setting.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, NgTemplateOutlet, SafePipe, TranslocoModule],
+  imports: [FormsModule, SafePipe, TranslocoModule, UiChatSoundSettingsComponent],
 })
 export class ChatMessageSettingComponent {
   private readonly objectStore = inject(ObjectStore);
@@ -36,7 +36,7 @@ export class ChatMessageSettingComponent {
   private readonly systemAvatarMenu = inject(SystemAvatarMenuService);
   private readonly rolePermission = inject(RolePermissionService);
   private readonly objectChange = inject(ObjectChangeService);
-  private readonly chatSound = inject(ChatSoundEventHandlerService);
+  private readonly roomPanels = inject(RoomPanelService);
 
   readonly systemAvatarVisible = this.systemAvatar.isVisible;
   readonly speakerAvatarVisible = this.systemAvatar.isSpeakerVisible;
@@ -99,6 +99,21 @@ export class ChatMessageSettingComponent {
   readonly showVnEmoteBadge = this.chatPrefs.showVnEmoteBadge;
   readonly showMessageCount = this.chatPrefs.showMessageCount;
   readonly fontSize = this.chatPrefs.fontSize;
+
+  /** How this reader has ruby drawn, and the choices for each part of it. */
+  readonly rubyDisplay = this.chatPrefs.rubyDisplay;
+  protected readonly rubyParts: readonly (keyof RubyDisplay)[] = ['show', 'align', 'spacing', 'size'];
+  protected readonly rubyChoices = {
+    show: RUBY_SHOWS,
+    align: RUBY_ALIGNS,
+    spacing: RUBY_SPACINGS,
+    size: RUBY_SIZES,
+  } as const;
+
+  /** Changes one part of how this reader has ruby drawn. */
+  setRubyDisplay(part: keyof RubyDisplay, value: string): void {
+    this.chatPrefs.setRubyDisplay({ [part]: value } as Partial<RubyDisplay>);
+  }
   readonly minFontSize = CHAT_FONT_SIZE_MIN;
   readonly maxFontSize = CHAT_FONT_SIZE_MAX;
 
@@ -228,78 +243,9 @@ export class ChatMessageSettingComponent {
     this.uiSignalService.notifyChatRedraw();
   }
 
-  readonly soundTypes = CHAT_SOUND_TYPES;
-
-  readonly soundScope = computed(() => this.chatPrefs.sound().scope);
-  readonly soundForAll = computed<ChatSoundSetting>(() => this.chatPrefs.sound().all);
-
-  /**
-   * The tabs a sound may be set for, each with what it is set to now.
-   *
-   * The system tab is in here, unlike the display answers above: nobody speaks on it, but
-   * the room does, and a notice landing there is as much worth a note - or worth silencing -
-   * as anybody's line. A tab the reader may not read is still left out.
-   *
-   * A row is followed by the tab's identifier, two tabs being free to share a name, while the
-   * answer itself is kept under the name so that it survives the room being passed around.
-   */
-  readonly soundRows = computed<{ identifier: string; name: string; sound: ChatSoundSetting }[]>(() => {
-    this.objectChange.collectionOf('chat-tab')();
-    this.objectChange.trackMyCursor();
-    const role = PeerCursor.myRole;
-    return this.chatTabList.chatTabs
-      .filter((tab) => canRoleViewTab(tab, role))
-      .map((tab) => {
-        this.objectChange.versionOf(tab.identifier)();
-        return { identifier: tab.identifier, name: tab.name, sound: this.chatPrefs.soundOfTab(tab.name) };
-      });
-  });
-
-  /** Chooses whether the sound a message makes is one setting for every tab or set tab by tab. */
-  setSoundScope(scope: ChatSettingScope): void {
-    this.chatPrefs.setSound({ ...this.chatPrefs.sound(), scope });
-  }
-
-  /**
-   * Changes the parts given of the message sound used for every tab, keeping the rest as they were.
-   */
-  setSoundForAll(sound: Partial<ChatSoundSetting>): void {
-    const setting = this.chatPrefs.sound();
-    this.chatPrefs.setSound({ ...setting, all: { ...setting.all, ...sound } });
-  }
-
-  /**
-   * Changes the parts given of the message sound for the tab of this name, keeping the rest as they
-   * were. Tabs are kept by name, so two tabs of one name share it.
-   */
-  setSoundOfTab(name: string, sound: Partial<ChatSoundSetting>): void {
-    this.chatPrefs.setSoundOfTab(name, { ...this.chatPrefs.soundOfTab(name), ...sound });
-  }
-
-  /**
-   * Plays a sound at its volume so the reader can hear what it will be like; nothing plays at no
-   * volume.
-   */
-  playSoundPreview(sound: ChatSoundSetting): void {
-    this.chatSound.preview(sound.type, sound.volume);
-  }
-
-  /** Turns the percentage from the volume slider into the 0 to 1 volume a sound setting keeps. */
-  toVolume(value: string): number {
-    return Number(value) / 100;
-  }
-
-  /** Turns a kept 0 to 1 volume into the whole percentage the slider and its label show. */
-  toPercent(volume: number): number {
-    return Math.round(volume * 100);
-  }
-
-  /**
-   * Reads the choice from the sound dropdown as a sound type; the dropdown offers only known types,
-   * so it is not checked.
-   */
-  asSoundType(value: string): ChatSoundType {
-    return value as ChatSoundType;
+  /** Opens the panel holding every one of the reader's sound settings, the chat's note among them. */
+  openSoundSettings(): void {
+    this.roomPanels.open('soundSettings');
   }
 
   /** Shows or hides portraits on one tab. Does nothing for a tab that is gone. */

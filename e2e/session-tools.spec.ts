@@ -40,8 +40,8 @@ test.describe('セッション進行まわり', () => {
     await expect(snapshot).toContainText('まだスナップショットがありません');
 
     await snapshot.getByRole('button', { name: /今すぐ保存/ }).click();
-    // 保存できたら世代の数え上げが動く。部屋全体を zip にまとめるので、ブラウザを並べて
-    // 流していると普段の 0.3 秒が 10 秒を超えることがある。
+    // 保存できたら世代の数え上げが動く。部屋全体をzipにまとめるので、ブラウザを並べて
+    // 流していると普段の0.3秒が10秒を超えることがある。
     await expect(snapshot).not.toContainText('まだスナップショットがありません', { timeout: 30000 });
   });
 

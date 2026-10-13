@@ -30,8 +30,10 @@ export const MENU_TOGGLES = [
   'handRail',
   'darkness',
   'fog',
+  'nameLabels',
   'resourceBars',
   'buffs',
+  'speechBubbles',
   'npcBar',
   'widgetPlToolbar',
   'widgetGmToolbar',
@@ -62,16 +64,25 @@ export const MENU_ACTS = [
   'releaseOwnership',
   'buttonGuide',
   'manual',
+  'firstPersonView',
 ] as const;
 
 export type MenuActName = (typeof MENU_ACTS)[number];
 
 /**
  * The entries that are not buttons at all and draw their own thing: the round and whose turn it is,
- * the master's borrowed eyes, the shelf of non-player pieces, the piece being moved, and the reach
- * shapes.
+ * the master's borrowed eyes, the shelf of non-player pieces, the piece being moved, the reach
+ * shapes, and the first-person view, entered by a player and shared by the master.
  */
-export const MENU_CUSTOMS = ['turnIndicator', 'persona', 'npcBarShelf', 'activeCharacter', 'rangeShortcut'] as const;
+export const MENU_CUSTOMS = [
+  'turnIndicator',
+  'persona',
+  'npcBarShelf',
+  'activeCharacter',
+  'rangeShortcut',
+  'firstPerson',
+  'firstPersonShare',
+] as const;
 
 export type MenuCustomName = (typeof MENU_CUSTOMS)[number];
 
@@ -198,6 +209,7 @@ export const MENU_COMMANDS: readonly MenuCommand[] = [
   panel('cutIn', 'slideshow', 'cutInList', 'app.fab.cutIn'),
   panel('effectLibrary', 'auto_awesome', 'effectLibrary', 'feature.effect.title', { audience: 'playing' }),
   panel('skin', 'palette', 'skin', 'app.fab.skin', { testId: 'seat-skin' }),
+  panel('soundSettings', 'volume_up', 'soundSettings', 'app.fab.soundSettings', { testId: 'seat-sound-settings' }),
   panel('objectList', 'category', 'objectList', 'app.fab.objectList', { audience: 'gameMaster' }),
   panel('partyList', 'group_work', 'partyList', 'feature.gmTools.party.title', { audience: 'gameMaster' }),
   panel('ownedCharacters', 'groups', 'ownedCharacters', 'app.fab.ownedCharacters', { audience: 'playing' }),
@@ -212,11 +224,13 @@ export const MENU_COMMANDS: readonly MenuCommand[] = [
   toggle('handRail', 'style', 'app.fab.hand', { audience: 'playing', testId: 'fab-entry-hand' }),
   toggle('darkness', 'bedtime', 'app.fab.darknessOn', { audience: 'gameMaster', dims: true }),
   toggle('fog', 'foggy', 'app.fab.fogOn', { audience: 'gameMaster', dims: true }),
+  toggle('nameLabels', 'label', 'app.fab.namesShown', { testId: 'toolbar-names', dims: true }),
   toggle('resourceBars', 'align_horizontal_left', 'app.fab.resourceBarsShown', {
     testId: 'toolbar-resource-bars',
     dims: true,
   }),
   toggle('buffs', 'auto_fix_high', 'app.fab.buffsShown', { testId: 'toolbar-buffs', dims: true }),
+  toggle('speechBubbles', 'chat_bubble', 'app.fab.speechShown', { testId: 'toolbar-speech', dims: true }),
   toggle('npcBar', 'groups', 'app.fab.npcBar', { audience: 'gameMaster' }),
   widget('widgetPlToolbar', 'person', 'app.fab.plTools', { audience: 'player', testId: 'seat-widget-plToolbar' }),
   widget('widgetGmToolbar', 'shield', 'app.fab.gmTools', {
@@ -257,6 +271,7 @@ export const MENU_COMMANDS: readonly MenuCommand[] = [
   act('releaseOwnership', 'key_off', 'app.fab.releaseOwnership', { audience: 'gameMaster' }),
   act('buttonGuide', 'help_outline', 'app.fab.buttonGuide'),
   act('manual', 'menu_book', 'app.fab.manual', { testId: 'fab-entry-manual' }),
+  act('firstPersonView', 'visibility', 'app.fab.firstPersonEnter', { audience: 'playing', surfaces: ['fab'] }),
 
   custom('turnIndicator', 'hourglass_top', 'feature.turnOrder.title', { surfaces: TOOLBARS }),
   custom('persona', 'visibility', 'feature.gmTools.persona.title', {
@@ -269,6 +284,16 @@ export const MENU_COMMANDS: readonly MenuCommand[] = [
     surfaces: ['plToolbar'],
   }),
   custom('rangeShortcut', 'radar', 'feature.plTools.range.title', { audience: 'player', surfaces: ['plToolbar'] }),
+  custom('firstPerson', 'visibility', 'feature.firstPerson.enter', {
+    audience: 'player',
+    surfaces: ['plToolbar'],
+    testId: 'first-person-enter',
+  }),
+  custom('firstPersonShare', 'visibility', 'feature.firstPerson.shareMenu', {
+    audience: 'gameMaster',
+    surfaces: ['gmToolbar'],
+    testId: 'first-person-share',
+  }),
 ];
 
 const BY_KEY: ReadonlyMap<string, MenuCommand> = new Map(MENU_COMMANDS.map((command) => [command.key, command]));

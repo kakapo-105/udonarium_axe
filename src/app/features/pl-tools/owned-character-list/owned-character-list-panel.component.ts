@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FormsModule } from '@angular/forms';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PartyService } from '@axe/application/party/party.service';
+import { DisclosureService } from '@axe/application/permission/disclosure.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { TableFocusService } from '@axe/application/tabletop/table-focus.service';
 import { SelectionSignalService } from '@axe/application/ui/selection-signal.service';
@@ -15,7 +16,11 @@ import { ChatPaletteRegistryService } from '@axe/features/chat/chat-palette/chat
 import { ObjectPanelService } from '@axe/features/panels/object-panel.service';
 import { ActiveCharacterService } from '@axe/features/pl-tools/active-character.service';
 import { resourceElementsOf, resourceMax } from '@axe/features/pl-tools/owned-character-list/character-resources';
-import { isOnTable, selectOwnedCharacters } from '@axe/features/pl-tools/owned-character-list/owned-characters';
+import {
+  isOnTable,
+  selectClaimableCharacters,
+  selectOwnedCharacters,
+} from '@axe/features/pl-tools/owned-character-list/owned-characters';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
 
@@ -36,6 +41,7 @@ export class OwnedCharacterListPanelComponent {
   private readonly partyService = inject(PartyService);
   protected readonly activeCharacter = inject(ActiveCharacterService);
   private readonly t = inject(TRANSLATE_FN);
+  private readonly disclosure = inject(DisclosureService);
 
   readonly characters = computed<GameCharacter[]>(() => {
     this.objectChange.collectionOf(GameCharacter.aliasName)();
@@ -44,6 +50,18 @@ export class OwnedCharacterListPanelComponent {
     const all = this.objectStore.getObjects<GameCharacter>(GameCharacter);
     for (const character of all) this.objectChange.versionOf(character.identifier)();
     return selectOwnedCharacters(all, userId);
+  });
+
+  /**
+   * The characters on the table nobody has claimed and this user may claim, offered when the list
+   * is empty so a player who joined before being given a piece can take one up from here.
+   */
+  readonly claimable = computed<GameCharacter[]>(() => {
+    this.objectChange.collectionOf(GameCharacter.aliasName)();
+    this.objectChange.trackMyCursor();
+    const all = this.objectStore.getObjects<GameCharacter>(GameCharacter);
+    for (const character of all) this.objectChange.versionOf(character.identifier)();
+    return selectClaimableCharacters(all).filter((character) => this.disclosure.canSetOwner(character));
   });
 
   readonly search = signal('');
@@ -115,6 +133,14 @@ export class OwnedCharacterListPanelComponent {
 
   protected openRemoteController(character: GameCharacter): void {
     this.objectPanels.openRemoteController(character);
+  }
+
+  /** Takes up a character nobody has claimed, making it this user's own. */
+  protected claim(character: GameCharacter): void {
+    const userId = PeerCursor.myCursor?.userId ?? '';
+    if (!userId || !this.disclosure.canSetOwner(character)) return;
+    character.owner = userId;
+    character.update();
   }
 
   protected focusToKoma(character: GameCharacter): void {

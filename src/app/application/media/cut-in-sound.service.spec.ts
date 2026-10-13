@@ -104,11 +104,11 @@ describe('CutInSoundService', () => {
     expect(played.map((audio) => audio.identifier)).toEqual(['se-2']);
   });
 
-  it('plays them at the volume for effects', () => {
+  it('plays them at the volume for cut-ins', () => {
     play(makeScene([{ t: 0, a: 'se-1', v: 100 }]));
     vi.advanceTimersByTime(0);
 
-    expect(playerFor('se-1')?.volumeType).toBe(VolumeType.SE);
+    expect(playerFor('se-1')?.volumeType).toBe(VolumeType.CUT_IN);
   });
 
   it('turns a quiet sound down', () => {

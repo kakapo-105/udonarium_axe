@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { OverlayLayers } from '@axe/application/ui/overlay-layers';
 import { PanelFrame, PanelService } from '@axe/application/ui/panel.service';
+import { ViewportService } from '@axe/application/ui/viewport.service';
 import { AttachedDocuments } from '@axe/domain/ui/attached-documents';
 import { PanelWindowLayerComponent } from '@axe/features/panels/panel-window-layer.component';
 import { windowRendererFactory } from '@axe/features/panels/window-renderer';
@@ -99,6 +100,7 @@ export class PanelWindowService {
   private readonly appRef = inject(ApplicationRef);
   private readonly environmentInjector = inject(EnvironmentInjector);
   private readonly rendererFactory = inject(RendererFactory2);
+  private readonly viewport = inject(ViewportService);
 
   private readonly windows = new Map<string, OpenWindow>();
 
@@ -114,8 +116,16 @@ export class PanelWindowService {
     this.document.defaultView?.addEventListener('pagehide', () => this.closeAll());
   }
 
-  /** Whether this browser will let a panel out at all. */
+  /**
+   * Whether this browser will let a panel out at all.
+   *
+   * A phone or a tablet opens a window as one more tab, where a panel stands alone with no table
+   * beside it to work with, so a screen with nothing but a finger to point with is not offered the
+   * button. A PC keeps it however narrow its window, and with a touch screen as well, as it still
+   * has its mouse or touchpad and opens a window of its own.
+   */
   get isSupported(): boolean {
+    if (this.viewport.isTouch() && !this.viewport.hasFinePointer()) return false;
     return typeof this.document.defaultView?.open === 'function';
   }
 

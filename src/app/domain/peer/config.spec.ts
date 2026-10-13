@@ -1,5 +1,10 @@
 import { TestBed } from '@angular/core/testing';
+import { VolumeType } from '@axe/core/storage/audio-player';
+import { ObjectContext } from '@axe/core/sync/game-object';
 import { waitZeroTimeout } from '@axe/core/util/zero-timeout';
+import { OPEN_STAMP_RULES, withStampsAllowed, withStampUseOn } from '@axe/domain/chat/stamp-rules';
+import { Jukebox } from '@axe/domain/media/jukebox';
+import { DEFAULT_ROOM_VOLUMES } from '@axe/domain/media/room-volumes';
 import { Config } from '@axe/domain/peer/config';
 
 describe('Config', () => {
@@ -14,6 +19,105 @@ describe('Config', () => {
     // thrown after the test has finished.
     await waitZeroTimeout();
     (Config as unknown as { _instance: Config | undefined })._instance = undefined;
+  });
+
+  describe('engagement-zone rules', () => {
+    it('answers nothing for a room saved before it could, so the defaults are played', () => {
+      expect(Config.instance.zoneRuleAnswers).toEqual({
+        enabled: null,
+        sizes: null,
+        countField: null,
+        samePointM: null,
+        outnumber: null,
+        leaveKind: null,
+        blockRadiusM: null,
+        clearName: null,
+      });
+      expect(Config.instance.moveKinds).toBeNull();
+    });
+
+    it('reads back what it writes, and empty again for null', () => {
+      const config = Config.instance;
+      config.zoneEnabled = true;
+      config.zoneSizes = '4:2:3';
+      config.zoneCountField = '体数';
+      config.zoneSamePointM = 0;
+      config.zoneOutnumber = 3;
+      config.zoneLeaveKind = '全力';
+      config.moveKinds = '全力:3:,通常:1:';
+
+      expect(config.zoneRuleAnswers).toEqual({
+        enabled: true,
+        sizes: '4:2:3',
+        countField: '体数',
+        samePointM: 0,
+        outnumber: 3,
+        leaveKind: '全力',
+        blockRadiusM: null,
+        clearName: null,
+      });
+      expect(config.moveKinds).toBe('全力:3:,通常:1:');
+
+      config.zoneEnabled = null;
+      config.zoneSizes = null;
+      config.zoneCountField = null;
+      config.zoneSamePointM = null;
+      config.zoneOutnumber = null;
+      config.zoneLeaveKind = null;
+      config.moveKinds = null;
+      expect(config.moveKinds).toBeNull();
+      expect(config.zoneRuleAnswers).toEqual({
+        enabled: null,
+        sizes: null,
+        countField: null,
+        samePointM: null,
+        outnumber: null,
+        leaveKind: null,
+        blockRadiusM: null,
+        clearName: null,
+      });
+    });
+  });
+
+  describe('drawing a move as straight legs', () => {
+    it('is off for a room saved before it could be asked, and reads back what it writes', () => {
+      const config = Config.instance;
+      expect(config.pathMove).toBe(false);
+
+      config.pathMove = true;
+      expect(config.pathMove).toBe(true);
+      config.pathMove = false;
+      expect(config.pathMove).toBe(false);
+    });
+  });
+
+  describe('stepping into a move', () => {
+    it('is off for a room saved before it could be asked, with no kind named, and reads back what it writes', () => {
+      const config = Config.instance;
+      expect(config.interruptEnabled).toBe(false);
+      expect(config.interruptKind).toBeNull();
+
+      config.interruptEnabled = true;
+      config.interruptKind = '全力';
+      expect(config.interruptEnabled).toBe(true);
+      expect(config.interruptKind).toBe('全力');
+
+      config.interruptKind = null;
+      expect(config.interruptKind).toBeNull();
+    });
+  });
+
+  describe('setting the sides out', () => {
+    it('has no tables for a room saved before it could, and reads back what it writes', () => {
+      const config = Config.instance;
+      expect(config.placementDistances).toBeNull();
+      expect(config.distanceModifiers).toBeNull();
+
+      config.placementDistances = '近い:10';
+      config.distanceModifiers = '10:修正なし';
+      expect(config.placementDistances).toBe('近い:10');
+      expect(config.distanceModifiers).toBe('10:修正なし');
+    });
   });
 
   describe('instance (singleton)', () => {
@@ -52,6 +156,137 @@ describe('Config', () => {
     it('returns the value it is given', () => {
       Config.instance.roomVolume = 0.5;
       expect(Config.instance.roomVolume).toBe(0.5);
+    });
+  });
+
+  describe('the room’s volume for each kind of sound', () => {
+    const setNewVolume = vi.fn();
+
+    function attributesOf(context: ObjectContext): Record<string, unknown> {
+      return context.syncData['attributes'] as Record<string, unknown>;
+    }
+
+    beforeEach(() => {
+      setNewVolume.mockClear();
+      vi.spyOn(Config.instance, 'jukebox', 'get').mockReturnValue({ setNewVolume } as unknown as Jukebox);
+    });
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it('starts at full for every kind', () => {
+      expect(Config.instance.roomVolumes).toEqual(DEFAULT_ROOM_VOLUMES);
+    });
+
+    it('sets one kind, leaving the others as they are', () => {
+      Config.instance.setRoomVolumeOf('bgm', 0.5);
+      Config.instance.setRoomVolumeOf('handling', 0);
+
+      expect(Config.instance.roomVolumes).toEqual({ ...DEFAULT_ROOM_VOLUMES, bgm: 0.5, handling: 0 });
+    });
+
+    it('scales each channel by the master room volume and its own kind, and previews by the master alone', () => {
+      Config.instance.roomVolume = 0.5;
+      Config.instance.setRoomVolumeOf('bgm', 1.6);
+      Config.instance.setRoomVolumeOf('effect', 0);
+
+      expect(Config.instance.roomScaleFor(VolumeType.MASTER)).toBeCloseTo(0.8);
+      expect(Config.instance.roomScaleFor(VolumeType.EFFECT)).toBe(0);
+      expect(Config.instance.roomScaleFor(VolumeType.SE)).toBe(0.5);
+      expect(Config.instance.roomScaleFor(VolumeType.AUDITION)).toBe(0.5);
+    });
+
+    it('reads full for every kind from an older version that sends none', () => {
+      Config.instance.setRoomVolumeOf('bgm', 0.5);
+      const older = Config.instance.toContext();
+      delete attributesOf(older)['_roomKindVolumes'];
+      older.majorVersion += 1;
+
+      Config.instance.apply(older);
+
+      expect(Config.instance.roomVolumes).toEqual(DEFAULT_ROOM_VOLUMES);
+      expect(Config.instance.roomScaleFor(VolumeType.MASTER)).toBe(1);
+    });
+
+    it('keeps the volumes when an older version that passed them along sends the config back', () => {
+      Config.instance.setRoomVolumeOf('background', 0.3);
+      const passedAlong = Config.instance.toContext();
+      attributesOf(passedAlong)['_roomVolume'] = 0.8;
+      passedAlong.majorVersion += 1;
+
+      Config.instance.apply(passedAlong);
+
+      expect(Config.instance.roomVolume).toBe(0.8);
+      expect(Config.instance.roomVolumes.background).toBe(0.3);
+    });
+
+    it('puts a change from another peer on the jukebox straight away', () => {
+      const changed = Config.instance.toContext();
+      attributesOf(changed)['_roomKindVolumes'] = '{"bgm":0.2}';
+      changed.majorVersion += 1;
+
+      Config.instance.apply(changed);
+
+      expect(setNewVolume).toHaveBeenCalled();
+      expect(Config.instance.roomVolumes.bgm).toBe(0.2);
+    });
+  });
+
+  describe('what the room lets its stamps be used for', () => {
+    function attributesOf(context: ObjectContext): Record<string, unknown> {
+      return context.syncData['attributes'] as Record<string, unknown>;
+    }
+
+    afterEach(() => {
+      Config.instance.stampRules = OPEN_STAMP_RULES;
+    });
+
+    it('lets every stamp be used for everything in a room saved before there were rules', () => {
+      Config.instance.stampRules = withStampUseOn(OPEN_STAMP_RULES, 'reaction', false);
+      const older = Config.instance.toContext();
+      delete attributesOf(older)['_stampRules'];
+      older.majorVersion += 1;
+
+      Config.instance.apply(older);
+
+      expect(Config.instance.stampRules).toEqual(OPEN_STAMP_RULES);
+    });
+
+    it('passes the rules on with the rest of the config', () => {
+      Config.instance.stampRules = withStampsAllowed(OPEN_STAMP_RULES, 'line', ['seal:ok'], false);
+
+      expect(attributesOf(Config.instance.toContext())['_stampRules']).toBe('{"line":{"deny":["seal:ok"]}}');
+    });
+  });
+
+  describe('whether what a character says shows over its piece', () => {
+    function attributesOf(context: ObjectContext): Record<string, unknown> {
+      return context.syncData['attributes'] as Record<string, unknown>;
+    }
+
+    afterEach(() => {
+      Config.instance.speechBubblesEnabled = true;
+    });
+
+    it('shows it in a room saved before the switch, and in one holding a value it does not know', () => {
+      Config.instance.speechBubblesEnabled = false;
+      const older = Config.instance.toContext();
+      delete attributesOf(older)['_speechBubbles'];
+      older.majorVersion += 1;
+      Config.instance.apply(older);
+      expect(Config.instance.speechBubblesEnabled).toBe(true);
+
+      const newer = Config.instance.toContext();
+      attributesOf(newer)['_speechBubbles'] = 'from-a-newer-version';
+      newer.majorVersion += 1;
+      Config.instance.apply(newer);
+      expect(Config.instance.speechBubblesEnabled).toBe(true);
+    });
+
+    it('passes the room turning it off on with the rest of the config', () => {
+      Config.instance.speechBubblesEnabled = false;
+
+      expect(attributesOf(Config.instance.toContext())['_speechBubbles']).toBe('off');
+      expect(Config.instance.speechBubblesEnabled).toBe(false);
     });
   });
 

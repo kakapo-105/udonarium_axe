@@ -13,8 +13,8 @@ test.describe('チャットウィンドウ', () => {
   });
 
   test('チャットタブを切り替えられること', async ({ page }) => {
-    // ラジオ自体は class="peer hidden" で display:none、ラベル内のピル div を
-    // クリックすると関連するラジオが checked になる。
+    // ラジオ自体はclass="peer hidden"でdisplay:none。ラベル内のピルdivを
+    // クリックすると関連するラジオがcheckedになる。
     await chatTabPill(page, 'サブタブ').click();
     const subTabRadio = page.locator('chat-window input[name^="chat-tab"]').nth(1);
     await expect(subTabRadio).toBeChecked();
@@ -105,7 +105,7 @@ test.describe('チャットでダイスロール', () => {
     await textarea.fill('2d6');
     await page.locator('chat-input').getByRole('button', { name: '送信' }).click();
     await expect(textarea).toHaveValue('');
-    // 送信ログには「2d6」エコーも残るため、DiceBot の結果メッセージで一意化する
+    // 送信ログには「2d6」のエコーも残るため、DiceBotの結果メッセージで一意化する
     await expect(page.locator('chat-tab').getByText(/DiceBot.*\(2D6\)/)).toBeVisible({ timeout: 10000 });
   });
 });

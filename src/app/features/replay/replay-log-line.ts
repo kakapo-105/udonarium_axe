@@ -104,6 +104,7 @@ const ICONS: Record<string, string> = {
   [ReplayEventKind.VoteFinish]: 'ballot',
   [ReplayEventKind.MediaSoundEffect]: 'volume_up',
   [ReplayEventKind.MediaBgm]: 'music_note',
+  [ReplayEventKind.MediaBackgroundSound]: 'waves',
   [ReplayEventKind.MediaCutIn]: 'movie',
   [ReplayEventKind.EffectCast]: 'auto_awesome',
   [ReplayEventKind.VnScene]: 'wallpaper',
@@ -203,6 +204,8 @@ export function toReplayLogLine(event: ReplayEvent, names: ReplayNameLookup): Re
       return line('soundEffect');
     case ReplayEventKind.MediaBgm:
       return line(detail['isPlaying'] === true ? 'bgmStart' : 'bgmStop');
+    case ReplayEventKind.MediaBackgroundSound:
+      return line(detail['isPlaying'] === true ? 'bgsStart' : 'bgsStop');
     case ReplayEventKind.MediaCutIn:
       return line('cutIn');
     case ReplayEventKind.EffectCast:

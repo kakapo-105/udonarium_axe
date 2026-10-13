@@ -16,8 +16,11 @@ import { CoordinateService } from '@axe/application/input/coordinate.service';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { GameObjectInventoryService } from '@axe/application/inventory/game-object-inventory.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
+import { EngagementZoneService } from '@axe/application/tabletop/engagement-zone.service';
+import { PieceTargetService } from '@axe/application/tabletop/piece-target.service';
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { TabletopActionService } from '@axe/application/tabletop/tabletop-action.service';
+import { VisionService } from '@axe/application/tabletop/vision.service';
 import { ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
 import { PieceContextMenuService } from '@axe/application/ui/piece-context-menu.service';
@@ -33,20 +36,17 @@ import { GameTable } from '@axe/domain/tabletop/game-table';
 import { isHexGrid } from '@axe/domain/tabletop/hex-geometry';
 import { multiAngleFontScaleFactor } from '@axe/domain/tabletop/multi-angle-font-scale';
 import { RangeArea } from '@axe/domain/tabletop/range';
+import { rangeCovers } from '@axe/domain/tabletop/range-coverage';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { ObjectPanelService } from '@axe/features/panels/object-panel.service';
 import { buildRangeContextMenuModel } from '@axe/features/tabletop/range/range-context-menu';
 import {
-  ClipAreaCorn,
-  ClipAreaHexagon,
-  ClipAreaLine,
-  ClipAreaPentagon,
-  ClipAreaSquare,
-  ClipAreaTriangle,
-  RangeRender,
-  RangeRenderSetting,
-} from '@axe/features/tabletop/range/range-render';
-import { clipAreaToPolygonCss, clipCircleCss } from '@axe/features/tabletop/range/range-render-util';
+  initialRangeClip,
+  paintRange,
+  RangeClip,
+  rangeClipPathCss,
+  rangeQuadrantCells,
+} from '@axe/features/tabletop/range/range-paint';
 import { RangeDockingCharacterComponent } from '@axe/features/tabletop/range-docking-character/range-docking-character.component';
 import { MovableOption } from '@axe/ui/directives/movable.directive';
 import { MovableDirective } from '@axe/ui/directives/movable.directive';
@@ -83,6 +83,9 @@ export class RangeComponent {
   private readonly objectChange = inject(ObjectChangeService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly translateFn = inject(TRANSLATE_FN);
+  private readonly zones = inject(EngagementZoneService);
+  private readonly vision = inject(VisionService);
+  private readonly pieceTarget = inject(PieceTargetService);
 
   readonly range = input.required<RangeArea>();
 
@@ -92,109 +95,11 @@ export class RangeComponent {
   readonly clipPath = computed<string>(() => {
     this._clipVersion();
     const range = this.range();
-    switch (range.type) {
-      case 'LINE':
-        return clipAreaToPolygonCss(this.clipAreaLine);
-      case 'CIRCLE':
-        return clipCircleCss(range.length, this.gridSize);
-      case 'SQUARE':
-        return clipAreaToPolygonCss(this.clipAreaSquare);
-      case 'TRIANGLE':
-        return clipAreaToPolygonCss(this.clipAreaTriangle);
-      case 'PENTAGON':
-        return clipAreaToPolygonCss(this.clipAreaPentagon);
-      case 'HEXAGON':
-        return clipAreaToPolygonCss(this.clipAreaHexagon);
-      case 'CUSTOM': {
-        const hx = Math.max(this.gridSize, this.customHalfWidthPx) + this.gridSize;
-        const hy = Math.max(this.gridSize, this.customHalfHeightPx) + this.gridSize;
-        return `polygon(${-hx}px ${-hy}px, ${hx}px ${-hy}px, ${hx}px ${hy}px, ${-hx}px ${hy}px)`;
-      }
-      case 'CORN':
-      default:
-        return clipAreaToPolygonCss(this.clipAreaCorn);
-    }
+    return rangeClipPathCss(this.painted() ?? initialRangeClip(range.type), range, this.gridSize);
   });
 
-  private clipAreaCorn: ClipAreaCorn = {
-    clip01x: 0, // 根本始点
-    clip01y: 0,
-    clip02x: 100,
-    clip02y: 0,
-    clip03x: 100,
-    clip03y: 100,
-    clip04x: 0,
-    clip04y: 100,
-    clip05x: 0, // 先端部
-    clip05y: 0,
-    clip06x: 0, // 折り返し
-    clip06y: 0,
-    clip07x: 0,
-    clip07y: 0,
-    clip08x: 0,
-    clip08y: 0,
-    clip09x: 0,
-    clip09y: 0,
-  };
-
-  private clipAreaLine: ClipAreaLine = {
-    clip01x: 0, // 左下
-    clip01y: 0,
-    clip02x: 0, // 左上
-    clip02y: -50,
-    clip03x: 100, // 右上
-    clip03y: -50,
-    clip04x: 100, // 右下
-    clip04y: 0,
-  };
-
-  private clipAreaSquare: ClipAreaSquare = {
-    clip01x: 0, // 左下
-    clip01y: 0,
-    clip02x: 0, // 左上
-    clip02y: -50,
-    clip03x: 100, // 右上
-    clip03y: -50,
-    clip04x: 100, // 右下
-    clip04y: 0,
-  };
-
-  private clipAreaTriangle: ClipAreaTriangle = {
-    clip01x: 0,
-    clip01y: -100,
-    clip02x: 100,
-    clip02y: 100,
-    clip03x: -100,
-    clip03y: 100,
-  };
-
-  private clipAreaPentagon: ClipAreaPentagon = {
-    clip01x: 0,
-    clip01y: -100,
-    clip02x: 100,
-    clip02y: -30,
-    clip03x: 60,
-    clip03y: 100,
-    clip04x: -60,
-    clip04y: 100,
-    clip05x: -100,
-    clip05y: -30,
-  };
-
-  private clipAreaHexagon: ClipAreaHexagon = {
-    clip01x: 0,
-    clip01y: -100,
-    clip02x: 100,
-    clip02y: -50,
-    clip03x: 100,
-    clip03y: 50,
-    clip04x: 0,
-    clip04y: 100,
-    clip05x: -100,
-    clip05y: 50,
-    clip06x: -100,
-    clip06y: -50,
-  };
+  /** What the canvases were last painted to be cut to, or nothing before the first paint. */
+  private readonly painted = signal<RangeClip | null>(null);
 
   /** The room's table selector, which knows which table is being viewed. */
   get tableSelecter(): TableSelecter {
@@ -235,22 +140,14 @@ export class RangeComponent {
 
   readonly areaQuadrantSize = computed(() => {
     this.rangeVersion();
-    if (this.range().type === 'CUSTOM') {
-      const cells = parseCellPattern(this.range().cellPattern);
-      const bb = cellPatternBoundingBox(cells);
-      const span = Math.max(bb.width, bb.height, 1);
-      return Math.ceil(span) + 1;
-    }
-    const w = this.width() < 1 ? 1 : this.width();
-    const l = this.length() < 1 ? 1 : this.length();
-    return Math.ceil(Math.sqrt(w * w + l * l)) + 1;
+    return rangeQuadrantCells(this.range());
   });
 
   readonly isRotatableRangeType = computed(() => {
     this.rangeVersion();
     const range = this.range();
     if (range.type === 'CUSTOM') return range.isRotatable === true;
-    return ['LINE', 'CORN', 'SQUARE', 'TRIANGLE', 'PENTAGON', 'HEXAGON'].includes(range.type);
+    return ['LINE', 'CORN', 'SQUARE', 'RHOMBUS', 'TRIANGLE', 'PENTAGON', 'HEXAGON'].includes(range.type);
   });
 
   readonly isCustomRangeType = computed(() => {
@@ -258,12 +155,9 @@ export class RangeComponent {
     return this.range().type === 'CUSTOM';
   });
 
-  private customHalfWidthPx = 25;
-  private customHalfHeightPx = 25;
-
   readonly usesSingleRotateGrab = computed(() => {
     this.rangeVersion();
-    return ['SQUARE', 'TRIANGLE', 'PENTAGON', 'HEXAGON', 'CUSTOM'].includes(this.range().type);
+    return ['SQUARE', 'RHOMBUS', 'TRIANGLE', 'PENTAGON', 'HEXAGON', 'CUSTOM'].includes(this.range().type);
   });
 
   readonly rotateGrabDistancePx = computed(() => Math.max(1, this.length()) * this.gridSize);
@@ -387,7 +281,8 @@ export class RangeComponent {
       () => this.dockingWindowOpen(),
       (r) => this.showDetail(r),
       this.translateFn,
-      (r) => this.openCellEditor(r)
+      (r) => this.openCellEditor(r),
+      (r) => this.targetInside(r)
     );
     const display = this.tabletopService.display();
     if (this.tabletopService.mode2d() && display.tabletopMenuStyle !== 'standard') {
@@ -403,6 +298,27 @@ export class RangeComponent {
       return;
     }
     this.contextMenuService.open(menuPosition, menu.actions, this.name());
+  }
+
+  /**
+   * Aims at every piece the range takes in that the reader can see, and at nothing else. A piece in an
+   * engagement zone is taken in where the range takes in the zone's centre; a piece taken out of the
+   * fight is not taken in at all.
+   */
+  targetInside(range: RangeArea): void {
+    const shape = {
+      type: range.type,
+      length: range.length,
+      width: range.width,
+      rotate: range.rotate,
+      origin: { x: range.location.x, y: range.location.y },
+    };
+    const reading = this.zones.reading();
+    const inside = this.objectStore
+      .getObjects<GameCharacter>(GameCharacter)
+      .filter((piece) => piece.isVisibleOnTable && piece.offField !== '1' && this.vision.isTokenVisible(piece))
+      .filter((piece) => rangeCovers(shape, this.gridSize, reading.pointOf(piece)) === true);
+    this.pieceTarget.setOnly(inside);
   }
 
   /** Opens the panel for choosing a character for the range to follow, from the follow menu entry. */
@@ -487,64 +403,15 @@ export class RangeComponent {
     if (!gridCanvasRef || !rangeCanvasRef) return;
     if (!gridCanvasRef.nativeElement.getContext('2d')) return;
     perfCounters.bump(PERF_RANGE_RENDER);
-    const render = new RangeRender(gridCanvasRef.nativeElement, rangeCanvasRef.nativeElement);
-
-    const w = this.width();
-    const l = this.length();
-    const setting: RangeRenderSetting = {
-      areaWidth: this.areaQuadrantSize() * 2,
-      areaHeight: this.areaQuadrantSize() * 2,
-      range: l < 1 ? 1 : l,
-      width: w < 0.1 ? 0.1 : w,
-      centerX: this.range().location.x,
-      centerY: this.range().location.y,
-      gridSize: this.gridSize,
-      type: this.range().type,
-      gridColor: this.range().gridColor,
-      rangeColor: this.range().rangeColor,
-      fanDegree: 0.0,
-      degree,
-      offSetX: this.range().offSetX,
-      offSetY: this.range().offSetY,
-      fillOutLine: this.range().fillOutLine,
-      gridType: this.currentTable.gridType,
-      isDocking: this.objectStore.get(this.range().followingCharacterIdentifier) !== null,
-    };
-
-    switch (this.range().type) {
-      case 'LINE':
-        this.clipAreaLine = render.renderLine(setting);
-        break;
-      case 'CIRCLE':
-        render.renderCircle(setting);
-        break;
-      case 'SQUARE':
-        this.clipAreaSquare = render.renderSquare(setting);
-        break;
-      case 'TRIANGLE':
-        this.clipAreaTriangle = render.renderTriangle(setting);
-        break;
-      case 'PENTAGON':
-        this.clipAreaPentagon = render.renderPentagon(setting);
-        break;
-      case 'HEXAGON':
-        this.clipAreaHexagon = render.renderHexagon(setting);
-        break;
-      case 'CUSTOM': {
-        const bb = render.renderCustom(setting, {
-          cellPattern: this.range().cellPattern,
-          rotationDegrees: degree,
-        });
-        this.customHalfWidthPx = bb.halfWidthPx;
-        this.customHalfHeightPx = bb.halfHeightPx;
-        break;
-      }
-      case 'CORN':
-      default:
-        this.clipAreaCorn = render.renderCorn(setting);
-        break;
-    }
-
+    const range = this.range();
+    this.painted.set(
+      paintRange(gridCanvasRef.nativeElement, rangeCanvasRef.nativeElement, range, {
+        gridSize: this.gridSize,
+        gridType: this.currentTable.gridType,
+        docked: this.objectStore.get(range.followingCharacterIdentifier) !== null,
+        degree,
+      })
+    );
     this._clipVersion.update((v) => v + 1);
   }
 }

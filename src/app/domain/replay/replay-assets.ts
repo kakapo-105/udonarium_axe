@@ -50,6 +50,7 @@ export function collectReplayAssetIds(
       const identifier = String(event.detail['identifier'] ?? '');
       if (identifier.length > 0) audios.add(identifier);
     }
+    if (event.kind === ReplayEventKind.MediaBackgroundSound && event.targetId) audios.add(event.targetId);
   }
 
   return { images, audios };

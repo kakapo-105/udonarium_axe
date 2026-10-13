@@ -39,13 +39,10 @@ export interface MessageAddedEvent {
   messageIdentifier: string;
 }
 
-export interface CardStackDecreasedEvent {
-  cardStackIdentifier: string;
-  cardIdentifier: string;
-}
-
 export interface CutInEvent {
   cutIn: unknown;
+  /** Who the cut-in is played for, where a launch says. */
+  speaker?: unknown;
 }
 
 export interface VoteTally {
@@ -86,6 +83,24 @@ export interface ImageDroppedEvent {
 
 export interface CcfoliaRoomDroppedEvent {
   entries: ArchiveEntries;
+}
+
+/** A file a load left out for being larger than its kind may be, with the limit it went over. */
+export interface FileTooLarge {
+  name: string;
+  kind: 'image' | 'audio';
+  limitBytes: number;
+  /**
+   * The picture itself, for one dropped or chosen on its own rather than found inside an archive,
+   * so it can be made smaller and added after all.
+   */
+  file?: File;
+  /** Where on the table it was dropped, for one that would have been placed there. */
+  dropPoint?: { x: number; y: number };
+}
+
+export interface FilesTooLargeEvent {
+  files: FileTooLarge[];
 }
 
 export interface LoadConfigEvent {
@@ -133,7 +148,6 @@ export const resourceChange$ = new EventChannel<ResourceChangeEvent>();
 export const selectGameTable$ = new EventChannel<SelectGameTableEvent>();
 export const updateAudioResource$ = new EventChannel<void>();
 export const messageAdded$ = new EventChannel<MessageAddedEvent>();
-export const cardStackDecreased$ = new EventChannel<CardStackDecreasedEvent>();
 export const startCutIn$ = new EventChannel<CutInEvent>();
 export const soundOnlyCutIn$ = new EventChannel<CutInEvent>();
 export const stopCutIn$ = new EventChannel<CutInEvent>();
@@ -147,6 +161,7 @@ export const fileLoaded$ = new EventChannel<void>();
 export const xmlLoaded$ = new EventChannel<XmlLoadedEvent>();
 export const imageDropped$ = new EventChannel<ImageDroppedEvent>();
 export const ccfoliaRoomDropped$ = new EventChannel<CcfoliaRoomDroppedEvent>();
+export const filesTooLarge$ = new EventChannel<FilesTooLargeEvent>();
 // The configuration load can emit before the app component subscribes, so this channel is
 // sticky: without it the event is missed and the peer id stays unset.
 export const loadConfig$ = new StickyEventChannel<LoadConfigEvent>();
@@ -179,10 +194,6 @@ export function emitSelectGameTable(event: SelectGameTableEvent) {
 /** Announces that a message joined a chat tab, whether sent here or received from a peer. */
 export function emitMessageAdded(event: MessageAddedEvent) {
   messageAdded$.emit(event);
-}
-/** Announces that a card left a card stack, whether taken here or by a peer. */
-export function emitCardStackDecreased(event: CardStackDecreasedEvent) {
-  cardStackDecreased$.emit(event);
 }
 /** Announces on this device that a cut-in starts; open windows for the same cut-in or tag close. */
 export function emitStartCutIn(event: CutInEvent) {
@@ -235,6 +246,10 @@ export function emitImageDropped(event: ImageDroppedEvent) {
 /** Announces that a CCFOLIA room archive was dropped, with its unzipped entries, for import. */
 export function emitCcfoliaRoomDropped(event: CcfoliaRoomDroppedEvent) {
   ccfoliaRoomDropped$.emit(event);
+}
+/** Announces the files a load left out for being too large, once the whole load is done. */
+export function emitFilesTooLarge(event: FilesTooLargeEvent) {
+  filesTooLarge$.emit(event);
 }
 /** Announces that the app config loaded; the channel is sticky, so late subscribers still get it. */
 export function emitLoadConfig(event: LoadConfigEvent) {

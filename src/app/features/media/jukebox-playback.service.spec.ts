@@ -1,12 +1,21 @@
 import { TestBed } from '@angular/core/testing';
+import { ChatMessageService } from '@axe/application/chat/chat-message.service';
+import { decodeI18nMessage } from '@axe/application/i18n/i18n-message';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { AudioFile } from '@axe/core/storage/audio-file';
 import { AudioPlayer } from '@axe/core/storage/audio-player';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
+import { ChatMessage } from '@axe/domain/chat/chat-message';
 import { CutInLauncher } from '@axe/domain/media/cut-in-launcher';
 import { Jukebox } from '@axe/domain/media/jukebox';
 import { Playlist } from '@axe/domain/media/playlist';
-import { JukeboxPlaybackService } from '@axe/features/media/jukebox-playback.service';
+import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { PeerRole } from '@axe/domain/peer/peer-role';
+import {
+  formatTrackLength,
+  formatTrackTime,
+  JukeboxPlaybackService,
+} from '@axe/features/media/jukebox-playback.service';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 
 function addReady(...identifiers: string[]): void {
@@ -133,6 +142,90 @@ describe('JukeboxPlaybackService', () => {
     });
   });
 
+  describe('what each role may change', () => {
+    let logged: string[];
+
+    function playAs(role: PeerRole, name = 'Alice'): void {
+      PeerCursor.createMyCursor();
+      PeerCursor.myCursor.role = role;
+      PeerCursor.myCursor.name = name;
+    }
+
+    beforeEach(() => {
+      logged = [];
+      vi.spyOn(TestBed.inject(ChatMessageService), 'sendSystemMessage').mockImplementation((text: string) => {
+        logged.push(decodeI18nMessage(text, TestBed.inject(TRANSLATE_FN)));
+        return {} as ChatMessage;
+      });
+    });
+
+    it('lets a guest only listen, leaving the room’s music as it is', () => {
+      addReady('a', 'b');
+      first.entries = ['a', 'b'];
+      jukebox.play('a');
+      playAs(PeerRole.Guest);
+
+      service.togglePlayPause();
+      service.next();
+      service.previous();
+      service.play(AudioStorage.instance.get('b')!);
+      service.playFromPlaylist(first, AudioStorage.instance.get('b')!);
+      service.seek(10);
+      service.stop();
+
+      expect(service.canOperate()).toBe(false);
+      expect(jukebox.isPlaying).toBe(true);
+      expect(jukebox.audioIdentifier).toBe('a');
+      expect(AudioPlayer.prototype.seekTo).not.toHaveBeenCalled();
+    });
+
+    it('lets a player play and stop, but not turn shuffle or repeat', () => {
+      addReady('a');
+      playAs(PeerRole.Player);
+
+      service.play(AudioStorage.instance.get('a')!);
+      expect(jukebox.audioIdentifier).toBe('a');
+      service.cycleRepeatMode();
+      service.toggleShuffle();
+
+      expect(service.canOperate()).toBe(true);
+      expect(service.canChangeModes()).toBe(false);
+      expect(jukebox.repeatMode).toBe('one');
+      expect(jukebox.shuffles).toBe(false);
+      expect(logged).toEqual([]);
+    });
+
+    it('writes each turn of repeat by the game master to the system log, naming them', () => {
+      const t = TestBed.inject(TRANSLATE_FN);
+      playAs(PeerRole.GameMaster, 'Gina');
+
+      service.cycleRepeatMode();
+      service.cycleRepeatMode();
+      service.cycleRepeatMode();
+
+      expect(jukebox.repeatMode).toBe('one');
+      expect(logged).toEqual([
+        t('feature.media.jukebox.log.repeatNone', { name: 'Gina' }),
+        t('feature.media.jukebox.log.repeatAll', { name: 'Gina' }),
+        t('feature.media.jukebox.log.repeatOne', { name: 'Gina' }),
+      ]);
+    });
+
+    it('writes each turn of shuffle by the game master to the system log, naming them', () => {
+      const t = TestBed.inject(TRANSLATE_FN);
+      playAs(PeerRole.GameMaster, 'Gina');
+
+      service.toggleShuffle();
+      service.toggleShuffle();
+
+      expect(jukebox.shuffles).toBe(false);
+      expect(logged).toEqual([
+        t('feature.media.jukebox.log.shuffleOn', { name: 'Gina' }),
+        t('feature.media.jukebox.log.shuffleOff', { name: 'Gina' }),
+      ]);
+    });
+  });
+
   it('remembers how long a paused track is, for the time it shows', () => {
     addReady('a');
     jukebox.play('a');
@@ -144,5 +237,19 @@ describe('JukeboxPlaybackService', () => {
 
     expect(service.duration()).toBe(200);
     expect(service.position()).toBe(30);
+  });
+});
+
+describe('reading out a track', () => {
+  it('reads a point in it as the whole seconds gone', () => {
+    expect(formatTrackTime(5.99)).toBe('0:05');
+    expect(formatTrackTime(65.4)).toBe('1:05');
+    expect(formatTrackTime(Number.NaN)).toBe('0:00');
+  });
+
+  it('reads its length to the nearest second, as one decoded a few samples short of six seconds is six', () => {
+    expect(formatTrackLength(5.999886621315193)).toBe('0:06');
+    expect(formatTrackLength(65.4)).toBe('1:05');
+    expect(formatTrackLength(Number.POSITIVE_INFINITY)).toBe('0:00');
   });
 });

@@ -1,6 +1,7 @@
 import { Logger, LogLevel } from '@axe/core/logging/logger';
 import { AudioFile } from '@axe/core/storage/audio-file';
 import { AudioPlayer, VolumeType } from '@axe/core/storage/audio-player';
+import { loopTaggedWavBlob } from '@axe/testing/loop-tagged-audio';
 
 // ─── AudioContext mock ────────────────────────────────────────────────────────
 
@@ -92,12 +93,7 @@ function makeAudioElm(): AudioElmMock {
 
 type AudioPlayerPrivateStatic = {
   _audioContext: unknown;
-  _masterGainNode: unknown;
-  _auditionGainNode: unknown;
-  _seGainNode: unknown;
-  _volume: number;
-  _auditionVolume: number;
-  _seVolume: number;
+  channels: Map<VolumeType, unknown>;
   cacheMap: Map<string, { url: string; blob: Blob }>;
   MAX_CACHE_SIZE: number;
   MAX_DECODED_BYTES: number;
@@ -109,8 +105,6 @@ type AudioPlayerPrivateInstance = {
   _audioElm?: unknown;
 };
 
-const DEFAULT_VOLUME = 0.5;
-
 const audioPlayerPrivate = AudioPlayer as unknown as AudioPlayerPrivateStatic;
 const asAudioPlayerPrivate = (player: AudioPlayer): AudioPlayerPrivateInstance =>
   player as unknown as AudioPlayerPrivateInstance;
@@ -118,16 +112,12 @@ const asAudioPlayerPrivate = (player: AudioPlayer): AudioPlayerPrivateInstance =
 function resetStaticState() {
   // reset the static fields so nothing leaks between tests
   audioPlayerPrivate._audioContext = undefined;
-  audioPlayerPrivate._masterGainNode = undefined;
-  audioPlayerPrivate._auditionGainNode = undefined;
-  audioPlayerPrivate._seGainNode = undefined;
-  // written to rather than set through the setters, which would build the gain graph a test
-  // has yet to ask for. A test that reads a default has to find one whatever ran before it.
-  audioPlayerPrivate._volume = DEFAULT_VOLUME;
-  audioPlayerPrivate._auditionVolume = DEFAULT_VOLUME;
-  audioPlayerPrivate._seVolume = DEFAULT_VOLUME;
+  // Emptied rather than set through the setters, which would build the gain graph a test has yet
+  // to ask for. A test that reads a default has to find one whatever ran before it.
+  audioPlayerPrivate.channels.clear();
   audioPlayerPrivate.cacheMap.clear();
   (AudioPlayer as unknown as { decodedBuffers: Map<string, unknown> }).decodedBuffers.clear();
+  AudioPlayer.clearAllCache();
 }
 
 function makeAudioFile(opts: { blob?: Blob | null; url?: string; identifier?: string } = {}): AudioFile {
@@ -269,6 +259,14 @@ describe('AudioPlayer', () => {
     it('the sound effects are two', () => {
       expect(VolumeType.SE).toBe(2);
     });
+    it('the background sounds are three', () => {
+      expect(VolumeType.BACKGROUND).toBe(3);
+    });
+    it('the kinds split off from the sound effects come after, in a fixed order', () => {
+      expect([VolumeType.CUT_IN, VolumeType.NOTIFICATION, VolumeType.HANDLING, VolumeType.EFFECT]).toEqual([
+        4, 5, 6, 7,
+      ]);
+    });
   });
 
   // ─── static audioContext ─────────────────────────────────────────────────
@@ -369,6 +367,40 @@ describe('AudioPlayer', () => {
     it('returns the effects gain', () => {
       const node = AudioPlayer.seNode;
       expect(node).toBeDefined();
+    });
+  });
+
+  // ─── static backgroundVolume / backgroundNode ─────────────────────────────
+
+  describe('static backgroundVolume', () => {
+    it('is half by default', () => {
+      expect(AudioPlayer.backgroundVolume).toBe(0.5);
+    });
+
+    it('carries a change through to the background gain', () => {
+      AudioPlayer.backgroundVolume = 0.4;
+      expect(AudioPlayer.backgroundVolume).toBe(0.4);
+      const gainNode = audioCtxMock.createGain.mock.results[0].value as GainNodeMock;
+      expect(gainNode.gain.setTargetAtTime).toHaveBeenCalledWith(0.4, 0, 0.01);
+    });
+  });
+
+  describe('static backgroundNode', () => {
+    it('is a channel of its own, apart from the music and the effects', () => {
+      const node = AudioPlayer.backgroundNode;
+      expect(node).toBe(AudioPlayer.backgroundNode);
+      expect(node).not.toBe(AudioPlayer.rootNode);
+      expect(node).not.toBe(AudioPlayer.seNode);
+    });
+
+    it('is where a player on the background volume type plays through', () => {
+      const player = new AudioPlayer(makeAudioFile({ url: 'blob:bg' }));
+      player.volumeType = VolumeType.BACKGROUND;
+      player.play();
+      const source = audioCtxMock.createMediaElementSource.mock.results[0].value as {
+        connect: ReturnType<typeof vi.fn>;
+      };
+      expect(source.connect).toHaveBeenCalledWith(AudioPlayer.backgroundNode);
     });
   });
 
@@ -671,7 +703,70 @@ describe('AudioPlayer', () => {
 
   // ─── static play (playBufferAsync) ───────────────────────────────────────
 
+  describe('channels', () => {
+    const ALL = [
+      VolumeType.MASTER,
+      VolumeType.AUDITION,
+      VolumeType.SE,
+      VolumeType.BACKGROUND,
+      VolumeType.CUT_IN,
+      VolumeType.NOTIFICATION,
+      VolumeType.HANDLING,
+      VolumeType.EFFECT,
+    ];
+
+    it('gives every kind a channel of its own, running to the speakers', () => {
+      const nodes = ALL.map((type) => AudioPlayer.channelNode(type));
+
+      expect(new Set(nodes).size).toBe(ALL.length);
+      for (const node of nodes) {
+        expect((node as unknown as GainNodeMock).connect).toHaveBeenCalledWith(audioCtxMock.destination);
+      }
+    });
+
+    it('starts every channel at half', () => {
+      expect(ALL.map((type) => AudioPlayer.channelVolume(type))).toEqual(ALL.map(() => 0.5));
+    });
+
+    it('glides one channel to a new volume and leaves the others alone', () => {
+      AudioPlayer.setChannelVolume(VolumeType.HANDLING, 0.3);
+
+      expect(AudioPlayer.channelVolume(VolumeType.HANDLING)).toBe(0.3);
+      expect(AudioPlayer.channelVolume(VolumeType.SE)).toBe(0.5);
+      const node = AudioPlayer.channelNode(VolumeType.HANDLING) as unknown as GainNodeMock;
+      expect(node.gain.setTargetAtTime).toHaveBeenCalledWith(0.3, 0, 0.01);
+    });
+
+    it('is the same node the named accessors give', () => {
+      expect(AudioPlayer.rootNode).toBe(AudioPlayer.channelNode(VolumeType.MASTER));
+      expect(AudioPlayer.seNode).toBe(AudioPlayer.channelNode(VolumeType.SE));
+      expect(AudioPlayer.backgroundNode).toBe(AudioPlayer.channelNode(VolumeType.BACKGROUND));
+    });
+  });
+
   describe('static play()', () => {
+    async function connectedChannel(): Promise<unknown> {
+      let gain: GainNodeMock | undefined;
+      await vi.waitFor(() => {
+        const source = audioCtxMock.createBufferSource.mock.results[0]?.value as AudioBufferSourceNodeMock | undefined;
+        expect(source?.start).toHaveBeenCalled();
+        gain = source!.connect.mock.calls[0][0] as GainNodeMock;
+      });
+      return gain!.connect.mock.calls[0][0];
+    }
+
+    it('plays through the sound-effect channel unless given another kind', async () => {
+      AudioPlayer.play(makeAudioFile({ blob: new Blob(['x']), identifier: 'kind-se' }), 0.5);
+
+      expect(await connectedChannel()).toBe(AudioPlayer.seNode);
+    });
+
+    it('plays through the channel of the kind it is given', async () => {
+      AudioPlayer.play(makeAudioFile({ blob: new Blob(['x']), identifier: 'kind-handling' }), 0.5, VolumeType.HANDLING);
+
+      expect(await connectedChannel()).toBe(AudioPlayer.channelNode(VolumeType.HANDLING));
+    });
+
     it('starts a buffer source when there are bytes', async () => {
       const blob = new Blob(['audio-data']);
       const af = makeAudioFile({ blob, identifier: 'sp1' });
@@ -1006,6 +1101,136 @@ describe('AudioPlayer', () => {
       expect(audioPlayerPrivate.cacheMap.has('evict-0')).toBe(false);
       // Newest entries should remain
       expect(audioPlayerPrivate.cacheMap.has(`evict-${maxSize + 4}`)).toBe(true);
+    });
+  });
+
+  describe('following the loop points a file names', () => {
+    type LoopSource = AudioBufferSourceNodeMock & { loop?: boolean; loopStart?: number; loopEnd?: number };
+    const sources = () => audioCtxMock.createBufferSource.mock.results.map((result) => result.value as LoopSource);
+    // A second long, at 8000 samples a second: the part from a quarter to three quarters goes round.
+    const looping = () =>
+      makeAudioFile({ blob: loopTaggedWavBlob({ start: 2000, end: 5999 }), identifier: 'looping-bgm' });
+    const plain = () => makeAudioFile({ blob: loopTaggedWavBlob(null), identifier: 'plain-bgm' });
+
+    function follower(loop = true): AudioPlayer {
+      const player = new AudioPlayer();
+      player.followsLoopPoints = true;
+      player.loop = loop;
+      return player;
+    }
+
+    beforeEach(() => {
+      Object.assign(audioCtxMock, { sampleRate: 48000 });
+      audioCtxMock.createGain.mockImplementation(() => ({
+        ...makeGainNode(),
+        gain: {
+          value: 1,
+          setValueAtTime: vi.fn(),
+          setTargetAtTime: vi.fn(),
+          cancelScheduledValues: vi.fn(),
+          linearRampToValueAtTime: vi.fn(),
+        },
+      }));
+    });
+
+    it('plays a track that names a loop from memory, going round between its points', async () => {
+      follower().play(looping());
+
+      await vi.waitFor(() => expect(sources()).toHaveLength(1));
+      expect(sources()[0]).toMatchObject({ loop: true, loopStart: 0.25, loopEnd: 0.75 });
+      expect(sources()[0].start).toHaveBeenCalledWith(0, 0);
+      expect(audioElmMock.play).not.toHaveBeenCalled();
+    });
+
+    it('streams a track that names no loop, and does not read it again the next time', async () => {
+      const player = follower();
+      const track = plain();
+
+      player.play(track);
+      await vi.waitFor(() => expect(audioElmMock.play).toHaveBeenCalledTimes(1));
+      player.play(track);
+
+      expect(audioElmMock.play).toHaveBeenCalledTimes(2);
+      expect(audioCtxMock.decodeAudioData).not.toHaveBeenCalled();
+    });
+
+    it('streams every track while it does not follow loop points', () => {
+      const player = new AudioPlayer();
+      player.loop = true;
+
+      player.play(looping());
+
+      expect(audioElmMock.play).toHaveBeenCalledOnce();
+    });
+
+    it('starts from where it was moved to while the track was being read, and reports that place meanwhile', async () => {
+      const player = follower();
+      player.play(looping());
+
+      player.seekTo(0.5);
+      expect(player.currentTime).toBe(0.5);
+
+      await vi.waitFor(() => expect(sources()).toHaveLength(1));
+      expect(sources()[0].start).toHaveBeenCalledWith(0, 0.5);
+    });
+
+    it('does not start a track paused or stopped while it was being read', async () => {
+      const paused = follower();
+      paused.play(looping());
+      paused.pause();
+      const stopped = follower();
+      stopped.play(looping());
+      stopped.stop();
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(sources().every((source) => source.start.mock.calls.length === 0)).toBe(true);
+      expect(paused.paused).toBe(true);
+    });
+
+    it('plays a track that names a loop on to its end while not looping, and says when it gets there', async () => {
+      const player = follower(false);
+      const ended = vi.fn();
+      player.onEnded = ended;
+      player.play(looping());
+      await vi.waitFor(() => expect(sources()).toHaveLength(1));
+
+      expect(sources()[0].loop).toBe(false);
+      sources()[0].onended!();
+      expect(ended).toHaveBeenCalledOnce();
+    });
+
+    it('turns going round on and off while the track plays', async () => {
+      const player = follower(false);
+      player.play(looping());
+      await vi.waitFor(() => expect(sources()).toHaveLength(1));
+
+      player.loop = true;
+
+      expect(sources()[0].loop).toBe(true);
+    });
+
+    it('decodes a track once for plays that follow one another', async () => {
+      const first = follower();
+      first.play(looping());
+      await vi.waitFor(() => expect(sources()).toHaveLength(1));
+      const second = follower();
+      second.play(looping());
+      await vi.waitFor(() => expect(sources()).toHaveLength(2));
+
+      expect(audioCtxMock.decodeAudioData).toHaveBeenCalledOnce();
+    });
+
+    it('streams a track too long to hold in memory, whatever loop it names', async () => {
+      const long = makeAudioFile({
+        blob: loopTaggedWavBlob({ start: 2000, end: 5999 }, { rate: 8, frames: 8 * 60 * 60 }),
+        identifier: 'long-bgm',
+      });
+
+      follower().play(long);
+
+      await vi.waitFor(() => expect(audioElmMock.play).toHaveBeenCalledOnce());
+      expect(audioCtxMock.decodeAudioData).not.toHaveBeenCalled();
     });
   });
 });

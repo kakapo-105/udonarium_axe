@@ -385,6 +385,97 @@ describe('GameTableSettingComponent', () => {
       layer.destroy();
     });
 
+    it('stands a layer behind the table, and writes how much it follows the camera and how high it stands', () => {
+      const table = withTable();
+      try {
+        component.addBackgroundLayer();
+        const layer = table.backgroundLayers[0];
+
+        component.setBackgroundLayerPlacement(layer, 'backdrop');
+        component.setBackgroundLayerFollowPercent(layer, 60);
+        component.setBackgroundLayerHeightPercent(layer, 25);
+
+        expect(layer.placedBackdrop).toBe(true);
+        expect(component.backgroundLayerFollowPercent(layer)).toBe(60);
+        expect(component.backgroundLayerHeightPercent(layer)).toBe(25);
+      } finally {
+        table.destroy();
+      }
+    });
+
+    it('holds the follow and the height between nought and a hundred, and ignores what cannot be read', () => {
+      const table = withTable();
+      try {
+        component.addBackgroundLayer();
+        const layer = table.backgroundLayers[0];
+        component.setBackgroundLayerPlacement(layer, 'backdrop');
+
+        component.setBackgroundLayerFollowPercent(layer, 500);
+        component.setBackgroundLayerHeightPercent(layer, -20);
+        expect([layer.follow, layer.height]).toEqual([1, 0]);
+
+        component.setBackgroundLayerFollowPercent(layer, Number.NaN);
+        expect(layer.follow).toBe(1);
+      } finally {
+        table.destroy();
+      }
+    });
+
+    it('offers the follow and the height only for a layer behind the table, and no drift up or down for it', async () => {
+      const table = withTable();
+      try {
+        component.addBackgroundLayer();
+        const layer = table.backgroundLayers[0];
+        const settle = async () => {
+          fixture.detectChanges();
+          await fixture.whenStable();
+          fixture.detectChanges();
+        };
+        await settle();
+        const root = fixture.nativeElement as HTMLElement;
+        expect(root.querySelector('[data-testid="background-layer-row"]')).not.toBeNull();
+        expect(root.querySelector('[data-testid="background-layer-follow"]')).toBeNull();
+
+        component.setBackgroundLayerPlacement(layer, 'backdrop');
+        await settle();
+
+        expect(root.querySelector('[data-testid="background-layer-follow"]')).not.toBeNull();
+        expect(root.querySelector('[data-testid="background-layer-height"]')).not.toBeNull();
+        expect(root.querySelector<HTMLInputElement>('[data-testid="background-layer-speed-y"]')!.disabled).toBe(true);
+      } finally {
+        table.destroy();
+      }
+    });
+
+    it('lists the layers behind the table first, each side counted on its own', () => {
+      const table = withTable();
+      try {
+        component.addBackgroundLayer();
+        component.addBackgroundLayer();
+        component.addBackgroundLayer();
+        const [under, backdrop, over] = table.backgroundLayers;
+        component.setBackgroundLayerPlacement(backdrop, 'backdrop');
+        component.setBackgroundLayerPlacement(over, 'over');
+
+        expect(component.backgroundLayers).toEqual([backdrop, under, over]);
+        expect(component.canMoveBackgroundLayer(backdrop, 1)).toBe(false);
+      } finally {
+        table.destroy();
+      }
+    });
+
+    it('writes no follow to a table that is no longer there to be edited', () => {
+      const table = withTable();
+      component.addBackgroundLayer();
+      const layer = table.backgroundLayers[0];
+      ObjectStore.instance.remove(table);
+
+      component.setBackgroundLayerFollowPercent(layer, 90);
+
+      expect(layer.follow).not.toBe(0.9);
+      layer.destroy();
+    });
+
     it('shows the two sides apart, everything under the board before everything over it', () => {
       const table = withTable();
       try {

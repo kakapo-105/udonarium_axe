@@ -362,4 +362,106 @@ describe('ChatTabComponent', () => {
       expect(fixture.componentInstance.writingSpeakers().length).toBe(0);
     });
   });
+
+  describe('bringing a line far up the log into view', () => {
+    let chatTab: ChatTab;
+
+    const drawn = () =>
+      Array.from((fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('chat-message')).map(
+        (line) => line.dataset['messageId']
+      );
+
+    beforeEach(() => {
+      beMyself('reader');
+      const mockPanel = document.createElement('div');
+      Object.defineProperty(mockPanel, 'clientHeight', { value: 300 });
+      TestBed.inject(PanelService).scrollablePanel = mockPanel as unknown as HTMLDivElement;
+      chatTab = new ChatTab();
+      chatTab.initialize();
+      for (let i = 0; i < 120; i++) {
+        chatTab.addMessage({ from: 'someone', name: '語り手', text: `${i}行目`, timestamp: i + 1 });
+      }
+      fixture.componentRef.setInput('chatTab', chatTab);
+      fixture.detectChanges();
+    });
+
+    afterEach(() => chatTab.destroy());
+
+    it('draws a line that was not drawn, and hands back its element', async () => {
+      const target = chatTab.chatMessages[3];
+      expect(drawn()).not.toContain(target.identifier);
+
+      const shown = component.reveal(target);
+      fixture.detectChanges();
+      const element = await shown;
+
+      expect(element?.dataset['messageId']).toBe(target.identifier);
+      expect(drawn()).toContain(target.identifier);
+      expect(drawn()).not.toContain(chatTab.chatMessages[119].identifier);
+    });
+
+    it('hands back a line already drawn without drawing others', async () => {
+      const target = chatTab.chatMessages[119];
+      const before = drawn();
+
+      const shown = component.reveal(target);
+      fixture.detectChanges();
+      const element = await shown;
+
+      expect(element?.dataset['messageId']).toBe(target.identifier);
+      expect(drawn()).toEqual(before);
+    });
+
+    it('hands back nothing for a line in another tab, or one said to somebody else', async () => {
+      const other = new ChatTab();
+      other.initialize();
+      const elsewhere = other.addMessage({ from: 'someone', name: '語り手', text: '別のタブ', timestamp: 1 });
+      const whispered = chatTab.addMessage({
+        from: 'someone',
+        to: 'another',
+        name: '語り手',
+        text: '内緒',
+        timestamp: 999,
+      });
+
+      expect(await component.reveal(elsewhere)).toBeNull();
+      expect(await component.reveal(whispered)).toBeNull();
+      other.destroy();
+    });
+
+    it('lights up the line asked for where it is drawn', () => {
+      const target = chatTab.chatMessages[119];
+      const line = () =>
+        (fixture.nativeElement as HTMLElement).querySelector(`chat-message[data-message-id="${target.identifier}"]`)!;
+
+      component.flash(target);
+      fixture.detectChanges();
+
+      expect(line().classList).toContain('chat-message-highlight');
+    });
+
+    it('stops drawing a line once it is deleted, and hands back nothing for it', async () => {
+      const target = chatTab.chatMessages[119];
+      expect(drawn()).toContain(target.identifier);
+
+      target.pseudoDelete(5000);
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(drawn()).not.toContain(target.identifier);
+      expect(await component.reveal(target)).toBeNull();
+    });
+
+    it('stops drawing a line the reader deleted themselves too', async () => {
+      const mine = chatTab.addMessage({ from: 'reader', name: '自分', text: '言い間違い', timestamp: 999 });
+      fixture.detectChanges();
+      expect(drawn()).toContain(mine.identifier);
+
+      mine.pseudoDelete(5000);
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(drawn()).not.toContain(mine.identifier);
+    });
+  });
 });

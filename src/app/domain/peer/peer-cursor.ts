@@ -1,5 +1,5 @@
 import { domainPeerDisconnect$ } from '@axe/core/event/domain-events';
-import { getMyPeerId, getPeerIds } from '@axe/core/network/peer-context-source';
+import { getMyPeerId, getPeerContext, getPeerIds } from '@axe/core/network/peer-context-source';
 import { ImageFile } from '@axe/core/storage/image-file';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import { SyncObject, SyncVar } from '@axe/core/sync/decorator';
@@ -39,6 +39,31 @@ export class PeerCursor extends GameObject {
   @SyncVar() movingWay = '';
   /** Whether that move is being taken over what stands in the way. Written as a word, not a flag. */
   @SyncVar() movingJumping = '';
+  /** The name of the kind of move being worked out, empty for the room's first or plain kind. */
+  @SyncVar() movingKind = '';
+  /**
+   * The way a move on a table with no grid is drawn along, as `x,y` points in table pixels joined by
+   * spaces; empty for a move counted in cells, or no move at all. Kept apart from `movingWay`, whose
+   * cells an older version would read these points as.
+   */
+  @SyncVar() movingPoints = '';
+  /**
+   * The move this peer has stopped to let the room step into, by an id of its own, while it waits for
+   * the answers; empty otherwise. The way is the one written above.
+   */
+  @SyncVar() movingDeclared = '';
+  /**
+   * This peer's answer to a move another peer declared: `id|pass`, or `id|along|piece,piece` for the
+   * pieces stepping in together that far along the way, in table pixels.
+   */
+  @SyncVar() interruptAnswer = '';
+  /** A game master's word on a declared move: `id|now` to settle it with the answers in, `id|drop` to let it go. */
+  @SyncVar() interruptVerdict = '';
+  /**
+   * `1` once this peer's version keeps engagement zones in order, so it may be the one that writes
+   * what follows from them. Empty on a cursor from a version that knows nothing of zones.
+   */
+  @SyncVar() zoneProtocol = '';
 
   @SyncVar() voteAnswer = -1; // 投票選択肢のindex値、-2:棄権
   @SyncVar() voteId = -1; // 回答した投票のID
@@ -184,8 +209,8 @@ export class PeerCursor extends GameObject {
   }
 
   /** The room's shared vote, which this peer's answer belongs to. */
-  get vote(): Vote {
-    return ObjectStore.instance.get<Vote>('Vote')!;
+  get vote(): Vote | null {
+    return ObjectStore.instance.get<Vote>('Vote');
   }
 
   static myCursor: PeerCursor = null!;
@@ -212,6 +237,15 @@ export class PeerCursor extends GameObject {
   /** Whether this peer is a player. */
   get isPlayer(): boolean {
     return this.role === PeerRole.Player;
+  }
+
+  /**
+   * The local user's id: the one on their own cursor, or before that exists, outside a room, the one
+   * the peer context holds; empty before either has one.
+   */
+  static get myUserId(): string {
+    const fromCursor = PeerCursor.myCursor?.userId ?? '';
+    return fromCursor.length > 0 ? fromCursor : getPeerContext().userId;
   }
 
   /** The local user's role; a player until their own cursor exists. */
@@ -320,7 +354,8 @@ export class PeerCursor extends GameObject {
   /**
    * Takes in synced state, keeping the user and peer id lookups in step with it.
    *
-   * When the peer has answered a different vote, the room's vote is checked to see whether it has finished.
+   * When the peer has answered a different vote, the room's vote is checked to see whether it has
+   * finished, where the room holds one.
    */
   override apply(context: ObjectContext) {
     const syncData = context.syncData as Record<string, unknown>;
@@ -339,7 +374,7 @@ export class PeerCursor extends GameObject {
     super.apply(context);
 
     if (voteId != this.voteId) {
-      this.vote.chkFinishVote();
+      this.vote?.chkFinishVote();
     }
   }
 }

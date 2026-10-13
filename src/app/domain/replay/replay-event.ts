@@ -24,6 +24,7 @@ export const ReplayEventKind = {
   VoteFinish: 'vote.finish',
   MediaSoundEffect: 'media.se',
   MediaBgm: 'media.bgm',
+  MediaBackgroundSound: 'media.bgs',
   MediaCutIn: 'media.cutin',
   EffectCast: 'effect.cast',
   VnScene: 'vn.scene',

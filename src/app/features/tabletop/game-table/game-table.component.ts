@@ -24,13 +24,15 @@ import { ImageService } from '@axe/application/storage/image.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { BoardSwitchService } from '@axe/application/tabletop/board-switch.service';
 import { ConcealmentService } from '@axe/application/tabletop/concealment.service';
+import { FirstPersonService } from '@axe/application/tabletop/first-person.service';
 import { HeldPieceService } from '@axe/application/tabletop/held-piece.service';
-import { MovePlanService } from '@axe/application/tabletop/move-plan.service';
+import { MovePlannerService } from '@axe/application/tabletop/move-planner.service';
 import { TableAmbienceService } from '@axe/application/tabletop/table-ambience.service';
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { TabletopActionService } from '@axe/application/tabletop/tabletop-action.service';
 import { TerrainBatchService } from '@axe/application/tabletop/terrain-batch.service';
 import { VisionService } from '@axe/application/tabletop/vision.service';
+import { BackdropPlacement } from '@axe/application/ui/backdrop-frame.service';
 import {
   ContextMenuAction,
   ContextMenuRadialGroup,
@@ -43,6 +45,7 @@ import { ModalService } from '@axe/application/ui/modal.service';
 import { MotionService } from '@axe/application/ui/motion.service';
 import { PanelService } from '@axe/application/ui/panel.service';
 import { RenderLiteService } from '@axe/application/ui/render-lite.service';
+import { RotationGuideService } from '@axe/application/ui/rotation-guide.service';
 import { SamplePiecesPreferenceService } from '@axe/application/ui/sample-pieces-preference.service';
 import { SelectionSignalService } from '@axe/application/ui/selection-signal.service';
 import { buildToggleAction } from '@axe/application/ui/tabletop-context-menu-actions';
@@ -54,6 +57,7 @@ import { ImageFile, imageFileEqual } from '@axe/core/storage/image-file';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
+import { BackdropCamera, backdropOffset } from '@axe/domain/tabletop/backdrop-offset';
 import {
   backgroundScrollAnimation,
   backgroundScrollMargin,
@@ -103,12 +107,14 @@ import {
   buildHexOuterBorderSvg,
   buildHexOutlineMask,
 } from '@axe/features/tabletop/game-table-mask/game-table-mask-helpers';
+import { TableInterruptOverlayComponent } from '@axe/features/tabletop/interrupt-prompt/table-interrupt-overlay.component';
 import { LightSourceComponent } from '@axe/features/tabletop/light-source/light-source.component';
 import { RangeComponent } from '@axe/features/tabletop/range/range.component';
 import { TableAltitudeGuideOverlayComponent } from '@axe/features/tabletop/table-altitude-guide-overlay/table-altitude-guide-overlay.component';
 import { TableAmbienceComponent } from '@axe/features/tabletop/table-ambience/table-ambience.component';
 import { TableBeamOverlayComponent } from '@axe/features/tabletop/table-beam-overlay/table-beam-overlay.component';
 import { TableDiceOverlayComponent } from '@axe/features/tabletop/table-dice-overlay/table-dice-overlay.component';
+import { TableFreePathOverlayComponent } from '@axe/features/tabletop/table-free-path-overlay/table-free-path-overlay.component';
 import { TableMoveBlockOverlayComponent } from '@axe/features/tabletop/table-move-block-overlay/table-move-block-overlay.component';
 import { TableMoveCostOverlayComponent } from '@axe/features/tabletop/table-move-cost-overlay/table-move-cost-overlay.component';
 import { TableMoveRangeOverlayComponent } from '@axe/features/tabletop/table-move-range-overlay/table-move-range-overlay.component';
@@ -121,6 +127,7 @@ import {
   overlayScale,
 } from '@axe/features/tabletop/table-vision-overlay/vision-overlay-render';
 import { TableWeatherOverlayComponent } from '@axe/features/tabletop/table-weather-overlay/table-weather-overlay.component';
+import { TableZoneOverlayComponent } from '@axe/features/tabletop/table-zone-overlay/table-zone-overlay.component';
 import { TerrainComponent } from '@axe/features/tabletop/terrain/terrain.component';
 import { TerrainBatchLayerComponent } from '@axe/features/tabletop/terrain-batch/terrain-batch-layer.component';
 import { TextNoteComponent } from '@axe/features/tabletop/text-note/text-note.component';
@@ -131,6 +138,7 @@ import {
   wallSilhouetteStyle,
 } from '@axe/features/tabletop/wall-projection';
 import { WhiteBoardComponent } from '@axe/features/tabletop/white-board/white-board.component';
+import { BackdropDirective } from '@axe/ui/directives/backdrop.directive';
 import { TooltipDirective } from '@axe/ui/directives/tooltip.directive';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { translateZCss, Z_OFFSET_BACKGROUND_LAYERS_PX, Z_OFFSET_FOREGROUND_LAYERS_PX } from '@axe/ui/tabletop/z-offset';
@@ -145,6 +153,35 @@ interface BackgroundLayerView {
   readonly style: Record<string, string>;
   readonly drifts: boolean;
 }
+
+/** One backdrop as the screen behind the table draws it. */
+interface BackdropLayerView {
+  readonly identifier: string;
+  readonly imageIdentifier: string;
+  readonly imageUrl: string;
+  /** Where the picture stands on the screen and how tall it is drawn. */
+  readonly frameStyle: Record<string, string>;
+  /** How wide the part that follows the camera is, the screen and two pictures to spare, and how its edges fade. */
+  readonly followStyle: Record<string, string>;
+  readonly style: Record<string, string>;
+  readonly drifts: boolean;
+  /** Where the part that follows the camera is moved for the way the camera stands. */
+  readonly place: BackdropPlacement;
+}
+
+/**
+ * The largest a backdrop's picture is drawn, either way. A backdrop is not held to the board, and
+ * the spare it needs for following the camera and drifting is a picture wide each, so a picture
+ * blown up past this would ask for a sheet of no use to anyone.
+ */
+const MAX_BACKDROP_TILE_PX = { width: 4096, height: 4096 };
+
+/**
+ * How a backdrop's picture fades out at its top and its foot, so a picture that is not clear at
+ * its edges does not end in a hard line across the screen. It is laid on the part that follows the
+ * camera, so the fade goes up and down with the picture as the view tilts.
+ */
+const BACKDROP_EDGE_FADE = 'linear-gradient(to bottom, transparent 0%, #000 15%, #000 85%, transparent 100%)';
 
 interface WallView {
   readonly wall: ActiveWall;
@@ -192,6 +229,7 @@ const NO_BEAM_WALL_GRIDS: readonly BeamWallGrid[] = [];
   templateUrl: './game-table.component.html',
   providers: [GameTableGestureService],
   imports: [
+    BackdropDirective,
     NgClass,
     NgTemplateOutlet,
     TerrainComponent,
@@ -218,6 +256,9 @@ const NO_BEAM_WALL_GRIDS: readonly BeamWallGrid[] = [];
     TableMoveRangeOverlayComponent,
     TableMoveBlockOverlayComponent,
     TableMoveCostOverlayComponent,
+    TableInterruptOverlayComponent,
+    TableFreePathOverlayComponent,
+    TableZoneOverlayComponent,
     TableTriggerOverlayComponent,
     TableEffectOverlayComponent,
     EffectTargetOverlayComponent,
@@ -259,7 +300,7 @@ export class GameTableComponent {
   private readonly selectionSignalService = inject(SelectionSignalService);
   private readonly cardTargetService = inject(CardTargetService);
   private readonly effectTargetingService = inject(EffectTargetingService);
-  private readonly movePlan = inject(MovePlanService);
+  private readonly movePlan = inject(MovePlannerService);
   private readonly viewport = inject(ViewportService);
   private readonly effectPlaybackService = inject(EffectPlaybackService);
   private readonly mobileLayout = inject(MobileLayoutService);
@@ -281,6 +322,7 @@ export class GameTableComponent {
   private _gridDrawnFrom: string | null = null;
   private readonly renderLite = inject(RenderLiteService);
   readonly gestureService = inject(GameTableGestureService);
+  private readonly firstPerson = inject(FirstPersonService);
   private readonly boardSwitches = inject(BoardSwitchService);
   private readonly concealment = inject(ConcealmentService);
 
@@ -313,6 +355,27 @@ export class GameTableComponent {
       this.tabletopService.mode2d();
       this.tabletopService.orthographicProjection();
       if (this._initialized) untracked(() => this.syncMode2d());
+    });
+    effect(() => {
+      const away = this.firstPerson.showing();
+      untracked(() => {
+        this.gestureService.suspended = away;
+        if (away) {
+          this.gestureService.cancelInput();
+          return;
+        }
+        if (!this._initialized) return;
+        this.setGameTableGrid(
+          this.currentTable.width,
+          this.currentTable.height,
+          this.currentTable.gridSize,
+          this.currentTable.gridType,
+          this.currentTable.gridColor,
+          this.currentTable.gridFontColor
+        );
+        this.syncMode2d();
+        this.snapToRealSize();
+      });
     });
     effect(() => {
       const focus = this.selectionSignalService.focusCoordinate();
@@ -622,7 +685,65 @@ export class GameTableComponent {
     }
   );
 
-  readonly underLayers = computed(() => this.laidLayers().filter((layer) => !layer.placedOver));
+  readonly underLayers = computed(() =>
+    this.laidLayers().filter((layer) => !layer.placedOver && !layer.placedBackdrop)
+  );
+  readonly backdropLayers = computed(() => this.laidLayers().filter((layer) => layer.placedBackdrop));
+
+  /**
+   * What the backdrops behind the table are drawn as, back to front.
+   *
+   * A backdrop is laid across the screen rather than on the board, and only across: a range of
+   * hills is one long picture, and laid upward as well it would stand on its own head. It drifts
+   * across as an under layer does, and the part around the drift is moved for the camera.
+   */
+  readonly backdropLayerViews = computed<readonly BackdropLayerView[]>(() => {
+    this.objectChangeService.fileVersion();
+    const sizes = this.layerNaturalSizes();
+    const moving = this.motion.enabled();
+    return this.backdropLayers().map((layer) => {
+      const tile = backgroundTileSize(sizes.get(layer.imageIdentifier) ?? null, layer.scale, MAX_BACKDROP_TILE_PX);
+      const x = moving ? backgroundScrollAnimation(layer.speedX, tile?.width ?? 0) : null;
+      const scrollsX = !!x && x.durationSeconds > 0;
+      const image = this.imageService.getEmptyOr(layer.imageIdentifier);
+      const width = tile?.width ?? 0;
+      const follow = layer.follow;
+      return {
+        identifier: layer.identifier,
+        imageIdentifier: layer.imageIdentifier,
+        imageUrl: image.url,
+        frameStyle: {
+          bottom: `${+(layer.height * 100).toFixed(2)}%`,
+          ...(tile ? { height: `${tile.height}px` } : { height: '0px' }),
+          ...(layer.opacity < 1 ? { opacity: `${layer.opacity}` } : {}),
+        },
+        followStyle: {
+          width: `calc(100% + ${width * 2}px)`,
+          'mask-image': BACKDROP_EDGE_FADE,
+          '-webkit-mask-image': BACKDROP_EDGE_FADE,
+        },
+        style: {
+          'background-image': `url(${image.url})`,
+          'background-repeat': 'repeat-x',
+          'background-position': 'left bottom',
+          ...(tile ? { 'background-size': `${tile.width}px ${tile.height}px` } : {}),
+          ...(x && scrollsX
+            ? {
+                '--bg-layer-x-name': 'bgLayerScrollX',
+                '--bg-layer-x-duration': `${x.durationSeconds}s`,
+                '--bg-layer-x-direction': x.reversed ? 'reverse' : 'normal',
+                '--bg-layer-tile-w': `${width}px`,
+              }
+            : {}),
+        },
+        drifts: scrollsX,
+        place: (camera: BackdropCamera) => {
+          const offset = backdropOffset(camera, follow, width);
+          return `translate3d(${offset.x}px, ${offset.y}px, 0px)`;
+        },
+      };
+    });
+  });
   readonly overLayers = computed(() => this.laidLayers().filter((layer) => layer.placedOver));
 
   readonly underLayerViews = computed<readonly BackgroundLayerView[]>(() => this.layerViews(this.underLayers()));
@@ -1120,11 +1241,6 @@ export class GameTableComponent {
   readonly isPickingEffectTarget = computed(() => this.effectTargetingService.isPicking());
   /** Whether a move is being worked out, which is when the table says how to work one out. */
   readonly isPlanningMove = this.movePlan.isPlanning;
-  readonly isJumpingMove = this.movePlan.isJumping;
-  /** A hand with no keys is told what it can do rather than which keys it has not got. */
-  protected readonly movePlanHintKey = computed(() =>
-    this.viewport.isTouch() ? 'feature.tabletop.movePlan.hintTouch' : 'feature.tabletop.movePlan.hint'
-  );
 
   private readonly heldPiece = inject(HeldPieceService);
 
@@ -1145,41 +1261,28 @@ export class GameTableComponent {
     };
   });
 
-  /** The two ways a move may be taken, offered as a pair so which one is on is plain to see. */
-  protected readonly moveModes = [
-    {
-      jumping: false,
-      icon: 'directions_walk',
-      label: 'feature.tabletop.movePlan.walk',
-      testId: 'move-plan-walk',
-    },
-    {
-      jumping: true,
-      icon: 'keyboard_double_arrow_up',
-      label: 'feature.tabletop.movePlan.jump',
-      testId: 'move-plan-jump',
-    },
-  ] as const;
+  private readonly rotationGuide = inject(RotationGuideService);
 
   /**
-   * Chooses how the move is taken, from the band at the foot of the screen.
-   *
-   * A finger has no space bar. The press is kept off the table underneath, which would read
-   * it as a choice of where to walk to.
+   * What is said while something is being turned: how far it has turned, and how to snap it to the
+   * grid's directions. A hand with no Alt key is told only the angle.
    */
-  onChooseMoveMode(jumping: boolean, event: Event): void {
-    event.preventDefault();
-    event.stopPropagation();
-    if (this.isJumpingMove() !== jumping) this.movePlan.toggleJump();
-  }
+  protected readonly rotateHint = computed(() => {
+    const turn = this.rotationGuide.turn();
+    if (!turn) return null;
+    return { ...turn, offersSnap: !this.viewport.isTouch() };
+  });
 
   /**
    * Backs out on Escape: from picking an effect's targets first, then from picking a card's target,
-   * and otherwise clears the selection.
+   * and otherwise clears the selection. Backing out of a pick takes the key, so whatever else
+   * listens for Escape, as the first-person view does to leave, lets it be.
    */
-  onEscapeKey(_e: Event) {
-    if (this.effectTargetingService.cancel()) return;
-    if (this.cardTargetService.cancelPicking()) return;
+  onEscapeKey(event: Event) {
+    if (this.effectTargetingService.cancel() || this.cardTargetService.cancelPicking()) {
+      event.preventDefault();
+      return;
+    }
     this.selectionSignalService.clearSelection();
   }
 

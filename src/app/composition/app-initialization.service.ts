@@ -1,5 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
+import { PersonalVolumeService } from '@axe/application/media/personal-volume.service';
+import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { KeyboardInsetService } from '@axe/application/ui/keyboard-inset.service';
 import { AppConfigService } from '@axe/composition/app-config.service';
 import { initializeNetworkMessaging } from '@axe/core/network/network-messaging';
@@ -23,6 +25,7 @@ import { DiceBot } from '@axe/domain/dice/dice-bot';
 import { createDefaultEffectPresets } from '@axe/domain/effect/builtin-effect-presets';
 import { EffectPresetSet } from '@axe/domain/effect/effect-preset-set';
 import { AudioTag } from '@axe/domain/media/audio-tag';
+import { BackgroundSound } from '@axe/domain/media/background-sound';
 import { createDefaultCutIns } from '@axe/domain/media/builtin-cut-ins';
 import { registerBuiltinMaterials } from '@axe/domain/media/builtin-materials';
 import { CutInLauncher } from '@axe/domain/media/cut-in-launcher';
@@ -45,6 +48,7 @@ const PREFETCH_FALLBACK_DELAY_MS = 1500;
 @Injectable({ providedIn: 'root' })
 export class AppInitializationService {
   private readonly fileArchiver = inject(FileArchiver);
+  private readonly rolePermission = inject(RolePermissionService);
   private readonly appConfigService = inject(AppConfigService);
   private readonly pointerDeviceService = inject(PointerDeviceService);
   private readonly imageStorage = inject(ImageStorage);
@@ -57,6 +61,7 @@ export class AppInitializationService {
   private readonly statusAilmentCatalog = inject(StatusAilmentCatalog);
   private readonly ngSelectConfig = inject(NgSelectConfig);
   private readonly keyboardInset = inject(KeyboardInsetService);
+  private readonly personalVolumes = inject(PersonalVolumeService);
 
   /**
    * Starts the app once at launch, before any room is used.
@@ -68,6 +73,7 @@ export class AppInitializationService {
   initialize(): void {
     initializeNetworkMessaging();
     this.fileArchiver.initialize();
+    this.fileArchiver.mayLoadDrops = () => this.rolePermission.canEditTabletop;
     ImageSharingSystem.instance.initialize();
     AudioSharingSystem.instance.initialize();
     ObjectSynchronizer.instance.initialize();
@@ -118,8 +124,11 @@ export class AppInitializationService {
 
     const jukebox = new Jukebox('Jukebox');
     jukebox.initialize();
-    AudioSharingSystem.instance.preferredIdentifiers = () =>
-      jukebox.audioIdentifier.length > 0 ? [jukebox.audioIdentifier] : [];
+    this.personalVolumes.restore();
+    AudioSharingSystem.instance.preferredIdentifiers = () => [
+      ...(jukebox.audioIdentifier.length > 0 ? [jukebox.audioIdentifier] : []),
+      ...BackgroundSound.playing().map((sound) => sound.audioIdentifier),
+    ];
 
     const playlist = new Playlist('Playlist');
     playlist.initialize();

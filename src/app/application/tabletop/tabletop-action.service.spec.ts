@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { TabletopActionService } from '@axe/application/tabletop/tabletop-action.service';
 import { TRUMP_BACK_IMAGE_PATH } from '@axe/application/tabletop/tabletop-action-helpers';
+import { ContextMenuAction } from '@axe/application/ui/context-menu.service';
 import { ViewModePreferenceService } from '@axe/application/ui/view-mode-preference.service';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
@@ -15,9 +16,15 @@ import { PeerRole } from '@axe/domain/peer/peer-role';
 import { cellGridOf, cellIndexAt } from '@axe/domain/tabletop/fog/cell-grid';
 import { GameTable } from '@axe/domain/tabletop/game-table';
 import { pieceCellOf } from '@axe/domain/tabletop/move/piece-on-grid';
+import { RangeArea } from '@axe/domain/tabletop/range';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { MAX_BOARD_PITCH } from '@axe/domain/tabletop/white-board';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
+
+/** An entry of a menu by its name, at its top or one group down. */
+function entryIn(menu: readonly ContextMenuAction[], name: string): ContextMenuAction | undefined {
+  return menu.flatMap((entry) => [entry, ...(entry.subActions ?? [])]).find((entry) => entry.name === name);
+}
 
 describe('TabletopActionService', () => {
   let service: TabletopActionService;
@@ -85,13 +92,49 @@ describe('TabletopActionService', () => {
       expect(card.imageFile.url).toContain('blank_card.webp');
     });
 
-    it('adds a blank-card action to the context menu', () => {
-      const action = service
-        .makeDefaultContextMenuActions({ x: 0, y: 0, z: 0 })
-        .find((entry) => entry.name === 'ブランクカードを作成');
+    it('adds a blank-card action to the context menu, among the cards', () => {
+      const action = entryIn(service.makeDefaultContextMenuActions({ x: 0, y: 0, z: 0 }), 'ブランクカードを作成');
 
       expect(action).toBeDefined();
       expect(action?.action).toBeInstanceOf(Function);
+    });
+  });
+
+  it('lists the create menu flat, in the order the table has always offered it', () => {
+    const menu = service.makeDefaultContextMenuActions({ x: 0, y: 0, z: 0 });
+
+    expect(menu.map((entry) => entry.name)).toEqual([
+      'キャラクターを作成',
+      'マップマスクを作成',
+      '地形を作成',
+      '共有メモを作成',
+      'ブランクカードを作成',
+      'トランプの山札を作成',
+      'ダイスを作成',
+      'コインを作成',
+      '射程範囲を作成',
+      '光源を作成',
+      'ホワイトボードを作成',
+      '環境エフェクトを置く',
+    ]);
+  });
+
+  describe('the range create menu', () => {
+    it('makes the square as a diamond or square to the grid, from under the square', () => {
+      const menu = entryIn(service.makeDefaultContextMenuActions({ x: 0, y: 0, z: 0 }), '射程範囲を作成');
+      const square = menu?.subActions?.find((entry) => entry.name === '四角形・ダイヤ');
+
+      expect(square?.action).toBeUndefined();
+      expect(square?.subActions?.map((entry) => entry.name)).toEqual(['ダイヤとして出力', '四角形として出力']);
+
+      const before = new Set(ObjectStore.instance.getObjects(RangeArea));
+      square!.subActions![0].action!();
+      const made = ObjectStore.instance.getObjects(RangeArea).filter((range) => !before.has(range));
+      try {
+        expect(made.map((range) => range.type)).toEqual(['RHOMBUS']);
+      } finally {
+        for (const range of made) range.destroy();
+      }
     });
   });
 

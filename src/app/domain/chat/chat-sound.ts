@@ -1,3 +1,5 @@
+import { AudioPlayer, VolumeType } from '@axe/core/storage/audio-player';
+import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { PresetSound } from '@axe/domain/media/sound-effect';
 
 export const CHAT_SOUND_TYPES = ['pageTurn', 'bubble', 'cyber', 'notify1', 'notify2'] as const;
@@ -49,4 +51,15 @@ export function chatSoundOf(type: ChatSoundType, text: string): string {
     case 'notify2':
       return PresetSound.chatNotify2;
   }
+}
+
+/**
+ * Plays the note a type makes for a line of this text, on this device alone and through the
+ * notification channel. Nothing plays at no volume, or before the sound has been loaded.
+ */
+export function playChatSound(type: ChatSoundType, text: string, volume: number): void {
+  const identifier = chatSoundOf(type, text);
+  if (identifier.length < 1 || volume <= 0) return;
+  const audio = AudioStorage.instance.get(identifier);
+  if (audio) AudioPlayer.play(audio, volume, VolumeType.NOTIFICATION);
 }

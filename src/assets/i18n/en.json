@@ -58,7 +58,8 @@
       "ownedCharacters": "My characters",
       "roomSnapshot": "Auto Save",
       "replay": "Replay",
-      "popOut": "Open in its own window"
+      "popOut": "Open in its own window",
+      "soundSettings": "Sound settings"
     },
     "party": {
       "unnamed": "Unnamed party"
@@ -147,6 +148,10 @@
       "up": "Move up",
       "down": "Move down",
       "toBottom": "Move to the bottom"
+    },
+    "sound": {
+      "mute": "Turn {{name}} off",
+      "unmute": "Turn {{name}} on"
     }
   },
   "feature": {
@@ -184,6 +189,171 @@
       "ownedOnly": "Limit AI control to pieces owned by this user",
       "roomHint": "The ownership limit is shared by the room. Only the GM can change it.",
       "audit": "Recent operations (up to 100)"
+    },
+    "zone": {
+      "menu": {
+        "title": "Engagement zone",
+        "declare": "Engage {{name}}",
+        "join": "Join this engagement zone",
+        "joinNumbered": "Join engagement zone {{number}}",
+        "leave": "Leave the engagement zone",
+        "offField": "Take out of the fight",
+        "onField": "Put back into the fight",
+        "square": "Make it square",
+        "circle": "Make it a circle",
+        "limit": "Limit",
+        "limitByTable": "As the size table allows",
+        "remove": "End the engagement zone",
+        "manage": "Manage engagement zones",
+        "prepareLeave": "Say it will leave next turn",
+        "cancelLeave": "Take back saying it will leave",
+        "checkFire": "Check the line of fire",
+        "placement": "Set out the sides",
+        "unseen": "Cannot be seen (moves cannot be stopped)",
+        "down": "Down (cannot act)",
+        "held": "Held fast where it stands",
+        "grab": "Take hold of {{name}}",
+        "grabbing": "Holding on to {{name}}",
+        "grabbedBy": "Held on to by {{name}}"
+      },
+      "chat": {
+        "declared": "{{attacker}} engaged {{target}}, and an engagement zone formed",
+        "joined": "{{name}} joined the engagement zone",
+        "left": "{{name}} left the engagement zone",
+        "offField": "{{name}} was taken out of the fight",
+        "onField": "{{name}} was put back into the fight",
+        "prepareLeave": "{{name}} said it will leave the engagement zone",
+        "held": "{{name}} was held by the engagement zone",
+        "interrupted": "{{names}} stepped into {{mover}}'s move",
+        "pulledIn": "{{name}} began its turn in an engagement zone holding more than its limit, and joined it",
+        "down": "{{name}} went down and is out of its engagement zone",
+        "grabbed": "{{holder}} took hold of {{captive}}",
+        "released": "{{captive}} is free of {{holder}}"
+      },
+      "settings": {
+        "section": "Engagement zones",
+        "enabled": "Use engagement zones",
+        "enabledHint": "When enemies at the same point declare a fight, a circular engagement zone forms around that point. It grows with the number of pieces in it, merges when its centre enters another zone, and ends when one side is gone.",
+        "sizes": "Size table",
+        "sizesHint": "Rows of \"count limit:radius (m):square side (m)\" separated by commas. The last row's count is the most a zone holds. Leave empty for the default table.",
+        "countField": "Value counted as bodies",
+        "countFieldHint": "A piece counts as the number in this sheet field. Leave empty to count each piece once.",
+        "samePoint": "Same-point distance (m)",
+        "samePointHint": "A fight can be declared with an enemy within this distance.",
+        "engagementWarning": "The move range's engagement is also on. Both judge the same thing in different ways, so use only one of them.",
+        "outnumber": "Outnumbering factor",
+        "outnumberHint": "A side more than this many times the other side's number walks through a zone, or out of one without saying so first.",
+        "leaveKind": "Kind that leaves an overflowing zone",
+        "leaveKindAny": "Any kind",
+        "leaveKindHint": "A piece leaves a zone holding more than its limit at once by this kind of move.",
+        "interrupt": "Let moves be stepped into",
+        "interruptHint": "Before a planned move is walked, the side of every enemy that can reach the way is asked whether to step in. A piece that steps in stops the move at that point, and a new engagement zone forms there with both. While turns are kept, it is forming until the turn ends. A move into an engagement zone, or one out of a zone the piece stands in, is also put to the side in the zone, which chooses whether to stop it; a piece it stops moves to the centre and joins. A zone nobody can answer for, and every zone while this is off, always stops it.",
+        "interruptKind": "Kind used to step in",
+        "interruptKindFirst": "The first kind",
+        "blockRadius": "Line of fire block radius (m)",
+        "clearName": "Ability that fires past cover",
+        "fireHint": "A line of fire counts the engagement zones it crosses, and pieces out of every zone that are enemies of the shooter within this radius, as in the way. A shooter whose sheet field or buff goes by this name has nothing in the way.",
+        "placementDistances": "Starting distances",
+        "placementDistancesHint": "Rows of \"name:distance (m)\" separated by commas, to choose from when setting out the sides.",
+        "distanceModifiers": "Distance modifiers",
+        "distanceModifiersHint": "Rows of \"up to distance (m):modifier\" separated by commas. The row for the distance between the leaders shows when setting out the sides. A row named for a situation or a kind of move instead of a distance (such as \"Rough footing:check -2\") can be ticked in the panel when it applies.",
+        "countFieldPlaceholder": "e.g. Bodies"
+      },
+      "heldInPlace": "{{name}} is held by its engagement zone and cannot move. Say it will leave, and it may leave from the next round",
+      "interrupt": {
+        "waiting": "Waiting for the room to step in ({{seconds}} s left)",
+        "offer": "You may step into {{mover}}'s move",
+        "ruling": "{{mover}}'s move is waiting for the room to step in",
+        "point": "Point",
+        "step": "Step in",
+        "pass": "Let it by",
+        "decideNow": "Decide now",
+        "drop": "Drop the interrupts",
+        "inZone": "(in a zone)",
+        "standingInZone": "(standing in a zone)",
+        "pullInto": "Pull into",
+        "zoneOf": "{{name}}'s zone"
+      },
+      "fire": {
+        "title": "Line of fire: {{name}}",
+        "distance": "{{metres}} m",
+        "clear": "Nothing in the way",
+        "blocked": "In the way:",
+        "zones": "{{count}} engagement zone(s)",
+        "candidates": "May land on: {{names}}",
+        "random": "Pick at random",
+        "none": "No piece is aimed at",
+        "unseen": "Unseen piece"
+      },
+      "placement": {
+        "title": "Setting out the sides",
+        "leader": "This side’s leader",
+        "other": "Other side’s leader",
+        "distance": "Distance",
+        "bearing": "Direction of the other side",
+        "place": "Set out",
+        "now": "Distance now {{metres}} m:",
+        "noNote": "Past the modifier table",
+        "outOfFight": "Out of the fight",
+        "bearing_0": "Right",
+        "bearing_45": "Down right",
+        "bearing_90": "Down",
+        "bearing_135": "Down left",
+        "bearing_180": "Left",
+        "bearing_225": "Up left",
+        "bearing_270": "Up",
+        "bearing_315": "Up right",
+        "situations": "Situations that apply",
+        "announceButton": "Say it in chat",
+        "announce": "The sides start {{metres}} m apart: {{notes}}"
+      },
+      "downInPlace": "{{name}} is down and cannot move",
+      "heldFastInPlace": "{{name}} is held fast where it stands",
+      "offerFight": "{{name}} stands at the same point as {{foe}}",
+      "offerFightAction": "Fight",
+      "grabbedInPlace": "{{name}} is held on to by {{holder}} and cannot move"
+    },
+    "firstPerson": {
+      "exit": "Back to the table",
+      "enter": "Dungeondry Master mode",
+      "chooseSeat": "Dungeondry Master mode (choose a piece)",
+      "noSeat": "Dungeondry Master mode (no piece of yours to look out of)",
+      "shareMenu": "Choose the view everyone is put in",
+      "sharing": "Change the view everyone is in",
+      "shareEmpty": "No piece on the table can be looked out of",
+      "playerOwned": "PL",
+      "sharedBadge": "Shared view (GM)",
+      "sharedByGm": "GM is sharing a view",
+      "stopSharing": "Release the shared view",
+      "sharedMissing": "The shared piece is not on the table (press to release)",
+      "keysHint": "WASD or ↑↓ to move · Q/E or ←→ to turn · Space for doors · F for your light · T to target · Shift+T to clear targets · Drag to look around (Esc to face ahead)",
+      "keysHintHex": "W/S or ↑↓: forward and back · A/D: front left and right · Z/C: back left and right · Q/E or ←→: turn · Space: doors · F: your light · T: target · Shift+T: clear targets · Drag to look around (Esc to face ahead)",
+      "facing": {
+        "north": "North",
+        "northEast": "North-east",
+        "east": "East",
+        "southEast": "South-east",
+        "south": "South",
+        "southWest": "South-west",
+        "west": "West",
+        "northWest": "North-west"
+      },
+      "hud": {
+        "forward": "Forward",
+        "back": "Back",
+        "left": "Left",
+        "right": "Right",
+        "frontLeft": "Front left",
+        "frontRight": "Front right",
+        "backLeft": "Back left",
+        "backRight": "Back right",
+        "turnLeft": "Turn left",
+        "turnRight": "Turn right",
+        "door": "Open or close the door",
+        "torchOn": "Light your torch",
+        "torchOff": "Put out your torch",
+        "clearTargets": "Clear targets"
+      }
     },
     "role": {
       "gm": "Game Master",
@@ -325,6 +495,7 @@
         "diceDeploy": "Lay out or put away dice",
         "panel": "Open a panel",
         "focus": "Look at the piece",
+        "firstPerson": "Dungeondry Master mode, and back",
         "sound": "Sound",
         "cutIn": "Cut-in",
         "prefill": "Draft into the chat box",
@@ -356,6 +527,7 @@
         "diceDeploy": "Lays out the dice the character is holding. Press it again while they are on the table to put them away.",
         "panel": "Opens one of that character's panels. Press it again to close it.",
         "focus": "Moves the camera to that character's piece.",
+        "firstPerson": "Puts you behind that character's eyes. Press it again while you are looking to come back to the table.",
         "sound": "Chosen from the sounds the table holds.",
         "cutIn": "Chosen from the cut-ins the table holds.",
         "prefill": "Puts the text in the chat box without sending it, for a long line you want to finish by hand.",
@@ -390,7 +562,10 @@
         "unsetActive": "Clear active character",
         "remoteController": "Open remote controller",
         "partyWith": "{{party}} — with {{names}}",
-        "partyAlone": "{{party}} — no companions yet"
+        "partyAlone": "{{party}} — no companions yet",
+        "emptyHint": "Make a character your own to change its HP and MP here, and open its sheet or chat palette.",
+        "claimableHeading": "Characters with no owner",
+        "claim": "Make mine"
       }
     },
     "gmObjectList": {
@@ -439,6 +614,14 @@
     },
     "media": {
       "jukebox": {
+        "gmOnlySuffix": " (only the GM can change it)",
+        "log": {
+          "repeatOne": "{{name}} set the jukebox to repeat one track.",
+          "repeatAll": "{{name}} set the jukebox to repeat the playlist.",
+          "repeatNone": "{{name}} turned off repeat on the jukebox.",
+          "shuffleOn": "{{name}} turned on shuffle on the jukebox.",
+          "shuffleOff": "{{name}} turned off shuffle on the jukebox."
+        },
         "title": "Jukebox",
         "panelMain": "BGM list",
         "playButton": "Play",
@@ -455,8 +638,7 @@
         "bgmLabel": "BGM",
         "seLabel": "SE",
         "roomLabel": "Room",
-        "roomTooltip": "Room volume (GM)",
-        "roomGmTooltip": "Shared GM control",
+        "roomTooltip": "Room (GM only)",
         "tabLibrary": "Library",
         "tabPlaylist": "Playlist",
         "tagDisabled": "Cannot change tag while in playlist",
@@ -475,7 +657,7 @@
         "clickToSelect": "or click to select",
         "maxFileSize": "Up to 10MB per file",
         "note1": "* Audition plays once through your own speakers only.",
-        "note2": "* BGM/SE plays for everyone in the room.",
+        "note2": "* BGM, SE and ambience play for everyone in the room.",
         "note3": "* Music files are not included in save data (zip).",
         "tagAll": "All",
         "clickToSelectTouch": "or tap here to choose",
@@ -495,7 +677,20 @@
         "removeFromPlaylistNamed": "Remove from \"{{name}}\"",
         "moveToPlaylist": "Move to another playlist",
         "copyToPlaylist": "Copy to another playlist",
-        "playlistsOfTrack": "Playlists"
+        "playlistsOfTrack": "Playlists",
+        "tagBgs": "Ambience",
+        "bgsLabel": "Ambience",
+        "bgsHeading": "Ambience",
+        "bgsPlay": "Play ambience",
+        "bgsStop": "Stop ambience",
+        "bgsStopAll": "Stop all",
+        "bgsRoomVolume": "Volume for everyone",
+        "bgsRoomVolumeOf": "Volume of “{{name}}” for everyone",
+        "bgsArriving": "Receiving…",
+        "ownVolumeHeading": "Your volume",
+        "ownVolumeNote": "Only you hear it; saved in this browser",
+        "roomVolumeHeading": "Room volume",
+        "roomVolumeNote": "Applies to everyone in the room; only the GM can change it"
       },
       "miniJukebox": {
         "stopped": "— Stopped —",
@@ -578,7 +773,10 @@
         "multiDirection_vertical-right": "Top, bottom and right",
         "multiDirection_vertical-left": "Top, bottom and left",
         "multiDirection_four-directions": "Top, bottom, left and right",
-        "multiDirectionHint": "Faces the cut-in several ways, but only while the table is seen from above."
+        "multiDirectionHint": "Faces the cut-in several ways, but only while the table is seen from above.",
+        "unknownSpeaker": "???",
+        "trySpeaker": "Play as",
+        "trySpeakerNobody": "Nobody"
       },
       "cutInEditor": {
         "tabBasic": "Settings",
@@ -604,6 +802,13 @@
         "strokeWidth": "Outline px",
         "fontFamily": "Font",
         "fontFamilyPlaceholder": "(the default font)",
+        "fontPresets": {
+          "default": "Default",
+          "gothic": "Gothic",
+          "mincho": "Mincho",
+          "rounded": "Rounded",
+          "mono": "Monospace"
+        },
         "fillFrom": "Colour",
         "fillTo": "To colour",
         "fillGradient": "Shade into another colour",
@@ -742,7 +947,24 @@
         "stageZoomFit": "Fit the whole cut-in (or hold ctrl and scroll)",
         "copyPose": "Take the moment this layer is holding (ctrl and C)",
         "pastePose": "Lay it down at the playhead (ctrl and V)",
-        "seekTo": "Go to a moment"
+        "seekTo": "Go to a moment",
+        "letterMotion": "Letters",
+        "letterStagger": "Gap (ms)",
+        "letterDuration": "Length (ms)",
+        "letterDefault": "Default",
+        "letterMotions": {
+          "none": "All at once",
+          "type": "Type",
+          "fade": "Fade in",
+          "pop": "Pop",
+          "slide": "Slide in",
+          "wave": "Wave",
+          "shake": "Shake"
+        },
+        "portraitSlot": "Show the player's portrait",
+        "portraitSlotHint": "Played from chat, this shows the speaking character's portrait; otherwise this layer's own picture, or a silhouette.",
+        "insertSpeakerName": "Insert name",
+        "speakerNameHint": "{character} becomes the name of whoever played it"
       }
     },
     "card": {
@@ -752,6 +974,8 @@
         "empty": "Your hand is empty",
         "playFaceUp": "Play face up",
         "playFaceDown": "Play face down",
+        "give": "Give to someone",
+        "giveTo": "Give to",
         "drawFromOther": "Draw from a hand",
         "discardPairs": "Discard pairs",
         "noPairs": "No matching pair"
@@ -793,6 +1017,8 @@
       "discardStackName": "Discards",
       "message": {
         "drewFromHand": "{{to}} drew a card from {{from}}",
+        "gaveFromHand": "{{from}} gave a card to {{to}}",
+        "handedOver": "{{name}} handed {{from}}'s {{count}} cards over to {{to}}",
         "discardedPairs": "{{name}} discarded pairs of {{ranks}}"
       },
       "drawPanel": {
@@ -801,7 +1027,11 @@
         "noPlayers": "Nobody is holding cards",
         "cardCount": "{{count}} cards",
         "back": "Pick another player",
-        "pickCard": "Pick a card to draw"
+        "pickCard": "Pick a card to draw",
+        "absentHands": "Hands of people who left",
+        "handOver": "Hand over",
+        "handOverTo": "Hand over to",
+        "handOverConfirm": "Hand {{from}}'s {{count}} cards over to {{to}}? They move face down."
       },
       "deckDialog": {
         "hint": "Makes one card per image carrying the tag, gathered into a single deck.",
@@ -829,7 +1059,13 @@
         "width": "Width",
         "height": "Height",
         "fontSize": "Font size",
-        "altitude": "Altitude"
+        "altitude": "Altitude",
+        "format": "Display"
+      },
+      "format": {
+        "plain": "As typed",
+        "formatted": "Formatted",
+        "hint": "Start a line with # for a heading, - or 1. for a list, > for a quote. Wrap words in ` for code, or put ``` lines around a block of it."
       }
     },
     "cardStack": {
@@ -1357,7 +1593,8 @@
         "cardHidden": "Card",
         "diceHidden": "???",
         "imageUnset": "No image",
-        "urlEdit": "Edit URL:"
+        "urlEdit": "Edit URL:",
+        "enlarge": "View larger"
       },
       "sheet": {
         "toggleEdit": "Toggle edit",
@@ -1385,6 +1622,13 @@
         "addPortraitTitle": "Add portrait",
         "removePortraitTitle": "Remove current portrait",
         "import": "Import",
+        "cutInFit": "Cut-in fit",
+        "cutInFitOpenHint": "Choose how this portrait is framed in cut-ins that show the speaker's portrait",
+        "cutInFitTitle": "Fit for cut-ins",
+        "cutInFitHint": "Drag to move; scroll or pinch to zoom. Arrow keys and +/- work too",
+        "cutInFitSet": "This portrait is shown as framed here",
+        "cutInFitUnset": "Not set (each cut-in frames it its own way)",
+        "cutInFitPutBack": "Reset",
         "chatPosition": "Chat position",
         "basicInfo": "Basic info",
         "gameData": "Game data",
@@ -1400,6 +1644,7 @@
         "rangeShapeCorn": "Cone",
         "rangeShapeTriangle": "Triangle",
         "rangeShapeSquare": "Square",
+        "rangeShapeDiamond": "Diamond",
         "rangeShapePentagon": "Pentagon",
         "rangeShapeHexagon": "Hexagon",
         "rangeShapeCircle": "Circle",
@@ -1435,7 +1680,15 @@
         "defaultSectionName": "Section",
         "defaultGroupName": "Group",
         "defaultTagName": "Tag",
-        "portraitClickHintTouch": "Tap to replace the image"
+        "portraitClickHintTouch": "Tap to replace the image",
+        "portraitsManage": "Portraits",
+        "collapseAll": "Collapse all",
+        "expandAll": "Expand all",
+        "moreActions": "More actions",
+        "portraitsManageTitle": "Portraits - {{name}}",
+        "sectionJump": "Jump to section",
+        "foldSection": "Collapse",
+        "unfoldSection": "Expand"
       },
       "settingsTab": {
         "inventorySetting": "Inventory settings",
@@ -1537,6 +1790,7 @@
         "dropHere": "Drop images here",
         "clickToSelect": "or click to select",
         "maxSize": "Up to 2MB per file",
+        "oversized": "Not added, over 2 MB: {{names}}",
         "newTagPlaceholder": "New tag name",
         "changeTag": "Change tag",
         "noImages": "No images in this category",
@@ -1545,7 +1799,20 @@
         "makeSecret": "Keep back",
         "clearSecret": "Give up",
         "makeSecretHint": "Keeps the ticked pictures out of everyone else’s lists",
-        "secretMark": "Kept back"
+        "secretMark": "Kept back",
+        "paste": "Paste",
+        "pasteHint": "Look over the picture on the clipboard before adding it (or click this list and press Ctrl+V)",
+        "pasteNothing": "There is no picture on the clipboard",
+        "pasteWithKeys": "The browser did not hand the clipboard over. Click this list and press Ctrl+V",
+        "editImage": "Edit",
+        "editImageHint": "Edits the one ticked picture and puts the result in its place, wherever it is used"
+      },
+      "tooLarge": {
+        "one": "“{{name}}” was not loaded because it is too large ({{limits}})",
+        "many": "“{{name}}” and {{count}} more were not loaded because they are too large ({{limits}})",
+        "audioLimit": "sounds up to {{mb}} MB",
+        "imageLimit": "images up to {{mb}} MB",
+        "separator": ", "
       }
     },
     "character": {
@@ -1555,6 +1822,9 @@
         "showRemoteController": "Show remote controller",
         "editBuff": "Edit buffs",
         "lightSettings": "Vision & light…",
+        "viewFirstPerson": "Look out of this piece",
+        "shareFirstPerson": "Put everyone in this piece's view",
+        "stopSharingFirstPerson": "Release everyone from the shared view",
         "planMove": "Move",
         "invokeRangeShape": "Invoke registered range",
         "hideInventoryOn": "☑ Hide from inventory",
@@ -1584,10 +1854,17 @@
         "radialBuffEffect": "Buffs & effects",
         "radialDisplay": "Display",
         "radialMove": "Move",
+        "radialZone": "Engagement zone",
         "radialDisclosure": "Access & owner",
         "radialObject": "Piece actions",
         "moveMode": "Getting about",
-        "showEveryone": "Show everyone"
+        "showEveryone": "Show everyone",
+        "buffGroup": "Buffs & effects",
+        "sightGroup": "Sight and view",
+        "handlingGroup": "Display and handling",
+        "disclosureGroup": "Visibility and owner",
+        "putAwayGroup": "Put away",
+        "conditionGroup": "State of the piece"
       },
       "panel": {
         "sheet": "Character sheet",
@@ -1610,6 +1887,7 @@
       },
       "buff": {
         "count": "{{count}} buff(s)",
+        "more": "{{count}} more",
         "detail": "Detail view",
         "simple": "Compact view",
         "empty": "No buffs or debuffs registered",
@@ -1884,6 +2162,10 @@
         "rangeShapeCorn": "Cone",
         "rangeShapeTriangle": "Triangle",
         "rangeShapeSquare": "Square",
+        "rangeShapeDiamond": "Diamond",
+        "rangeShapeAsDiamond": "As a diamond",
+        "rangeShapeAsSquare": "As a square",
+        "rangeShapeSquareFamily": "Square / Diamond",
         "rangeShapePentagon": "Pentagon",
         "rangeShapeHexagon": "Hexagon",
         "rangeShapeCircle": "Circle",
@@ -1934,7 +2216,13 @@
         "openDataSheet": "Open every data item in a sheet",
         "copy": "Duplicate",
         "saving": "Saving {{percent}}%",
-        "save": "Save"
+        "save": "Save",
+        "textSection": "Text",
+        "text": "Words",
+        "textPlaceholder": "Words shown on the mask",
+        "textSize": "Size",
+        "textColor": "Colour",
+        "textOutline": "Outline the words"
       },
       "contextMenu": {
         "altitudeSetting": "Altitude",
@@ -1992,6 +2280,9 @@
         "shapeCorn": "Cone",
         "shapeTriangle": "Triangle (centered)",
         "shapeSquare": "Square",
+        "shapeAsDiamond": "As a diamond",
+        "shapeAsSquare": "As a square",
+        "shapeSquareFamily": "Square / Diamond",
         "shapePentagon": "Pentagon",
         "shapeHexagon": "Hexagon",
         "shapeCircle": "Circle",
@@ -2035,11 +2326,16 @@
         "doorStyleLift": "Rises up",
         "doorStyleSink": "Sinks down",
         "doorStyleSlide": "Slides aside",
-        "doorFlip": "Open the other way"
+        "doorFlip": "Open the other way",
+        "rangeTargetInside": "Aim at everything inside"
       },
       "holdHint": {
         "footing": "Wheel to step through what it can stand on",
         "lift": "Shift and wheel to send it up a cell at a time"
+      },
+      "rotateHint": {
+        "holdAlt": "Hold Alt to snap to every {{step}}°",
+        "snapping": "Snapping to every {{step}}°"
       },
       "tableSetting": {
         "title": "Table settings",
@@ -2179,7 +2475,7 @@
         "recommendedView_flat": "2D (seen from above)",
         "recommendedViewHint": "How this table is best read. Readers whose view is set to auto are given it; readers who picked 3D or 2D keep what they picked.",
         "sectionBackgroundLayers": "Layers",
-        "backgroundLayerHint": "These drift under a table drawn on a transparent picture, or over it. They stack from the back, and each shows whatever is beneath it. A picture is laid edge to edge, and whatever reaches past the board is cut off.",
+        "backgroundLayerHint": "These drift under a table drawn on a transparent picture, or over it. They stack from the back, and each shows whatever is beneath it. A picture is laid edge to edge, and whatever reaches past the board is cut off. Set the placement to Backdrop to lay a long picture across the whole screen behind the table; it follows the camera a little as the view turns or moves. The less it follows, the further away it looks, so a few stacked together give depth.",
         "backgroundLayerAdd": "+ Add a layer",
         "backgroundLayerRemove": "Remove",
         "backgroundLayerImage": "Choose a picture",
@@ -2187,13 +2483,18 @@
         "backgroundLayerSpeedY": "Up and down",
         "backgroundLayerOpacity": "Opacity",
         "backgroundLayerScale": "Scale",
-        "backgroundLayerIndexUnder": "Under {{index}}",
-        "backgroundLayerIndexOver": "Over {{index}}",
         "backgroundLayerPlacement": "Which side",
         "backgroundLayerPlacement_under": "Under the table picture",
         "backgroundLayerPlacement_over": "Over it, under the pieces",
+        "backgroundLayerPlacement_backdrop": "Backdrop (behind the table, follows the camera a little)",
         "backgroundLayerMoveUp": "Further back",
-        "backgroundLayerMoveDown": "Further forward"
+        "backgroundLayerMoveDown": "Further forward",
+        "backgroundLayerIndex_under": "Under {{index}}",
+        "backgroundLayerIndex_over": "Over {{index}}",
+        "backgroundLayerIndex_backdrop": "Backdrop {{index}}",
+        "backgroundLayerFollow": "Follows camera",
+        "backgroundLayerHeight": "Height",
+        "backgroundLayerSpeedYBackdrop": "A backdrop is laid across only, so it does not drift up or down"
       },
       "displayCalibration": {
         "title": "Measure this screen",
@@ -2411,7 +2712,12 @@
         "jump": "Jump",
         "walk": "Walk",
         "hintTouch": "Tap to walk there / press and hold to set a corner / tap the piece to leave it",
-        "modeLabel": "How the move is taken"
+        "modeLabel": "How the move is taken",
+        "kindLabel": "Kind of move",
+        "plainKind": "Normal",
+        "metresLeft": "{{metres}} m left",
+        "unstoppable": "Unstoppable move",
+        "unstoppableHint": "Nobody can stop this move, by stepping in or by an engagement zone. Switch it before the first corner is set"
       },
       "displaySetting": {
         "title": "Tabletop display",
@@ -2531,6 +2837,9 @@
       "diceStage_table": "On the table",
       "diceStage_both": "Both",
       "diceStageHint": "Chat rolls tumble in 3D and land on the numbers rolled. A secret roll shows on the roller's screen alone",
+      "sectionSpeechBubbles": "Speech bubbles",
+      "speechBubbles": "Show what characters say in a bubble over their pieces",
+      "speechBubblesHint": "A public line said as a character on the table shows over its piece for a few seconds, only the words in 「」 where there are any. Whispers, secret lines, and dice or command lines do not show. Each person can hide them on their own screen from the toolbar",
       "sectionControllerResources": "Values and resources on the remote",
       "controllerResourcesShowAll": "Show all",
       "controllerResourcesHideAll": "Hide all",
@@ -2618,13 +2927,32 @@
       "tickerSpeed": "Speed",
       "tickerSpeedUnit": "px/s",
       "replayHint": "Read back a recorded session, or play it back with the table. Recordings stay on this device.",
+      "sectionDanger": "Danger zone",
+      "wipeBrowserData": "Erase all data in this browser",
+      "wipeBrowserDataHint": "Erases everything kept in this browser, such as your settings, the room's automatic saves and recorded replays, then reloads the page. Try it when something keeps looking or acting wrong. This cannot be undone.",
+      "wipeConfirmTitle": "Erase all data in this browser?",
+      "wipeConfirmMessage": "The following will be erased and the page reloaded. This cannot be undone.\n- Your settings (display, volumes, skins, widget layout and so on)\n- The room's automatic saves and recorded replays\n- The pictures for your dice and skins\n\nReloading takes you out of the current room for now. If you are playing alone, anything in the room you have not saved is lost too.\nIf the app is open in other tabs, close them first.",
+      "wipeConfirmOk": "Erase all and reload",
       "hostilityBy": "How the sides are told apart",
       "hostilityBy_npc": "By whom the master runs",
       "hostilityBy_party": "By party",
       "sizeSlipsPast": "Squeeze past a piece two cells or more apart in size (but not stop on it)",
       "handTracesWay": "Spring the ground between the two ends when a hand moves a piece",
       "squeezes": "Let an oversized piece squeeze through a gap too small for it, at a step apiece",
-      "jumpCells": "How far one leap carries, in cells (0 carries as far as the move has left)"
+      "jumpCells": "How far one leap carries, in cells (0 carries as far as the move has left)",
+      "tab_stamp": "Stamps",
+      "stampUse_line": "Stamps as lines",
+      "stampUse_reaction": "Reactions",
+      "stampUseOn_line": "Let stamps be sent as lines",
+      "stampUseOn_reaction": "Let stamps be put on lines as reactions",
+      "stampRulesHint": "Press a stamp to allow or deny it. Stamps already sent stay as they are.",
+      "stampAllowAll": "Allow all",
+      "stampDenyAll": "Deny all",
+      "moveKinds": "Kinds of move",
+      "moveKindsPlaceholder": "e.g. Full:3:,Normal:1:,Limited:1:3",
+      "moveKindsHint": "Rows of \"name:factor:cap (m)\" separated by commas. Movement is multiplied by the factor, and a kind with a cap goes no further than that. Leave the cap empty for none. The first kind is the default, and another can be chosen from the band while a move is worked out. Leave empty for a single kind that goes as far as the movement says.",
+      "pathMove": "Draw the way as straight legs on a table with no grid",
+      "pathMoveHint": "On a table with no grid, a move is worked out as a way of straight legs measured in metres instead of in cells. Terrain and engagement zones stop it as they do on a grid. Tables with a grid move as before."
     },
     "skin": {
       "title": "Skin",
@@ -2838,8 +3166,10 @@
         "tokenExpired": "The SkyWay auth token has expired. Reconnecting...",
         "generic": "A network error occurred. ({{errorType}})",
         "reconnecting": "Attempting to reconnect...",
-        "lastReconnect": "This is the last attempt. If it does not connect, leave it a while and come back in."
+        "lastReconnect": "This is the last attempt. If it does not connect, leave it a while and come back in.",
+        "sameNameMember": "You are in this room in another tab, or your previous connection has not dropped yet. Close the other tab, or wait a little and join again"
       },
+      "waitingForPreviousConnection": "Waiting for your previous connection to drop (up to about a minute)",
       "peerCursor": {
         "noSignal": "No keepalive signal from {{name}} for over {{seconds}}s. Connection may be unstable.",
         "reconnected": "Reconnected to {{name}}.",
@@ -2891,6 +3221,42 @@
         "writingOthers": "{{count}} more typing",
         "titleWithCount": "{{title}} ({{count}})"
       },
+      "search": {
+        "button": "Search",
+        "open": "Search the chat (Ctrl+F)",
+        "placeholder": "Search this tab",
+        "count": "{{current}} / {{total}}",
+        "none": "No matches",
+        "older": "Earlier line (Enter)",
+        "newer": "Later line (Shift+Enter)",
+        "close": "Close (Esc)"
+      },
+      "bookmark": {
+        "button": "Bookmarks",
+        "open": "Bookmarks",
+        "title": "Bookmarks",
+        "filter": "Bookmarks to show",
+        "filters": {
+          "all": "All",
+          "shared": "Shared",
+          "personal": "Personal"
+        },
+        "kinds": {
+          "shared": "Shared",
+          "personal": "Personal"
+        },
+        "close": "Close (Esc)",
+        "jump": "Go to this line",
+        "rename": "Rename",
+        "renamePlaceholder": "Title (leave empty for the line’s opening words)",
+        "renameHint": "Enter to save / Esc to cancel",
+        "remove": "Remove bookmark",
+        "empty": {
+          "all": "No bookmarks yet. Bookmark a line with its bookmark button or from its right-click (long-press) menu. Shared bookmarks are for everyone in the room, personal ones for you alone.",
+          "shared": "No shared bookmarks yet. Everyone in the room sees these.",
+          "personal": "No personal bookmarks yet. Only you see these, and they are kept in this browser."
+        }
+      },
       "input": {
         "you": " (you)",
         "everyone": "Everyone",
@@ -2908,7 +3274,8 @@
         "sendToTicker": "Ticker",
         "sendToTickerHint": "Also run this line around the edge of the screen",
         "tools": "Input settings",
-        "myDice": "My Dice"
+        "myDice": "My Dice",
+        "stamp": "Send a stamp (with what you have typed, if anything)"
       },
       "tab": {
         "unnamedCharacter": "Unnamed character",
@@ -2933,12 +3300,48 @@
         "editedSimple": " (edited)",
         "reply": "Reply",
         "quote": "Quote",
+        "react": "React",
         "jumpToOriginal": "Jump to original message",
         "shareAsMemo": "Send to shared memo",
         "ticker": "Ticker",
         "copyToTab": "Copy to another tab",
         "copyText": "Copy text",
-        "selectText": "Select text"
+        "selectText": "Select text",
+        "afterWhisper": "Whisper it afterwards",
+        "afterWhisperTo": "Whisper to",
+        "afterWhisperNobody": "Whisper it afterwards (nobody else is here)",
+        "undoAfterWhisper": "Undo the whisper and show it to everyone",
+        "deleteLine": "Delete",
+        "deleteLineHint": "Delete (it leaves everyone’s screen but stays in the log)",
+        "deleteLineConfirm": "Delete this line? It leaves everyone’s screen and cannot be brought back. It stays in the log.",
+        "bookmarks": {
+          "button": "Bookmark",
+          "shared": {
+            "add": "Add a shared bookmark",
+            "remove": "Remove the shared bookmark",
+            "marked": "Shared bookmark",
+            "markedAs": "Shared bookmark: {{name}}"
+          },
+          "personal": {
+            "add": "Add a personal bookmark",
+            "remove": "Remove the personal bookmark",
+            "marked": "Personal bookmark",
+            "markedAs": "Personal bookmark: {{name}}"
+          }
+        },
+        "history": {
+          "open": "View edit history",
+          "close": "Close edit history",
+          "title": "Edit history",
+          "original": "As first said",
+          "edit": "Edit {{count}}",
+          "beforeKept": "As edited before edits were kept",
+          "editUncounted": "Edited",
+          "current": "Now"
+        },
+        "actions": "Line actions",
+        "more": "More actions",
+        "edit": "Edit"
       },
       "stream": {
         "title": "Message stream",
@@ -3007,7 +3410,23 @@
         "soundType_notify1": "Notification 1",
         "soundType_notify2": "Notification 2",
         "messageCount": "Show the line count in the title",
-        "messageCountTooltip": "Puts the number of lines in the tab beside the chat window title. Only the lines you can see are counted"
+        "messageCountTooltip": "Puts the number of lines in the tab beside the chat window title. Only the lines you can see are counted",
+        "sectionRuby": "Ruby",
+        "ruby_show": "Show ruby",
+        "ruby_show_over": "Over the text",
+        "ruby_show_brackets": "In brackets after it",
+        "ruby_show_hidden": "Not at all",
+        "ruby_align": "Position",
+        "ruby_align_center": "Centred on the text",
+        "ruby_align_start": "From the first letter",
+        "ruby_spacing": "When lengths differ",
+        "ruby_spacing_even": "Spread the shorter 1:2:1",
+        "ruby_spacing_tight": "Keep it together in the middle",
+        "ruby_size": "Size",
+        "ruby_size_half": "Half the text",
+        "ruby_size_normal": "Standard",
+        "ruby_size_large": "Large",
+        "rubyHint": "Applies to ruby in the chat, novel mode, shared notes and saved logs. This setting is for this device only"
       },
       "systemAvatar": {
         "title": "System-chan",
@@ -3062,6 +3481,8 @@
         "previewFrameTitle": "Sample of the exported log",
         "previewLimited": "Showing the latest {{count}} lines. Saving writes out the whole tab.",
         "previewSample": "Nothing has been said yet, so a sample conversation is shown.",
+        "omitDeleted": "Leave deleted lines out of the log",
+        "omitDeletedHint": "Deleted lines are left out of the saved log",
         "styles": {
           "standard": {
             "name": "Standard",
@@ -3126,11 +3547,16 @@
           "coc": {
             "name": "CoC log",
             "description": "The classic layout other tools can read"
+          },
+          "text": {
+            "name": "Plain text",
+            "description": "Just the words, as a .txt file"
           }
         },
         "labels": {
           "secret": "Secret dice",
           "edited": "edited",
+          "pseudoDeleted": "deleted",
           "quote": "Quote",
           "reply": "Reply to",
           "critical": "Critical",
@@ -3140,7 +3566,8 @@
           "allTabs": "All tabs",
           "everyTab": "All",
           "messages": "{{count}} lines",
-          "exportedWith": "Exported from Udonarium Axe"
+          "exportedWith": "Exported from Udonarium Axe",
+          "reactions": "Reactions"
         },
         "sample": {
           "gm": "GM",
@@ -3179,6 +3606,23 @@
         "descSuffix": " — help",
         "unreachable": "The dice bot \"{{name}}\" could not be loaded, so no dice were rolled for this line. If sending it again still does not roll, reload the page.",
         "intro": "[Dice bot] Type dice expressions in chat to roll dice.\nInput example) 2d6+1 attack!\nOutput example) 2d6+1 attack!\n              diceBot: (2d6) → 7\nYou can also include a dice expression followed by a space and additional text.\n\nUsage examples\n  3D6+1>=9 : Roll 3d6+1 and check whether the total is 9 or more.\n  1D100<=50 : D100 downward roll with target value 50.\n  3U6[5] : Roll 3d6 with reroll on 5+ (open-ended above).\n  3B6 : Roll 3d6 and output values separately (no sum).\n  10B6>=4 : Roll 10d6 and count dice with value 4+.\n  2R6[>3]>=5 : Reroll dice >3 then count dice with value 5+.\n  (8/2)D(4+6)<=(5*3) : Arithmetic is allowed in count/sides/target.\n  c(10-4*3/2+2) : c(expression) evaluates math only.\n  choice[a,b,c] : Pick one element at random.\n  S3d6 : Prefix S for a secret roll (others cannot see).\n  3d6/2 : Divide the result (rounding depends on system). Use /2C (ceil), /2R (round), /2F (floor).\n  D66 : D66 die. Order depends on the system: D66N (raw), D66A (ascending), D66D (descending).\n\nFor full details see the bcdice command guide:\nhttps://docs.bcdice.org/\n===================================\n"
+      },
+      "stampPack": {
+        "title": "Stamp sets",
+        "hint": "Make sets of stamps from the room's pictures. Sets are saved with the room and everyone can use them.",
+        "create": "New set",
+        "newPackName": "New set",
+        "namePlaceholder": "Name of the set",
+        "stampNamePlaceholder": "Name of the stamp",
+        "removePack": "Delete this set",
+        "removePackConfirm": "Delete the set \"{{name}}\"? Its pictures stay in the room, and stamps already used still show.",
+        "addFromRoom": "Add from the image list",
+        "addFromFiles": "Add from files",
+        "removeStamp": "Take out of the set",
+        "emptyPack": "No stamps yet",
+        "noPacks": "The room has no stamp sets yet",
+        "tooLarge": "Over 2MB and not added: {{names}}",
+        "alreadyIn": "That picture is in this set already"
       }
     },
     "visualNovel": {
@@ -3747,6 +4191,8 @@
         "effectFrom": "{{actor}} cast {{effect}} from {{caster}} at {{targets}}",
         "bgmStart": "{{actor}} put on {{target}}",
         "bgmStop": "{{actor}} stopped the music",
+        "bgsStart": "{{actor}} started the ambience {{target}}",
+        "bgsStop": "{{actor}} stopped the ambience {{target}}",
         "vnScene": "{{actor}} changed the scene to {{target}}",
         "vnSceneClear": "{{actor}} cleared the backdrop",
         "vnPlayhead": "{{actor}} moved the story on",
@@ -3877,7 +4323,7 @@
         "paused": "The browser paused the export while this tab was in the background. It carries on while the tab is in view.",
         "realtime": "On this browser the export runs in real time — keep this tab open until it finishes",
         "withEffects": "Include sound effects",
-        "withMusic": "Include music",
+        "withMusic": "Include music and ambience",
         "round": "Round {{round}}",
         "turn": "{{name}}'s turn",
         "roundTurn": "Round {{round}} · {{name}}'s turn",
@@ -4430,6 +4876,118 @@
         "on": "On",
         "off": "Off"
       }
+    },
+    "soundSettings": {
+      "ownHeading": "Your volume",
+      "ownHint": "Only you hear these, and they are saved in this browser. Turn each kind off with the button on the left.",
+      "chatHeading": "Chat notification",
+      "roomHeading": "Room volume",
+      "roomHint": "Applies to everyone in the room; only the GM can change it. Each kind is scaled by the overall value as well.",
+      "openAll": "Open all of your sound settings",
+      "kind": {
+        "audition": {
+          "label": "Preview",
+          "hint": "What you preview in the jukebox"
+        },
+        "bgm": {
+          "label": "BGM",
+          "hint": "Music from the jukebox"
+        },
+        "background": {
+          "label": "Ambience",
+          "hint": "Looping rain, fire and the like"
+        },
+        "cutIn": {
+          "label": "Cut-ins",
+          "hint": "Cut-in music, scene sounds and videos"
+        },
+        "notification": {
+          "label": "Notifications",
+          "hint": "Chat notifications and alarms"
+        },
+        "handling": {
+          "label": "Handling",
+          "hint": "Dice, cards and pieces being moved"
+        },
+        "effect": {
+          "label": "Effects",
+          "hint": "Map effects and values going up or down"
+        },
+        "se": {
+          "label": "Other SE",
+          "hint": "Jukebox SE, hotbar sounds and the like"
+        }
+      }
+    },
+    "ride": {
+      "menu": {
+        "title": "Mounts",
+        "on_rider": "Ride {{mount}}",
+        "on_passenger": "Ride {{mount}} behind",
+        "on_cargo": "Be carried by {{mount}}",
+        "off": "Get off {{mount}}",
+        "refusal_needsSkill": " (cannot steer)",
+        "refusal_tooHard": " (not skilled enough)",
+        "refusal_changedThisTurn": " (got on or off this turn)",
+        "mountable": "Make a mount",
+        "passenger": "Takes a second rider",
+        "cargo": "Loads it carries",
+        "cargoNone": "None",
+        "anyone": "Anybody may ride",
+        "seatHeight": "Rider height",
+        "seatHeightDefault": "Half its size",
+        "seatHeightCells": "{{cells}} cells",
+        "prone": "Fallen over",
+        "refusal_fellThisTurn": " (fell this turn)",
+        "upAndOn_rider": "Get up and ride {{mount}}",
+        "upAndOn_passenger": "Get up and ride {{mount}} behind",
+        "upAndOn_cargo": "Get up and be loaded on {{mount}}",
+        "refusal_down": " (down)",
+        "refusal_held": " (held in place)",
+        "refusal_prone": " (fallen over)",
+        "refusal_mountDown": " (the mount is down)",
+        "refusal_mountProne": " (the mount has fallen over)",
+        "refusal_mountHeld": " (the mount is held)"
+      },
+      "chat": {
+        "on_rider": "{{name}} got on {{mount}} ({{action}})",
+        "on_passenger": "{{name}} got on {{mount}} behind ({{action}})",
+        "on_cargo": "{{name}} was loaded on {{mount}} ({{action}})",
+        "off": "{{name}} got off {{mount}} ({{action}})",
+        "majorAction": "takes the turn's action",
+        "minorAction": "takes no action",
+        "prone": "{{name}} fell over",
+        "up": "{{name}} got up",
+        "fell": "{{name}} fell off {{mount}} (a fall of {{metres}} m)",
+        "twoUpOn": "{{name}} was given {{buff}}",
+        "twoUpOff": "{{buff}} was taken off {{name}}"
+      },
+      "settings": {
+        "section": "Mounts",
+        "skillField": "Steering skill field",
+        "skillFieldPlaceholder": "Empty: everybody steers",
+        "requireField": "Required skill field",
+        "hint": "With a steering skill field, only pieces with 1 or more in it steer a mount. Others may ride in front only on a mount anybody may ride. With a required skill field, a piece whose skill is below the value on the mount's sheet cannot ride it.",
+        "fallMin": "Shortest fall (m)",
+        "fallDamage": "Roll for a fall",
+        "fallDamagePlaceholder": "Empty: only say how far. {m} is the fall",
+        "twoUpBuff": "Two-up buff",
+        "twoUpBuffPlaceholder": "Empty: none. Written as a chat buff"
+      },
+      "carriedInPlace": "{{name}} moves with {{mount}} while riding it",
+      "noRider": "{{name}} does not move without a rider",
+      "mountMoved": "{{mount}} has moved in another turn this round",
+      "cannotAfterLeaving": "{{name}} got off {{mount}} this turn and cannot move on its own",
+      "riderHeld": "{{name}} is held where it stands and cannot move {{mount}}",
+      "offer": "{{name}} is on {{mount}}",
+      "offerAction_rider": "Ride",
+      "offerAction_passenger": "Ride behind",
+      "offerAction_cargo": "Be loaded",
+      "offerRefused": "{{name}} cannot ride {{mount}}",
+      "stayedOn": "{{name}} already got on or off this turn and was put back on {{mount}}",
+      "offerActionUp_rider": "Get up and ride",
+      "offerActionUp_passenger": "Get up and ride behind",
+      "offerActionUp_cargo": "Get up and be loaded"
     }
   },
   "app": {
@@ -4454,6 +5012,11 @@
       "connectionQuality": "Connection quality",
       "miniPlayer": "Mini player",
       "visualNovel": "Novel mode",
+      "firstPersonEnter": "Dungeondry Master mode",
+      "firstPersonChoose": "Dungeondry Master mode (choose a piece)",
+      "firstPersonExit": "Leave Dungeondry Master mode",
+      "firstPersonNoSeat": "Dungeondry Master mode (no piece to look out of)",
+      "firstPersonShared": "Dungeondry Master mode (shared by the GM)",
       "gmTools": "GM tools",
       "plTools": "PL tools",
       "ownedCharacters": "My characters",
@@ -4475,10 +5038,14 @@
       "recording": "Recording",
       "fogOn": "Fog of war: on (click to turn off)",
       "fogOff": "Fog of war: off (click to turn on)",
+      "namesShown": "Names: shown (click to hide)",
+      "namesHidden": "Names: hidden (click to show)",
       "resourceBarsShown": "Resource bars: shown (click to hide)",
       "resourceBarsHidden": "Resource bars: hidden (click to show)",
       "buffsShown": "Buffs: shown (click to hide)",
       "buffsHidden": "Buffs: hidden (click to show)",
+      "speechShown": "Speech bubbles: shown (click to hide)",
+      "speechHidden": "Speech bubbles: hidden (click to show)",
       "viewFlat": "Flat view (click for depth)",
       "viewPerspective": "Table in depth (click to flatten)",
       "viewAutoFlat": "View: auto (2D)",
@@ -4489,7 +5056,8 @@
       "widgets": "Widgets",
       "foldToolbar": "Fold the toolbar",
       "unfoldToolbar": "Open the toolbar",
-      "buttonGuide": "Show every button's name (? key)"
+      "buttonGuide": "Show every button's name (? key)",
+      "soundSettings": "Sound settings"
     },
     "roomDataDefault": "Room data"
   },
@@ -4716,7 +5284,8 @@
       "duplicate": "Duplicate",
       "saveTemplate": "Save as template",
       "addFromTemplate": "Add from template",
-      "deleteTemplate": "Delete template"
+      "deleteTemplate": "Delete template",
+      "moveTo": "Move to…"
     },
     "defaults": {
       "newGroup": "Group",
@@ -4738,6 +5307,32 @@
       "distance": "Distance: {{distance}}",
       "chatNote": "{{target}} (from {{source}}, {{distance}})",
       "sendToChat": "Send to chat"
+    },
+    "deletion": {
+      "deleted": "Deleted “{{name}}”",
+      "deletedUnnamed": "Deleted an item",
+      "undo": "Undo"
+    },
+    "stepDown": "Decrease {{name}} by 1",
+    "stepUp": "Increase {{name}} by 1",
+    "editor": {
+      "name": "Name",
+      "type": "Type",
+      "order": "Order",
+      "nameEmpty": "Enter a name",
+      "back": "Back",
+      "moveToHint": "Choose where to move “{{name}}”",
+      "referenceCopied": "Copied “{{path}}”",
+      "fieldTitle": "Item settings",
+      "groupTitle": "Group settings",
+      "sectionTitle": "Section settings",
+      "open": "Open the settings of “{{name}}”",
+      "view": "Show as",
+      "addField": "Add item",
+      "addFieldHint": "Choose the type of the item to add to “{{name}}”",
+      "templateSaved": "Saved “{{name}}” as a template",
+      "deleteGroup": "Delete this group",
+      "addGroup": "Add group"
     }
   },
   "ui": {
@@ -4750,6 +5345,41 @@
       "invalid": "Warning: invalid URL.",
       "open": "Open",
       "cancel": "Cancel"
+    },
+    "imageEditor": {
+      "title": "Edit picture",
+      "position": "Picture {{index}} of {{count}}: {{name}}",
+      "crop": "Crop",
+      "erase": "Clear background",
+      "turnLeft": "Rotate left",
+      "turnRight": "Rotate right",
+      "flipAcross": "Flip horizontally",
+      "flipUpDown": "Flip vertically",
+      "reset": "Undo every edit",
+      "cropHint": "Drag over the picture to frame the part to keep. Drag inside the frame to move it, or drag a corner to resize it.",
+      "ratio_free": "Free",
+      "ratio_original": "Original",
+      "keepWhole": "Use the whole picture",
+      "eraseHint": "Click the background to clear the run of colour joined to that point. Click as often as you like.",
+      "tolerance": "Colour range",
+      "undo": "Undo",
+      "size": "Output size",
+      "width": "Width",
+      "height": "Height",
+      "keepProportions": "Keep proportions",
+      "cancel": "Cancel",
+      "skip": "Leave this one out",
+      "restAsTheyAre": "Add the rest as they are",
+      "add": "Add",
+      "replace": "Replace",
+      "addAsCopy": "Add as a copy",
+      "addAsCopyHint": "Keeps the original as it is and adds the edited picture as a picture of its own",
+      "failed": "This picture could not be read",
+      "tooLarge": "It comes out at {{size}}MB, over the 2MB limit, and cannot be added. Keep a smaller part or lower the output size",
+      "overLimit": "This picture is {{size}}MB, over the 2MB limit. Adding it converts it to a lighter format; if it still does not fit, crop it or lower the output size",
+      "editFirst": "Edit before adding",
+      "editFirstHint": "When ticked, each picture chosen opens in the editor before it is added. A picture over 2MB opens in the editor either way",
+      "saveFailed": "The picture could not be stored. Please try again"
     },
     "fileSelecter": {
       "panelTitle": "Files",
@@ -4800,6 +5430,590 @@
       "previous": "Previous portrait",
       "next": "Next portrait",
       "unnamed": "Portrait {{index}}"
+    },
+    "stamp": {
+      "families": {
+        "recent": "Recent",
+        "sfx": "Sound effects",
+        "seal": "Seals",
+        "roll": "Rolls",
+        "battle": "Battle",
+        "explore": "Exploring",
+        "feel": "Feelings",
+        "talk": "Table talk"
+      },
+      "items": {
+        "sfx": {
+          "laugh": {
+            "label": "HAHA",
+            "name": "Laugh"
+          },
+          "shock": {
+            "label": "WHAM",
+            "name": "Shock"
+          },
+          "creepy": {
+            "label": "EEK",
+            "name": "Creepy"
+          },
+          "heart": {
+            "label": "AWW",
+            "name": "Love it"
+          },
+          "clap": {
+            "label": "CLAP",
+            "name": "Applause"
+          },
+          "notice": {
+            "label": "GASP",
+            "name": "Realised"
+          },
+          "gulp": {
+            "label": "GULP",
+            "name": "Nervous"
+          },
+          "smirk": {
+            "label": "HEH",
+            "name": "Scheming"
+          },
+          "boom": {
+            "label": "BOOM",
+            "name": "Big reveal"
+          },
+          "menace": {
+            "label": "RUMBLE",
+            "name": "Menacing"
+          },
+          "silence": {
+            "label": "SILENCE",
+            "name": "Silence"
+          },
+          "stare": {
+            "label": "STARE",
+            "name": "Staring"
+          },
+          "thump": {
+            "label": "THUMP",
+            "name": "Heart racing"
+          },
+          "excited": {
+            "label": "YAY",
+            "name": "Can’t wait"
+          },
+          "flop": {
+            "label": "D’OH",
+            "name": "Pratfall"
+          },
+          "shine": {
+            "label": "SHINE",
+            "name": "Shine"
+          },
+          "startle": {
+            "label": "EEP",
+            "name": "Caught out"
+          },
+          "murmur": {
+            "label": "MURMUR",
+            "name": "Uneasy stir"
+          },
+          "entrance": {
+            "label": "TA-DA",
+            "name": "Grand entrance"
+          },
+          "glance": {
+            "label": "PEEK",
+            "name": "Glance"
+          },
+          "huff": {
+            "label": "HMPH",
+            "name": "Huff"
+          },
+          "gloom": {
+            "label": "GLOOM",
+            "name": "Gloom"
+          },
+          "idea": {
+            "label": "DING",
+            "name": "Got an idea"
+          },
+          "leanin": {
+            "label": "WHOA",
+            "name": "Leaning in"
+          },
+          "roll": {
+            "label": "CLATTER",
+            "name": "Rolling the dice"
+          },
+          "dumbfounded": {
+            "label": "HUH?",
+            "name": "Dumbfounded"
+          }
+        },
+        "seal": {
+          "ok": {
+            "label": "OK",
+            "name": "Got it"
+          },
+          "seen": {
+            "label": "SEEN",
+            "name": "Seen"
+          },
+          "lol": {
+            "label": "LOL",
+            "name": "LOL"
+          },
+          "wow": {
+            "label": "WOW",
+            "name": "Wow"
+          },
+          "fear": {
+            "label": "EEK",
+            "name": "Scary"
+          },
+          "sob": {
+            "label": "SOB",
+            "name": "Teary"
+          },
+          "god": {
+            "label": "GOD",
+            "name": "Amazing"
+          },
+          "precious": {
+            "label": "AWW",
+            "name": "Precious"
+          },
+          "agree": {
+            "label": "TRUE",
+            "name": "True"
+          },
+          "really": {
+            "label": "HMM",
+            "name": "Is that so?"
+          },
+          "fair": {
+            "label": "FAIR",
+            "name": "Fair point"
+          },
+          "unfair": {
+            "label": "NAH",
+            "name": "No point"
+          },
+          "noobjection": {
+            "label": "AGREED",
+            "name": "No objection"
+          },
+          "objection": {
+            "label": "OBJECT",
+            "name": "Objection"
+          },
+          "gotit": {
+            "label": "GOT IT",
+            "name": "Totally get it"
+          },
+          "thatsit": {
+            "label": "THIS",
+            "name": "That’s it"
+          },
+          "relate": {
+            "label": "SAME",
+            "name": "I feel you"
+          },
+          "lmao": {
+            "label": "ROFL",
+            "name": "ROFL"
+          },
+          "genius": {
+            "label": "GENIUS",
+            "name": "Genius"
+          },
+          "win": {
+            "label": "WIN",
+            "name": "Winner"
+          },
+          "best": {
+            "label": "BEST",
+            "name": "The best"
+          },
+          "capable": {
+            "label": "PRO",
+            "name": "Capable"
+          },
+          "noway": {
+            "label": "NOPE",
+            "name": "No way"
+          },
+          "approved": {
+            "label": "APPROVED",
+            "name": "Approved"
+          },
+          "rejected": {
+            "label": "DENIED",
+            "name": "Rejected"
+          },
+          "foreshadow": {
+            "label": "FLAG",
+            "name": "Foreshadowing"
+          },
+          "ominous": {
+            "label": "UH-OH",
+            "name": "Ominous"
+          },
+          "rip": {
+            "label": "RIP",
+            "name": "Rest in peace"
+          },
+          "done": {
+            "label": "DONE",
+            "name": "Done"
+          },
+          "congrats": {
+            "label": "YAY",
+            "name": "Congrats"
+          },
+          "thanks": {
+            "label": "THX",
+            "name": "Thanks"
+          },
+          "secret": {
+            "label": "SHH",
+            "name": "Secret"
+          },
+          "lucky": {
+            "label": "LUCK",
+            "name": "Lucky"
+          },
+          "unlucky": {
+            "label": "DOOM",
+            "name": "Unlucky"
+          }
+        },
+        "roll": {
+          "critical": {
+            "name": "Critical!"
+          },
+          "fumble": {
+            "name": "Fumble..."
+          },
+          "success": {
+            "name": "Made it!"
+          },
+          "failure": {
+            "name": "Missed..."
+          },
+          "pray": {
+            "name": "Praying"
+          },
+          "throw": {
+            "name": "Here goes!"
+          },
+          "reroll": {
+            "name": "One more roll?"
+          },
+          "shake": {
+            "name": "Shaking the dice"
+          },
+          "blow": {
+            "name": "Blowing on the dice"
+          },
+          "stare": {
+            "name": "Glaring at the dice"
+          },
+          "sanity": {
+            "name": "Sanity check"
+          },
+          "secret": {
+            "name": "Secret roll"
+          },
+          "count": {
+            "name": "Adding up modifiers"
+          },
+          "clover": {
+            "name": "Lucky charm"
+          },
+          "cursed": {
+            "name": "Cursed dice"
+          },
+          "nervous": {
+            "name": "Nervous"
+          },
+          "aghast": {
+            "name": "Wait, what?"
+          },
+          "bonus": {
+            "name": "Bonus!"
+          },
+          "hoard": {
+            "name": "Love my dice"
+          },
+          "doubt": {
+            "name": "Suspicious dice"
+          }
+        },
+        "battle": {
+          "sword": {
+            "name": "Slash!"
+          },
+          "shield": {
+            "name": "Guard"
+          },
+          "magic": {
+            "name": "Casting"
+          },
+          "bow": {
+            "name": "Taking aim"
+          },
+          "charge": {
+            "name": "Charge!"
+          },
+          "hurt": {
+            "name": "Ouch..."
+          },
+          "heal": {
+            "name": "Healing"
+          },
+          "fainted": {
+            "name": "Knocked out"
+          },
+          "dodge": {
+            "name": "Dodge!"
+          },
+          "victory": {
+            "name": "Victory!"
+          },
+          "flee": {
+            "name": "Run away!"
+          },
+          "berserk": {
+            "name": "Going all out"
+          },
+          "stunned": {
+            "name": "Seeing stars"
+          },
+          "poison": {
+            "name": "Poisoned"
+          },
+          "asleep": {
+            "name": "Asleep"
+          },
+          "buff": {
+            "name": "Powered up"
+          },
+          "taunt": {
+            "name": "Taunt"
+          },
+          "protect": {
+            "name": "I’ll cover you!"
+          },
+          "smash": {
+            "name": "Full-power strike"
+          },
+          "ready": {
+            "name": "Bring it on"
+          },
+          "lowhp": {
+            "name": "1 HP left"
+          }
+        },
+        "explore": {
+          "magnifier": {
+            "name": "Investigating"
+          },
+          "listen": {
+            "name": "Listening"
+          },
+          "sneak": {
+            "name": "Sneaking"
+          },
+          "found": {
+            "name": "Found it!"
+          },
+          "map": {
+            "name": "Reading the map"
+          },
+          "treasure": {
+            "name": "Treasure!"
+          },
+          "trapped": {
+            "name": "It’s a trap!"
+          },
+          "lockpick": {
+            "name": "Picking the lock"
+          },
+          "torch": {
+            "name": "So dark..."
+          },
+          "think": {
+            "name": "Thinking"
+          },
+          "idea": {
+            "name": "I’ve got it!"
+          },
+          "puzzled": {
+            "name": "Stumped"
+          },
+          "shop": {
+            "name": "Shopping"
+          },
+          "eat": {
+            "name": "Meal time"
+          },
+          "camp": {
+            "name": "Making camp"
+          },
+          "toast": {
+            "name": "Cheers!"
+          },
+          "tome": {
+            "name": "Research"
+          },
+          "peek": {
+            "name": "Peeking"
+          },
+          "lost": {
+            "name": "Lost"
+          },
+          "knock": {
+            "name": "Knock knock"
+          }
+        },
+        "feel": {
+          "smile": {
+            "name": "Smile"
+          },
+          "laugh": {
+            "name": "LOL"
+          },
+          "cry": {
+            "name": "Sobbing"
+          },
+          "angry": {
+            "name": "Angry"
+          },
+          "shock": {
+            "name": "Shocked"
+          },
+          "blush": {
+            "name": "Embarrassed"
+          },
+          "smug": {
+            "name": "Smug"
+          },
+          "love": {
+            "name": "Love it!"
+          },
+          "scared": {
+            "name": "Scared"
+          },
+          "awkward": {
+            "name": "Awkward"
+          },
+          "confused": {
+            "name": "Huh?"
+          },
+          "excited": {
+            "name": "Excited"
+          },
+          "pout": {
+            "name": "Sulking"
+          },
+          "sigh": {
+            "name": "Sigh"
+          },
+          "sleepy": {
+            "name": "Sleepy"
+          },
+          "evil": {
+            "name": "All according to plan"
+          },
+          "moved": {
+            "name": "So moved"
+          },
+          "blank": {
+            "name": "Soul has left"
+          },
+          "proud": {
+            "name": "Proud"
+          },
+          "panic": {
+            "name": "Panic"
+          }
+        },
+        "talk": {
+          "ok": {
+            "name": "OK!"
+          },
+          "no": {
+            "name": "No"
+          },
+          "wait": {
+            "name": "Wait a sec"
+          },
+          "hello": {
+            "name": "Hello!"
+          },
+          "goodgame": {
+            "name": "Good game"
+          },
+          "thanks": {
+            "name": "Thank you"
+          },
+          "sorry": {
+            "name": "Sorry"
+          },
+          "question": {
+            "name": "Question!"
+          },
+          "agree": {
+            "name": "Agreed"
+          },
+          "beg": {
+            "name": "Please!"
+          },
+          "brb": {
+            "name": "BRB"
+          },
+          "goodnight": {
+            "name": "Good night"
+          },
+          "tea": {
+            "name": "Tea break"
+          },
+          "clap": {
+            "name": "Applause"
+          },
+          "cheer": {
+            "name": "You can do it!"
+          },
+          "popcorn": {
+            "name": "Just watching"
+          },
+          "memo": {
+            "name": "Taking notes"
+          },
+          "rules": {
+            "name": "Checking the rules"
+          },
+          "hurry": {
+            "name": "Time’s ticking"
+          },
+          "letsplay": {
+            "name": "Let’s play!"
+          },
+          "ruling": {
+            "name": "GM’s call!"
+          },
+          "oshi": {
+            "name": "I stan this"
+          },
+          "foreshadow": {
+            "name": "That’s foreshadowing…!"
+          }
+        }
+      },
+      "picture": "Stamp",
+      "standIn": "[{{words}}]",
+      "unnamedPack": "(unnamed)",
+      "manage": "Manage stamp sets"
     }
   },
   "error": {}

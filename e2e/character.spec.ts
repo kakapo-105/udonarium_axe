@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { createCharacter, waitAppReady } from './helpers';
+import { createCharacter, revealMenuEntry, waitAppReady } from './helpers';
 
 test.describe('キャラクターのコンテキストメニュー', () => {
   test.beforeEach(async ({ page }) => {
@@ -15,18 +15,18 @@ test.describe('キャラクターのコンテキストメニュー', () => {
     await expect(menu.getByText('詳細を表示')).toBeVisible();
     await expect(menu.getByText('チャットパレットを表示')).toBeVisible();
     await expect(menu.getByText('リモコンを表示')).toBeVisible();
-    await expect(menu.getByText('バフ編集')).toBeVisible();
+    await expect(await revealMenuEntry(page, menu, 'バフ編集')).toBeVisible();
     await expect(menu.getByText('コピーを作る')).toBeVisible();
   });
 
   test('「バフ編集」でバフ編集パネルが開けること', async ({ page }) => {
-    await page.locator('context-menu').getByText('バフ編集').click();
+    await (await revealMenuEntry(page, page.locator('context-menu'), 'バフ編集')).click();
     await expect(page.locator('game-character-buff-view')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('game-character-buff-view').getByRole('button', { name: /バフを追加/ })).toBeVisible();
   });
 
   test('「バフ編集」でバフを追加できること', async ({ page }) => {
-    await page.locator('context-menu').getByText('バフ編集').click();
+    await (await revealMenuEntry(page, page.locator('context-menu'), 'バフ編集')).click();
     await expect(page.locator('game-character-buff-view')).toBeVisible({ timeout: 5000 });
     const before = await page.locator('game-character-buff-view [game-data-element-buff]').count();
     await page
@@ -41,7 +41,7 @@ test.describe('キャラクターのコンテキストメニュー', () => {
   });
 
   test('高度設定サブメニューに「高度を0にする」があること', async ({ page }) => {
-    await page.locator('context-menu').getByText('高度設定').hover();
+    await (await revealMenuEntry(page, page.locator('context-menu'), '高度設定')).hover();
     await expect(page.locator('context-menu').getByText('高度を0にする')).toBeVisible({ timeout: 5000 });
   });
 });
@@ -60,7 +60,7 @@ test.describe('キャラクターシート (詳細パネル)', () => {
     const downloadPromise = page.waitForEvent('download', { timeout: 30000 });
     await page.locator('game-character-sheet').getByRole('button', { name: '保存' }).click();
     const download = await downloadPromise;
-    // SaveDataService はキャラ単体でも xml_<name>_<timestamp>.zip 形式で保存する。
+    // SaveDataServiceはキャラ単体でもxml_<name>_<timestamp>.zip形式で保存する。
     expect(download.suggestedFilename()).toMatch(/^xml_.*\.zip$/);
   });
 });

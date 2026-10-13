@@ -1,4 +1,5 @@
 import { resolveBuffColor } from '@axe/domain/character/buff-appearance';
+import { parseEffectChatToken } from '@axe/domain/effect/effect-chat-token';
 import { HotbarSlotKind } from '@axe/domain/hotbar/hotbar-slot-kind';
 
 const KIND_ICONS: Record<HotbarSlotKind, string> = {
@@ -8,6 +9,7 @@ const KIND_ICONS: Record<HotbarSlotKind, string> = {
   diceDeploy: 'casino',
   panel: 'article',
   focus: 'my_location',
+  firstPerson: 'visibility',
   sound: 'volume_up',
   cutIn: 'slideshow',
   prefill: 'edit_note',
@@ -23,6 +25,7 @@ const KIND_COLORS: Record<HotbarSlotKind, string> = {
   diceDeploy: '#ef6c00',
   panel: '#455a64',
   focus: '#1565c0',
+  firstPerson: '#00695c',
   sound: '#ad1457',
   cutIn: '#ad1457',
   prefill: '#455a64',
@@ -32,7 +35,6 @@ const KIND_COLORS: Record<HotbarSlotKind, string> = {
 };
 
 const DICE_PATTERN = /\d*[dD]\d+/;
-const EFFECT_TOKEN_PATTERN = /《.+》/;
 
 /**
  * The icon name a slot shows on the bar.
@@ -76,7 +78,7 @@ function chatMacroIcon(argument: string): string {
   const text = firstLine(argument);
   if (text.startsWith(':')) return 'favorite';
   if (text.startsWith('&')) return 'auto_fix_high';
-  if (EFFECT_TOKEN_PATTERN.test(text)) return 'auto_awesome';
+  if (parseEffectChatToken(text)) return 'auto_awesome';
   if (DICE_PATTERN.test(text)) return 'casino';
   return KIND_ICONS.chat;
 }

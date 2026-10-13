@@ -1,20 +1,35 @@
 import { computed, inject, Injectable } from '@angular/core';
+import { ChatMessageService } from '@axe/application/chat/chat-message.service';
+import { encodeI18nMessage } from '@axe/application/i18n/i18n-message';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
+import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { AudioFile } from '@axe/core/storage/audio-file';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
-import { AudioTag } from '@axe/domain/media/audio-tag';
+import { AUDIO_TAG_BGS, AudioTag } from '@axe/domain/media/audio-tag';
 import { CutInLauncher } from '@axe/domain/media/cut-in-launcher';
 import { Jukebox, RepeatMode } from '@axe/domain/media/jukebox';
 import { Playlist } from '@axe/domain/media/playlist';
+import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 
-/** A point in a track or its length, read out as minutes and seconds such as `1:05`; `0:00` for nothing sensible. */
+/** A point in a track, read out as the whole minutes and seconds gone such as `1:05`; `0:00` for nothing sensible. */
 export function formatTrackTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
   const minutes = Math.floor(seconds / 60);
   const rest = Math.floor(seconds % 60);
   return `${minutes}:${rest.toString().padStart(2, '0')}`;
+}
+
+/**
+ * A track's length, read out to the nearest second, such as `1:05`.
+ *
+ * Unlike a point in the track, a length is not cut down to the second it has reached: a track
+ * decoded to the speaker's own rate, as one with loop points is, can come out a few samples short
+ * of the second it was cut to, and six seconds would read as five.
+ */
+export function formatTrackLength(seconds: number): string {
+  return formatTrackTime(Number.isFinite(seconds) ? Math.round(seconds) : seconds);
 }
 
 /** A playlist as the jukebox's controls show it. */
@@ -33,6 +48,11 @@ export interface PlaylistView {
  *
  * Starting music from here first stops the cut-ins that have no tag, as music started anywhere
  * does.
+ *
+ * What plays changes for the whole room, so a guest, who is there to watch, changes none of it, and
+ * only the game master turns shuffle and repeat, as with the room's other shared settings. A turn
+ * of either is written in the system log under the name of whoever made it, so the room can see
+ * who changed it.
  */
 @Injectable({ providedIn: 'root' })
 export class JukeboxPlaybackService {
@@ -40,7 +60,21 @@ export class JukeboxPlaybackService {
   private readonly objectChange = inject(ObjectChangeService);
   private readonly audioStorage = inject(AudioStorage);
   private readonly t = inject(TRANSLATE_FN);
+  private readonly rolePermission = inject(RolePermissionService);
+  private readonly chatMessage = inject(ChatMessageService);
   private readonly knownDurations = new Map<string, number>();
+
+  /** Whether this reader may change what the room plays, which every role but a guest may. */
+  readonly canOperate = computed(() => {
+    this.objectChange.trackMyCursor();
+    return this.rolePermission.canEditTabletop;
+  });
+
+  /** Whether this reader may turn shuffle and repeat for the room, which only the game master may. */
+  readonly canChangeModes = computed(() => {
+    this.objectChange.trackMyCursor();
+    return this.rolePermission.canEditShared;
+  });
 
   private get jukebox(): Jukebox | null {
     return this.objectStore.get<Jukebox>('Jukebox') ?? null;
@@ -111,6 +145,11 @@ export class JukeboxPlaybackService {
       .filter((audio): audio is AudioFile => audio !== null && !audio.isHidden);
   });
 
+  /** The name a tag is shown under: the background sounds' tag translated, and any other as it is. */
+  tagLabel(tag: string): string {
+    return tag === AUDIO_TAG_BGS ? this.t('feature.media.jukebox.tagBgs') : tag;
+  }
+
   /** The name a playlist goes by: the one it was given, or a stand-in until it has one. */
   labelOf(playlist: Playlist): string {
     const name = (playlist.name ?? '').trim();
@@ -145,12 +184,14 @@ export class JukeboxPlaybackService {
 
   /** Plays a track for the room, as the room's music or once as an effect when it is tagged SE. */
   play(audio: AudioFile): void {
+    if (!this.rolePermission.canEditTabletop) return;
     this.cutInLauncher?.stopBlankTagCutIn();
     this.jukebox?.play(audio.identifier, AudioTag.get(audio.identifier)?.tag !== 'SE');
   }
 
   /** Plays a track of a playlist for the room and makes that the playlist the room goes on through. */
   playFromPlaylist(playlist: Playlist, audio: AudioFile): void {
+    if (!this.rolePermission.canEditTabletop) return;
     this.cutInLauncher?.stopBlankTagCutIn();
     this.jukebox?.playFromPlaylist(playlist, audio.identifier);
   }
@@ -158,7 +199,7 @@ export class JukeboxPlaybackService {
   /** Pauses the room's track, goes on with a paused one, or starts the playlist when nothing is held. */
   togglePlayPause(): void {
     const jukebox = this.jukebox;
-    if (!jukebox) return;
+    if (!jukebox || !this.rolePermission.canEditTabletop) return;
     if (jukebox.isPlaying) {
       jukebox.pause();
       return;
@@ -170,41 +211,59 @@ export class JukeboxPlaybackService {
 
   /** Stops the room's track and lets it go. */
   stop(): void {
+    if (!this.rolePermission.canEditTabletop) return;
     this.jukebox?.stop();
   }
 
   /** Plays the next track for the room. */
   next(): void {
+    if (!this.rolePermission.canEditTabletop) return;
     this.cutInLauncher?.stopBlankTagCutIn();
     this.jukebox?.playNext();
   }
 
   /** Plays the previous track for the room, or starts the current one again when it is a few seconds in. */
   previous(): void {
+    if (!this.rolePermission.canEditTabletop) return;
     this.cutInLauncher?.stopBlankTagCutIn();
     this.jukebox?.playPrevious();
   }
 
   /** Moves the room's track to a point in seconds. */
   seek(seconds: number): void {
+    if (!this.rolePermission.canEditTabletop) return;
     this.jukebox?.seek(seconds);
   }
 
-  /** Turns shuffle on or off for the room. */
+  /** Turns shuffle on or off for the room, and writes in the system log who did. */
   toggleShuffle(): void {
     const jukebox = this.jukebox;
-    if (jukebox) jukebox.setShuffled(!jukebox.shuffles);
+    if (!jukebox || !this.rolePermission.canEditShared) return;
+    jukebox.setShuffled(!jukebox.shuffles);
+    this.logChange(jukebox.shuffles ? 'shuffleOn' : 'shuffleOff');
   }
 
-  /** Steps the room's repeat mode on through none, the whole playlist and one track. */
+  /**
+   * Steps the room's repeat mode on through none, the whole playlist and one track, and writes in
+   * the system log who did and what it is now.
+   */
   cycleRepeatMode(): void {
-    this.jukebox?.cycleRepeatMode();
+    const jukebox = this.jukebox;
+    if (!jukebox || !this.rolePermission.canEditShared) return;
+    jukebox.cycleRepeatMode();
+    const logKeys: Record<RepeatMode, string> = { none: 'repeatNone', all: 'repeatAll', one: 'repeatOne' };
+    this.logChange(logKeys[jukebox.repeatMode] ?? 'repeatNone');
+  }
+
+  private logChange(key: string): void {
+    const name = PeerCursor.myCursor?.name ?? '';
+    this.chatMessage.sendSystemMessage(encodeI18nMessage(`feature.media.jukebox.log.${key}`, { name }));
   }
 
   /** Makes a playlist the one the room plays through and starts it from the top. */
   playPlaylist(identifier: string): void {
     const playlist = this.playlistOf(identifier);
-    if (!playlist) return;
+    if (!playlist || !this.rolePermission.canEditTabletop) return;
     this.cutInLauncher?.stopBlankTagCutIn();
     this.jukebox?.playPlaylist(playlist);
   }

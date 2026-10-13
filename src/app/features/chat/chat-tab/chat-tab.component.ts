@@ -7,10 +7,12 @@ import {
   effect,
   ElementRef,
   inject,
+  Injector,
   input,
   output,
   signal,
   viewChild,
+  viewChildren,
 } from '@angular/core';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
@@ -65,6 +67,7 @@ export class ChatTabComponent {
   private readonly objectStore = inject(ObjectStore);
   private readonly uiSignalService = inject(UiSignalService);
   private readonly t = inject(TRANSLATE_FN);
+  private readonly injector = inject(Injector);
   protected readonly isIOS = isiOS;
 
   constructor() {
@@ -577,6 +580,53 @@ export class ChatTabComponent {
       this.preScrollTop = scrollPosition.top;
       this.renderVersion.update((v) => v + 1);
     });
+  }
+
+  /**
+   * Draws the lines around one of the tab's lines and scrolls the log so that it stands in the
+   * middle of the panel, however far up the log it is.
+   *
+   * Resolves to the line's element once it is drawn, or null when the line is not in this tab, is
+   * not shown to this reader, or there is no panel to scroll.
+   */
+  async reveal(message: ChatMessage): Promise<HTMLElement | null> {
+    const tab = this.chatTab;
+    const panel = this.panelService.scrollablePanel;
+    if (!tab || !panel || !message.isShownInChat) return null;
+    const index = tab.chatMessages.indexOf(message);
+    if (index < 0) return null;
+    if (index < this.topIndex || this.bottomIndex < index) this.drawAround(index, panel);
+    else this.renderVersion.update((v) => v + 1);
+    await new Promise<void>((resolve) => afterNextRender(() => resolve(), { injector: this.injector }));
+    const element = Array.from(
+      this.messageContainerRef().nativeElement.querySelectorAll<HTMLElement>('chat-message[data-message-id]')
+    ).find((line) => line.dataset['messageId'] === message.identifier);
+    if (!element) return null;
+    const lineBox = element.getBoundingClientRect();
+    const panelBox = panel.getBoundingClientRect();
+    panel.scrollTop += lineBox.top - panelBox.top - (panel.clientHeight - lineBox.height) / 2;
+    return element;
+  }
+
+  private drawAround(index: number, panel: HTMLDivElement): void {
+    const rows = Math.floor(panel.clientHeight / this.minMessageHeight) + 1;
+    this.topIndex = index - rows;
+    this.bottomIndex = index + rows;
+    this.adjustIndex();
+    this.needUpdate = true;
+    this.preScrollTop = -1;
+    this.scrollSpeed = 0;
+    this.topElm = this.bottomElm = null;
+    this.renderVersion.update((v) => v + 1);
+  }
+
+  private readonly drawnLines = viewChildren(ChatMessageComponent);
+
+  /** Lights up one of the tab's lines for a moment, where it is drawn. */
+  flash(message: ChatMessage): void {
+    this.drawnLines()
+      .find((line) => line.chatMessage === message)
+      ?.flash();
   }
 
   /** Renders the log again; a chat redraw request from the UI signal service leads here. */

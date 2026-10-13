@@ -311,6 +311,11 @@ export class VisualNovelOverlayComponent {
 
   readonly isShoutShape = computed(() => this.currentEmote().shape === 'shout');
 
+  /** Joins lists of classes into one for a `[class]` binding made of several, leaving out the empty ones. */
+  protected classes(...lists: string[]): string {
+    return lists.filter((list) => list.length > 0).join(' ');
+  }
+
   readonly bubbleBoxClass = computed(() => {
     switch (this.currentEmote().shape) {
       case 'thought':

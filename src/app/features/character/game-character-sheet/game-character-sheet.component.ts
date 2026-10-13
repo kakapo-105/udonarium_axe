@@ -1,12 +1,16 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
   DestroyRef,
   effect,
+  ElementRef,
   inject,
+  Injector,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { SaveDataService } from '@axe/application/file/save-data.service';
@@ -14,11 +18,14 @@ import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
+import { BottomSheetService } from '@axe/application/ui/bottom-sheet.service';
 import { ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { DataElementDragService } from '@axe/application/ui/data-element-drag.service';
 import { ModalService } from '@axe/application/ui/modal.service';
-import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
+import { MotionService } from '@axe/application/ui/motion.service';
+import { PanelService } from '@axe/application/ui/panel.service';
 import { buildReorderContextMenu } from '@axe/application/ui/reorder-context-menu';
+import { SheetViewPreferenceService } from '@axe/application/ui/sheet-view-preference.service';
 import { UiSignalService } from '@axe/application/ui/ui-signal.service';
 import { ViewportService } from '@axe/application/ui/viewport.service';
 import { ImageFile } from '@axe/core/storage/image-file';
@@ -26,7 +33,6 @@ import { ImageStorage } from '@axe/core/storage/image-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { Card } from '@axe/domain/card/card';
 import { CardStack } from '@axe/domain/card/card-stack';
-import { portraitElementAt, portraitNameOf, setPortraitNameOf } from '@axe/domain/character/character-portrait';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import {
   DataElement,
@@ -42,6 +48,8 @@ import { TabletopObject } from '@axe/domain/tabletop/tabletop-object';
 import { Terrain, TERRAIN_FACES, TerrainFace } from '@axe/domain/tabletop/terrain';
 import { TextNote } from '@axe/domain/tabletop/text-note';
 import { CardStackCardListComponent } from '@axe/features/card/card-stack-card-list/card-stack-card-list.component';
+import { CharacterPortraitPanelComponent } from '@axe/features/character/game-character-sheet/character-portrait-panel.component';
+import { buildCharacterSheetMenu } from '@axe/features/character/game-character-sheet/character-sheet-context-menu';
 import { cloneTabletopObject } from '@axe/features/character/game-character-sheet/character-sheet-target-helpers';
 import {
   canReorderDetailElement,
@@ -50,22 +58,33 @@ import {
 } from '@axe/features/character/game-character-sheet/detail-element-reorder-helpers';
 import { GameCharacterSettingsTabComponent } from '@axe/features/character/game-character-sheet/game-character-settings-tab.component';
 import { clampInRange, roundOr } from '@axe/features/character/game-character-sheet/numeric-input-helpers';
-import { ImportCharacterImgComponent } from '@axe/features/character/import-character-img/import-character-img.component';
+import { openDataElementEditor } from '@axe/features/data-element/data-element-editor/open-data-element-editor';
+import { DataElementDeletionService } from '@axe/features/data-element/game-data-element/data-element-deletion.service';
+import { IN_DATA_ELEMENT_SHEET } from '@axe/features/data-element/game-data-element/data-element-sheet-host';
 import { GameDataElementComponent } from '@axe/features/data-element/game-data-element/game-data-element.component';
 import { DisclosureControlComponent } from '@axe/features/disclosure/disclosure-control/disclosure-control.component';
 import { FileSelecterComponent } from '@axe/ui/components/file-selecter/file-selecter.component';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
+import { formatNoteText } from '@axe/ui/text-decoration/format-note-text';
 import { TranslocoModule } from '@jsverse/transloco';
+
+/** How long a section picked from the row of sections stays lit while the sheet scrolls to it. */
+const CHOSEN_SECTION_HOLD_MS = 1200;
+
+/** The width, in rem, a character sheet folds to one column below. */
+const NARROW_SHEET_REM = 36;
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'game-character-sheet',
   templateUrl: './game-character-sheet.component.html',
   host: { class: 'block' },
+  providers: [{ provide: IN_DATA_ELEMENT_SHEET, useValue: true }],
   imports: [
     CardStackCardListComponent,
     DisclosureControlComponent,
     FormsModule,
+    CharacterPortraitPanelComponent,
     GameCharacterSettingsTabComponent,
     GameDataElementComponent,
     SafePipe,
@@ -87,6 +106,37 @@ export class GameCharacterSheetComponent {
   private readonly dataElementDrag = inject(DataElementDragService);
   private readonly translateFn = inject(TRANSLATE_FN);
   private readonly rolePermission = inject(RolePermissionService);
+  private readonly dataElementDeletion = inject(DataElementDeletionService);
+  private readonly bottomSheet = inject(BottomSheetService);
+  private readonly injector = inject(Injector);
+  private readonly sheetView = inject(SheetViewPreferenceService);
+  private readonly motion = inject(MotionService);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly sectionChips = viewChild<ElementRef<HTMLElement>>('sectionChips');
+  private readonly sheetRoot = viewChild<ElementRef<HTMLElement>>('sheetRoot');
+  private readonly isTouch = inject(ViewportService).isTouch;
+  /** Whether the sheet is narrower than 36rem. */
+  private readonly isNarrow = signal(false);
+
+  /**
+   * Whether the sheet lays itself out for a phone: one column under a heading of its own, with a
+   * row of its sections. So it does where it is narrower than 36rem, and on a phone held either
+   * way, where a sheet turned on its side has the width but not the height for the wide layout.
+   */
+  readonly narrowLayout = computed(() => this.isNarrow() || this.isCompact());
+
+  /**
+   * Whether the sheet's rows are edited through their editors rather than the buttons beside them:
+   * where the sheet lays itself out for a phone, or on a touch screen at any width, where a 20px
+   * button is too small for a finger.
+   */
+  readonly compactEditing = computed(() => this.narrowLayout() || this.isTouch());
+  private cardObserver: IntersectionObserver | null = null;
+  /** Until when the section picked from the row of sections stays lit, while the sheet scrolls to it. */
+  private chosenSectionUntil = 0;
+
+  /** The section the reader is at, which the narrow sheet's row of sections lights up. */
+  readonly activeSectionId = signal<string | null>(null);
 
   readonly isReadOnly = computed(() => {
     this.objectChange.trackMyCursor();
@@ -399,6 +449,20 @@ export class GameCharacterSheetComponent {
   setTextNoteText(note: TextNote, event: Event): void {
     note.text = (event.target as HTMLTextAreaElement).value;
   }
+  /** Whether the note's body is drawn with formatting, for its switch. */
+  textNoteFormatted(note: TextNote): boolean {
+    this.objectChange.versionOf(note.identifier)();
+    return note.isFormatted;
+  }
+  /** Draws the note's body with formatting, or as it was typed; the body itself stays as it is. */
+  setTextNoteFormatted(note: TextNote, formatted: boolean): void {
+    note.isFormatted = formatted;
+  }
+  /** The note's body drawn with formatting, for the preview under its text area. */
+  textNoteFormattedHtml(note: TextNote): string {
+    this.objectChange.versionOf(note.identifier)();
+    return formatNoteText(note.text);
+  }
   /** The note's width, for its width field. */
   textNoteWidth(note: TextNote): number {
     this.objectChange.versionOf(note.identifier)();
@@ -496,6 +560,7 @@ export class GameCharacterSheetComponent {
     { type: 'CORN', labelKey: 'feature.inventory.sheet.rangeShapeCorn', icon: 'change_history' },
     { type: 'TRIANGLE', labelKey: 'feature.inventory.sheet.rangeShapeTriangle', icon: 'details' },
     { type: 'SQUARE', labelKey: 'feature.inventory.sheet.rangeShapeSquare', icon: 'crop_square' },
+    { type: 'RHOMBUS', labelKey: 'feature.inventory.sheet.rangeShapeDiamond', icon: 'diamond' },
     { type: 'PENTAGON', labelKey: 'feature.inventory.sheet.rangeShapePentagon', icon: 'pentagon' },
     { type: 'HEXAGON', labelKey: 'feature.inventory.sheet.rangeShapeHexagon', icon: 'hexagon' },
     { type: 'CIRCLE', labelKey: 'feature.inventory.sheet.rangeShapeCircle', icon: 'radio_button_unchecked' },
@@ -550,17 +615,6 @@ export class GameCharacterSheetComponent {
     });
   }
 
-  readonly portraitImages = computed(() => {
-    this.objectChange.fileVersion();
-    const char = this.character;
-    if (!char?.imageDataElement) return [];
-    this.objectChange.versionOf(char.identifier)();
-    return char.imageDataElement.children.map((child, index) => {
-      const file = this.imageStorage.get(child.value as string) ?? ImageFile.Empty;
-      return { index, imageFile: file, name: portraitNameOf(child) };
-    });
-  });
-
   private readKomaIndex(char: GameCharacter): number {
     const iconEl = char.detailDataElement?.getFirstElementByName('ICON');
     return iconEl ? (iconEl.currentValue as number) : 0;
@@ -573,19 +627,95 @@ export class GameCharacterSheetComponent {
     return this.readKomaIndex(char);
   });
 
-  readonly portraitName = computed(() => {
+  /**
+   * Whether a section's card is folded to its heading. A card open for editing is never folded, so
+   * the reader can see what they are changing.
+   */
+  isCardFolded(card: DataElement): boolean {
+    return !this.isElementEditing(card.identifier) && this.sheetView.isFolded(card.name);
+  }
+
+  /** Folds a section's card to its heading, or opens it, from its heading; this browser remembers. */
+  toggleCardFold(card: DataElement): void {
+    this.sheetView.setFolded(card.name, !this.sheetView.isFolded(card.name));
+  }
+
+  /** Folds every section of the sheet, or opens them all, from the narrow sheet's menu. */
+  setAllCardsFolded(folded: boolean): void {
+    this.sheetView.setAllFolded(
+      this.detailElements().map((card) => card.name),
+      folded
+    );
+  }
+
+  /**
+   * Brings a section's card to the top, from the narrow sheet's row of sections, opening it first
+   * if it is folded.
+   */
+  jumpToSection(card: DataElement): void {
+    if (this.sheetView.isFolded(card.name)) this.sheetView.setFolded(card.name, false);
+    this.activeSectionId.set(card.identifier);
+    this.chosenSectionUntil = performance.now() + CHOSEN_SECTION_HOLD_MS;
+    queueMicrotask(() => {
+      const target = this.host.nativeElement.querySelector(`[data-card-id="${CSS.escape(card.identifier)}"]`);
+      target?.scrollIntoView({ block: 'start', behavior: this.motion.enabled() ? 'smooth' : 'auto' });
+    });
+  }
+
+  /**
+   * Opens a section's editor in a sheet from the bottom, from the "⋯" on its card on a narrow
+   * sheet, which holds what the card's small buttons hold on a wide one.
+   */
+  openSectionEditor(card: DataElement, event?: Event): void {
+    openDataElementEditor(this.bottomSheet, this.translateFn, card, {
+      host: event?.currentTarget instanceof Element ? event.currentTarget : null,
+      injector: this.injector,
+    });
+  }
+
+  /** The character's name, as the narrow sheet's heading shows it. */
+  readonly characterName = computed(() => {
     const char = this.character;
     if (!char) return '';
     this.objectChange.versionOf(char.identifier)();
-    return portraitNameOf(portraitElementAt(char, this.readKomaIndex(char)));
+    return char.name;
   });
 
-  readonly portraitPosIndex = computed(() => {
+  /**
+   * Opens the character's portraits in a sheet from the bottom, from the portrait at the top of a
+   * narrow sheet, where there is no column beside the game data to show them in.
+   */
+  openPortraitSheet(event?: Event): void {
     const char = this.character;
-    if (!char) return 0;
-    this.objectChange.versionOf(char.identifier)();
-    return char.portraitPosition ?? 0;
-  });
+    if (!char) return;
+    this.bottomSheet.open(CharacterPortraitPanelComponent, {
+      title: this.translateFn('feature.inventory.sheet.portraitsManageTitle', { name: char.name }),
+      inputs: { character: char },
+      host: event?.currentTarget instanceof Element ? event.currentTarget : null,
+      injector: this.injector,
+    });
+  }
+
+  /**
+   * Opens the menu under the "⋯" at the top of a narrow sheet, which holds what the toolbar and the
+   * portrait column hold on a wide one.
+   */
+  openSheetMenu(event: MouseEvent): void {
+    const button = event.currentTarget instanceof Element ? event.currentTarget : null;
+    const rect = button?.getBoundingClientRect();
+    const position = rect ? { x: rect.right, y: rect.bottom } : this.pointerDeviceService.pointers[0];
+    const actions = buildCharacterSheetMenu(
+      {
+        portraits: () => this.openPortraitSheet(event),
+        copy: () => this.clone(),
+        save: () => void this.saveToXML(),
+        collapseAll: () => this.setAllCardsFolded(true),
+        expandAll: () => this.setAllCardsFolded(false),
+      },
+      this.translateFn
+    );
+    this.contextMenuService.open(position, actions, this.characterName());
+  }
 
   readonly komaImageFile = computed(() => {
     this.objectChange.fileVersion();
@@ -621,7 +751,58 @@ export class GameCharacterSheetComponent {
       const char = this.character;
       if (char) untracked(() => char.addExtendData());
     });
+    // The row of sections follows the reader down the sheet: whichever card stands under the row
+    // is the one lit up, and the row slides to keep it in sight.
+    effect(() => {
+      this.detailElements();
+      if (this.activeTab() !== 'sheet') return;
+      untracked(() => afterNextRender(() => this.watchCards(), { injector: this.injector }));
+    });
+    effect(() => {
+      const id = this.activeSectionId();
+      const nav = this.sectionChips()?.nativeElement;
+      if (!id || !nav) return;
+      const chip = nav.querySelector<HTMLElement>(`[data-chip-id="${CSS.escape(id)}"]`);
+      if (chip) nav.scrollTo({ left: chip.offsetLeft - (nav.clientWidth - chip.offsetWidth) / 2 });
+    });
+    this.destroyRef.onDestroy(() => this.cardObserver?.disconnect());
+    effect((onCleanup) => {
+      const root = this.sheetRoot()?.nativeElement;
+      if (!root || typeof ResizeObserver === 'undefined') return;
+      const observer = new ResizeObserver(([entry]) => {
+        const rem = parseFloat(getComputedStyle(root.ownerDocument.documentElement).fontSize) || 16;
+        this.isNarrow.set(entry.contentRect.width < NARROW_SHEET_REM * rem);
+      });
+      observer.observe(root);
+      onCleanup(() => observer.disconnect());
+    });
     this.destroyRef.onDestroy(() => this.flushCardOwnFaceText());
+  }
+
+  private watchCards(): void {
+    this.cardObserver?.disconnect();
+    const root = this.host.nativeElement.closest('.overflow-auto');
+    if (typeof IntersectionObserver === 'undefined' || !(root instanceof HTMLElement)) return;
+    const showing = new Set<string>();
+    this.cardObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).dataset['cardId'];
+          if (!id) continue;
+          if (entry.isIntersecting) showing.add(id);
+          else showing.delete(id);
+        }
+        if (performance.now() < this.chosenSectionUntil) return;
+        const showingCards = this.detailElements().filter((card) => showing.has(card.identifier));
+        // At the very bottom a short last section can never reach the top, so the last one in view
+        // is the one being read.
+        const atBottom = root.scrollTop + root.clientHeight >= root.scrollHeight - 2;
+        const current = atBottom ? showingCards.at(-1) : showingCards[0];
+        if (current) this.activeSectionId.set(current.identifier);
+      },
+      { root, rootMargin: '-64px 0px -60% 0px' }
+    );
+    for (const card of this.host.nativeElement.querySelectorAll('[data-card-id]')) this.cardObserver.observe(card);
   }
 
   /** Switches the sheet between reading and editing, from its edit button. */
@@ -666,15 +847,15 @@ export class GameCharacterSheetComponent {
   }
 
   /**
-   * Deletes a card from the character's sheet, from the card's delete button, and forgets that it
-   * was open for editing.
+   * Deletes a card from the character's sheet, from the card's delete button, leaving a notice that
+   * offers to put it back, and forgets that it was open for editing.
    */
   deleteTopLevelElement(id: string) {
     const char = this.character;
     if (!char?.detailDataElement) return;
     const el = char.detailDataElement.children.find((e) => e.identifier === id);
-    if (!el) return;
-    el.destroy();
+    if (!(el instanceof DataElement)) return;
+    this.dataElementDeletion.delete(el, () => char.update());
     this.editingIds.update((set) => {
       const next = new Set(set);
       next.delete(id);
@@ -701,142 +882,8 @@ export class GameCharacterSheetComponent {
   /** Does nothing; the terrain grid checkbox changes the terrain through its own binding. */
   clickGrid() {}
 
-  /**
-   * Chooses which of the character's portraits is its image on the table, from the portrait
-   * thumbnails; the index is held within the portraits it has.
-   */
-  setKomaIndex(index: number) {
-    const char = this.character;
-    if (!char?.imageDataElement) return;
-    char.addExtendData();
-    const iconEl = char.detailDataElement?.getFirstElementByName('ICON');
-    if (!iconEl) return;
-    const max = char.imageDataElement.children.length - 1;
-    iconEl.currentValue = Math.max(0, Math.min(index, max));
-    iconEl.value = max;
-    char.update();
-  }
-
-  /**
-   * Opens the image picker and replaces the picture of the portrait the piece currently shows, or
-   * of the first portrait when that index is out of range.
-   */
-  openKomaImageModal() {
-    const char = this.character;
-    if (!char?.imageDataElement) return;
-    char.addExtendData();
-    this.modalService.open<string>(FileSelecterComponent, { isAllowedEmpty: false }).then((value) => {
-      if (!value || !char.imageDataElement) return;
-      const iconEl = char.detailDataElement?.getFirstElementByName('ICON');
-      const idx = iconEl ? (iconEl.currentValue as number) : 0;
-      const images = char.imageDataElement.children;
-      if (idx >= 0 && idx < images.length) {
-        images[idx].value = value;
-      } else if (images.length > 0) {
-        images[0].value = value;
-      }
-      char.update();
-    });
-  }
-
   /** Names the portrait the piece currently shows, from the name field under the thumbnails. */
-  setPortraitName(event: Event) {
-    const char = this.character;
-    if (!char) return;
-    const element = portraitElementAt(char, this.readKomaIndex(char));
-    if (!element) return;
-    setPortraitNameOf(element, (event.target as HTMLInputElement).value);
-    char.update();
-  }
-
   /** Moves where the character's portrait stands in chat, from the arrows beside the position. */
-  setPortraitPos(pos: number) {
-    const char = this.character;
-    if (!char) return;
-    char.portraitPosition = pos;
-  }
-
-  /**
-   * Opens the image picker and adds the chosen picture as another portrait of the character, from
-   * the add button after the thumbnails.
-   */
-  addPortrait() {
-    const char = this.character;
-    if (!char?.imageDataElement) return;
-    this.modalService.open<string>(FileSelecterComponent, { isAllowedEmpty: false }).then((value) => {
-      if (!value) return;
-      char.imageDataElement!.appendChild(DataElement.create('imageIdentifier', value, { type: 'image' }, ''));
-      const iconEl = char.detailDataElement?.getFirstElementByName('ICON');
-      if (iconEl) iconEl.value = char.imageDataElement!.children.length - 1;
-      char.update();
-    });
-  }
-
-  /**
-   * Opens the image picker and replaces the picture of a portrait, from a click on the large
-   * portrait.
-   */
-  changePortrait(index: number) {
-    const char = this.character;
-    if (!char?.imageDataElement) return;
-    this.modalService.open<string>(FileSelecterComponent, { isAllowedEmpty: false }).then((value) => {
-      if (!value) return;
-      const images = char.imageDataElement!.children;
-      if (index < images.length) {
-        images[index].value = value;
-        char.update();
-      }
-    });
-  }
-
-  /**
-   * Removes a portrait from the character, from the delete button under the thumbnails.
-   *
-   * The last portrait cannot be removed. When the one shown on the table is removed the first
-   * portrait takes its place; otherwise the piece keeps showing the same picture.
-   */
-  removePortrait(index: number) {
-    const char = this.character;
-    if (!char?.imageDataElement) return;
-    const images = char.imageDataElement.children;
-    if (images.length <= 1) return;
-    const el = images[index];
-    if (!el) return;
-    const iconEl = char.detailDataElement?.getFirstElementByName('ICON');
-    if (iconEl) {
-      const komaIdx = iconEl.currentValue as number;
-      if (komaIdx === index) {
-        iconEl.currentValue = 0;
-      } else if (komaIdx > index) {
-        iconEl.currentValue = (komaIdx as number) - 1;
-      }
-      iconEl.value = images.length - 2;
-    }
-    char.imageDataElement.removeChild(el);
-    char.update();
-  }
-
-  /**
-   * Opens a small panel by the pointer for copying another character's pictures onto this one, from
-   * the import button under the portraits.
-   */
-  showImportImages() {
-    const obj = this.tabletopObject;
-    if (!obj) return;
-    const coordinate = this.pointerDeviceService.pointers[0];
-    const option: PanelOption = {
-      left: coordinate.x - 250,
-      top: coordinate.y - 175,
-      width: 350,
-      height: 250,
-    };
-    option.title = this.translateFn('feature.inventory.sheet.imageCopyTitle', {
-      name: (obj as GameCharacter).name,
-    });
-    const component = this.panelService.open<ImportCharacterImgComponent>(ImportCharacterImgComponent, option);
-    component.tabletopObject = obj as GameCharacter;
-  }
-
   /** Does nothing; the checkbox it is bound to changes the range area through its own binding. */
   clickRangeOffSetX() {}
 

@@ -3,7 +3,9 @@ import { updateAudioResource$ } from '@axe/core/event/domain-events';
 import { AudioFile } from '@axe/core/storage/audio-file';
 import { AudioPlayer, VolumeType } from '@axe/core/storage/audio-player';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
-import { AudioTag } from '@axe/domain/media/audio-tag';
+import { LoopPlayer } from '@axe/core/storage/loop-player';
+import { AUDIO_TAG_BGS, AudioTag } from '@axe/domain/media/audio-tag';
+import { BackgroundSound } from '@axe/domain/media/background-sound';
 import { Jukebox } from '@axe/domain/media/jukebox';
 import { Playlist } from '@axe/domain/media/playlist';
 import { Config } from '@axe/domain/peer/config';
@@ -183,6 +185,7 @@ describe('Jukebox', () => {
       const player = (jukebox as unknown as { audioPlayer: AudioPlayer }).audioPlayer;
       expect(player.volumeType).toBe(VolumeType.MASTER);
       expect(player.loop).toBe(true);
+      expect(player.followsLoopPoints).toBe(true);
       expect(playSpy).toHaveBeenCalledOnce();
     });
 
@@ -410,27 +413,112 @@ describe('Jukebox', () => {
   });
 
   describe('setNewVolume()', () => {
-    it('multiplies the room volume into the player volume', () => {
-      // The volume setter reaches for an audio context, so it is stubbed.
-      const volumeSpy = vi.spyOn(AudioPlayer, 'volume', 'set').mockImplementation(() => {});
-      const auditionSpy = vi.spyOn(AudioPlayer, 'auditionVolume', 'set').mockImplementation(() => {});
-      const seSpy = vi.spyOn(AudioPlayer, 'seVolume', 'set').mockImplementation(() => {});
+    function channelVolumes() {
+      // The channel setter reaches for an audio context, so it is stubbed.
+      const set = vi.spyOn(AudioPlayer, 'setChannelVolume').mockImplementation(() => {});
+      return (type: VolumeType) => set.mock.calls.filter(([called]) => called === type).at(-1)?.[1];
+    }
 
+    function makeJukeboxInRoomAt(roomVolume: number): Jukebox {
       const jukebox = new Jukebox('Jukebox');
       jukebox.initialize();
       const config = new Config('Config');
       config.initialize();
-      config.roomVolume = 0.8;
+      config.roomVolume = roomVolume;
+      return jukebox;
+    }
 
+    it('multiplies the room volume into this peer’s level for each channel', () => {
+      const heard = channelVolumes();
+      const jukebox = makeJukeboxInRoomAt(0.8);
       jukebox.volume = 0.5;
       jukebox.auditionVolume = 0.6;
       jukebox.seVolume = 0.7;
+      jukebox.backgroundVolume = 0.25;
 
       jukebox.setNewVolume();
 
-      expect(volumeSpy).toHaveBeenCalledWith(expect.closeTo(0.4));
-      expect(auditionSpy).toHaveBeenCalledWith(expect.closeTo(0.48));
-      expect(seSpy).toHaveBeenCalledWith(expect.closeTo(0.56));
+      expect(heard(VolumeType.MASTER)).toBeCloseTo(0.4);
+      expect(heard(VolumeType.AUDITION)).toBeCloseTo(0.48);
+      expect(heard(VolumeType.SE)).toBeCloseTo(0.56);
+      expect(heard(VolumeType.BACKGROUND)).toBeCloseTo(0.2);
+    });
+
+    it('carries the channels split off from the sound effects too, at half until set', () => {
+      const heard = channelVolumes();
+      const jukebox = makeJukeboxInRoomAt(0.5);
+      jukebox.setLevel(VolumeType.HANDLING, 0);
+
+      jukebox.setNewVolume();
+
+      expect(heard(VolumeType.HANDLING)).toBe(0);
+      expect(heard(VolumeType.CUT_IN)).toBeCloseTo(0.25);
+      expect(heard(VolumeType.NOTIFICATION)).toBeCloseTo(0.25);
+      expect(heard(VolumeType.EFFECT)).toBeCloseTo(0.25);
+    });
+
+    it('multiplies in the room’s volume for each kind on top of its overall volume, but not into previews', () => {
+      const heard = channelVolumes();
+      const jukebox = makeJukeboxInRoomAt(0.5);
+      const config = jukebox.config;
+      config.setRoomVolumeOf('bgm', 1.6);
+      config.setRoomVolumeOf('background', 0.5);
+      config.setRoomVolumeOf('handling', 0);
+      jukebox.volume = 0.5;
+      jukebox.auditionVolume = 0.5;
+      jukebox.backgroundVolume = 0.8;
+
+      jukebox.setNewVolume();
+
+      expect(heard(VolumeType.MASTER)).toBeCloseTo(0.4);
+      expect(heard(VolumeType.BACKGROUND)).toBeCloseTo(0.2);
+      expect(heard(VolumeType.HANDLING)).toBe(0);
+      expect(heard(VolumeType.SE)).toBeCloseTo(0.25);
+      expect(heard(VolumeType.AUDITION)).toBeCloseTo(0.25);
+    });
+  });
+
+  describe('background sounds', () => {
+    beforeEach(() => {
+      stubAudioPlayerPlay();
+      stubAudioPlayerStop();
+      vi.spyOn(LoopPlayer.prototype, 'start').mockImplementation(() => {});
+    });
+
+    it('keeps this peer’s background volume, starting at half', () => {
+      const jukebox = new Jukebox();
+      jukebox.initialize();
+      expect(jukebox.backgroundVolume).toBe(0.5);
+
+      jukebox.backgroundVolume = 0.3;
+      expect(jukebox.backgroundVolume).toBe(0.3);
+    });
+
+    it('starts a sound tagged as a background sound looping, and leaves the track alone', () => {
+      const jukebox = new Jukebox();
+      jukebox.initialize();
+      AudioStorage.instance.add(makeReadyAudio('bgm-01'));
+      AudioStorage.instance.add(makeReadyAudio('rain'));
+      AudioTag.create('rain').tag = AUDIO_TAG_BGS;
+      jukebox.play('bgm-01');
+
+      jukebox.play('rain');
+
+      expect(BackgroundSound.of('rain')?.isOn).toBe(true);
+      expect(jukebox.audioIdentifier).toBe('bgm-01');
+      expect(jukebox.isPlaying).toBe(true);
+    });
+
+    it('leaves them out of the music the room goes through while its playlist is empty', () => {
+      const jukebox = new Jukebox();
+      jukebox.initialize();
+      AudioStorage.instance.add(makeReadyAudio('bgm-01'));
+      AudioStorage.instance.add(makeReadyAudio('rain'));
+      AudioStorage.instance.add(makeReadyAudio('door'));
+      AudioTag.create('rain').tag = AUDIO_TAG_BGS;
+      AudioTag.create('door').tag = 'SE';
+
+      expect(jukebox.queue).toEqual(['bgm-01']);
     });
   });
 
@@ -888,6 +976,25 @@ describe('Jukebox', () => {
         jukebox.apply(restarted);
 
         expect(seekSpy).toHaveBeenCalledWith(0);
+      });
+
+      it('fades in a player that follows loop points as well when another peer moves the track', () => {
+        addReady('a');
+        const jukebox = makeJukebox();
+        jukebox.apply(jukebox.toContext());
+        const playing = jukebox.toContext();
+        playing.syncData = { ...playing.syncData, audioIdentifier: 'a', isPlaying: true, startTime: 0 };
+        jukebox.apply(playing);
+        vi.spyOn(AudioPlayer.prototype, 'currentTime', 'get').mockReturnValue(10);
+        const before = (jukebox as unknown as { audioPlayer: AudioPlayer }).audioPlayer;
+
+        const moved = jukebox.toContext();
+        moved.syncData = { ...moved.syncData, startTime: 30, seekCount: (jukebox.seekCount ?? 0) + 1 };
+        jukebox.apply(moved);
+
+        const after = (jukebox as unknown as { audioPlayer: AudioPlayer }).audioPlayer;
+        expect(after).not.toBe(before);
+        expect(after.followsLoopPoints).toBe(true);
       });
 
       it('takes no seek from an older version that sends no count', () => {

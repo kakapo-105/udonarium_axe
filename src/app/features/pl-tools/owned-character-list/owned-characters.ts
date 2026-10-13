@@ -1,6 +1,5 @@
+import { GRAVEYARD_LOCATION, isControllableByUser } from '@axe/domain/character/character-control';
 import { GameCharacter } from '@axe/domain/character/game-character';
-
-export const GRAVEYARD_LOCATION = 'graveyard';
 
 /**
  * Whether the user owns the character and it is not in the graveyard; an empty user id owns
@@ -18,17 +17,6 @@ export function selectOwnedCharacters(characters: readonly GameCharacter[], user
 }
 
 /**
- * Whose piece you may take up and work: your own, and the ones nobody has claimed.
- *
- * An unclaimed piece is anyone's to move, so it is anyone's to point a hotbar at as well.
- */
-export function isControllableByUser(character: GameCharacter, userId: string): boolean {
-  if (character.location.name === GRAVEYARD_LOCATION) return false;
-  if (character.owner.length < 1) return true;
-  return userId.length > 0 && character.owner === userId;
-}
-
-/**
  * The characters the user may take up, their own and the unclaimed, outside the graveyard and in
  * the order given.
  */
@@ -39,4 +27,12 @@ export function selectControllableCharacters(characters: readonly GameCharacter[
 /** Whether the character is showing on the table. */
 export function isOnTable(character: GameCharacter): boolean {
   return character.isVisibleOnTable;
+}
+
+/**
+ * The characters on the table nobody has claimed, which a user with no character of their own can
+ * take up from the empty list.
+ */
+export function selectClaimableCharacters(characters: readonly GameCharacter[]): GameCharacter[] {
+  return characters.filter((character) => character.owner.length < 1 && isOnTable(character));
 }

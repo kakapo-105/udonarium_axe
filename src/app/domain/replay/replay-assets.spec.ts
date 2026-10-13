@@ -51,4 +51,13 @@ describe('collectReplayAssetIds()', () => {
 
     expect([...found.audios]).toEqual(['se']);
   });
+
+  it('adds the sound a background sound started or stopped', () => {
+    const found = collectReplayAssetIds(
+      [],
+      [event({ kind: ReplayEventKind.MediaBackgroundSound, targetId: 'rain', detail: { isPlaying: true } })]
+    );
+
+    expect([...found.audios]).toEqual(['rain']);
+  });
 });

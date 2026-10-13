@@ -300,6 +300,74 @@ describe('reading the cut-ins', () => {
   });
 });
 
+describe('reading the background sounds', () => {
+  it('reads one sent already playing as started, with its sound and room volume', () => {
+    const draft = interpretObjectChange({
+      aliasName: 'background-sound',
+      identifier: 'bgs_rain',
+      before: null,
+      after: { audioIdentifier: 'rain', isPlaying: true, volume: 0.4 },
+    });
+    expect(draft?.kind).toBe(ReplayEventKind.MediaBackgroundSound);
+    expect(draft?.targetIdentifier).toBe('rain');
+    expect(draft?.detail).toEqual({ isPlaying: true, volume: 0.4 });
+    expect(draft?.patch?.identifier).toBe('bgs_rain');
+  });
+
+  it('reads one switched off as stopped, and on again as started', () => {
+    const stopped = interpretObjectChange({
+      aliasName: 'background-sound',
+      identifier: 'bgs_rain',
+      before: { audioIdentifier: 'rain', isPlaying: true, volume: 1 },
+      after: { audioIdentifier: 'rain', isPlaying: false, volume: 1 },
+    });
+    expect(stopped?.kind).toBe(ReplayEventKind.MediaBackgroundSound);
+    expect(stopped?.detail['isPlaying']).toBe(false);
+
+    const started = interpretObjectChange({
+      aliasName: 'background-sound',
+      identifier: 'bgs_rain',
+      before: { audioIdentifier: 'rain', isPlaying: false, volume: 1 },
+      after: { audioIdentifier: 'rain', isPlaying: true, volume: 1 },
+    });
+    expect(started?.detail['isPlaying']).toBe(true);
+  });
+
+  it('leaves a change of volume alone to the patch', () => {
+    const draft = interpretObjectChange({
+      aliasName: 'background-sound',
+      identifier: 'bgs_rain',
+      before: { audioIdentifier: 'rain', isPlaying: true, volume: 1 },
+      after: { audioIdentifier: 'rain', isPlaying: true, volume: 0.2 },
+    });
+    expect(draft?.kind).toBe(ReplayEventKind.ObjectUpdate);
+  });
+
+  it('reads one sent stopped as made, not started', () => {
+    const draft = interpretObjectChange({
+      aliasName: 'background-sound',
+      identifier: 'bgs_rain',
+      before: null,
+      after: { audioIdentifier: 'rain', isPlaying: false },
+    });
+    expect(draft?.kind).toBe(ReplayEventKind.ObjectCreate);
+  });
+
+  it('reads an empty volume as full', () => {
+    const draft = interpretObjectChange({
+      aliasName: 'background-sound',
+      identifier: 'bgs_rain',
+      before: null,
+      after: { audioIdentifier: 'rain', isPlaying: true, volume: '' },
+    });
+    expect(draft?.detail['volume']).toBe(1);
+  });
+
+  it('keeps them at the middle setting', () => {
+    expect(isRecordableKind(ReplayEventKind.MediaBackgroundSound, ReplayDetailLevel.Notable)).toBe(true);
+  });
+});
+
 describe('reading the music', () => {
   it('reads a change of track', () => {
     const draft = interpretObjectChange({

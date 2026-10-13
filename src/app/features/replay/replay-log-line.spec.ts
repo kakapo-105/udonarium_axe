@@ -51,6 +51,19 @@ describe('formatReplayElapsed()', () => {
 });
 
 describe('toReplayLogLine()', () => {
+  it('writes a background sound started and stopped, naming the sound', () => {
+    const started = toReplayLogLine(
+      event(ReplayEventKind.MediaBackgroundSound, { isPlaying: true }, { targetId: 'rain' }),
+      { ...names, targetName: (identifier) => (identifier === 'rain' ? '雨音' : identifier) }
+    );
+    expect(started.key).toBe('feature.replay.line.bgsStart');
+    expect(started.params['target']).toBe('雨音');
+    expect(started.icon).toBe('waves');
+
+    const stopped = toReplayLogLine(event(ReplayEventKind.MediaBackgroundSound, { isPlaying: false }), names);
+    expect(stopped.key).toBe('feature.replay.line.bgsStop');
+  });
+
   it('writes a move as from one place to another', () => {
     const line = toReplayLogLine(
       event(ReplayEventKind.ObjectMove, {

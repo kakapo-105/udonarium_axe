@@ -1,6 +1,6 @@
 import { expect, Locator, Page, test } from '@playwright/test';
 
-import { createCharacter, waitAppReady } from './helpers';
+import { createCharacter, revealMenuEntry, waitAppReady } from './helpers';
 
 function newCharacterPiece(page: Page) {
   return page.locator('game-character').filter({ hasText: '新しいキャラクター' }).first();
@@ -20,7 +20,7 @@ async function selectBuffView(page: Page, label: string) {
   await newCharacterPiece(page).dispatchEvent('contextmenu');
   const menu = page.locator('context-menu');
   await expect(menu.locator('li').first()).toBeVisible({ timeout: 5000 });
-  await menu.getByText('バフの表示').hover();
+  await (await revealMenuEntry(page, menu, 'バフの表示')).hover();
   const item = menu.getByText(new RegExp(`^(✔ )?${label}$`));
   await expect(item).toBeVisible({ timeout: 5000 });
   await item.click();
@@ -31,7 +31,7 @@ async function addBuff(page: Page, count = 1) {
   await newCharacterPiece(page).dispatchEvent('contextmenu');
   const menu = page.locator('context-menu');
   await expect(menu.locator('li').first()).toBeVisible({ timeout: 5000 });
-  await menu.getByText('バフ編集').click();
+  await (await revealMenuEntry(page, menu, 'バフ編集')).click();
   const view = page.locator('game-character-buff-view');
   await expect(view).toBeVisible({ timeout: 5000 });
   for (let i = 0; i < count; i++) await view.getByRole('button', { name: /バフを追加/ }).click();
@@ -56,9 +56,9 @@ async function box(locator: Locator) {
 }
 
 /**
- * バフのアイコンと、その中の要素を同じ瞬間に測る。
+ * バフのアイコンと、その中の要素を同時に測る。
  * アイコンは少し縮んだ位置から現れるので、アニメーションが終わるのを待ってから測る。
- * 2 回に分けて測ると、その間に描き直されたときに別々の瞬間の位置を比べてしまう。
+ * 2回に分けて測ると、その間に描き直されたときに別々の時点の位置を比べてしまう。
  */
 async function settledBoxes(badge: Locator, inner: string) {
   return badge.evaluate(async (element, selector) => {
@@ -72,6 +72,14 @@ async function settledBoxes(badge: Locator, inner: string) {
     };
     return { icon: rectOf(element), rounds: rectOf(element.querySelector(selector)!) };
   }, inner);
+}
+
+/**
+ * The buff rows a piece shows in detail, one per buff: the buffs are kept in a container, which is
+ * drawn as a block of its own around them.
+ */
+function buffRows(piece: Locator): Locator {
+  return piece.locator('[game-data-element-buff]:not(:has([game-data-element-buff]))').filter({ hasText: 'R' });
 }
 
 test.describe('コマの頭上表示', () => {
@@ -113,8 +121,14 @@ test.describe('コマの頭上表示', () => {
     const count = await buttons.count();
     expect(count).toBeGreaterThan(3);
 
-    const tops: number[] = [];
-    for (let i = 0; i < count; i++) tops.push((await box(buttons.nth(i))).y);
+    // Read every button in the same moment: the sheet above the row can still grow as it opens,
+    // and buttons measured one by one would straddle that shift.
+    const tops = await actions.evaluate((cluster) =>
+      [...cluster.querySelectorAll('button')]
+        .filter((button) => button.offsetParent !== null && getComputedStyle(button).visibility !== 'hidden')
+        .map((button) => button.getBoundingClientRect().top)
+    );
+    expect(tops).toHaveLength(count);
     expect(Math.max(...tops) - Math.min(...tops), '操作ボタンが 2 段に折り返している').toBeLessThan(6);
     expect(cluster.height, '操作ボタンの帯が 2 段ぶんの高さになっている').toBeLessThan(34);
 
@@ -161,7 +175,7 @@ test.describe('コマの頭上表示', () => {
 
     await selectBuffView(page, '詳細');
     await expect(badges).toHaveCount(0, { timeout: 5000 });
-    await expect(piece.locator('[game-data-element-buff]').filter({ hasText: 'R' }).first()).toBeVisible({
+    await expect(buffRows(piece).first()).toBeVisible({
       timeout: 5000,
     });
 
@@ -251,7 +265,7 @@ test.describe('コマの頭上表示', () => {
     const piece = newCharacterPiece(page);
     await selectBuffView(page, '詳細');
 
-    const rows = piece.locator('[game-data-element-buff]').filter({ hasText: 'R' });
+    const rows = buffRows(piece);
     await expect(rows.first()).toBeVisible({ timeout: 5000 });
 
     const gauge = await box(piece.locator('[data-testid="piece-gauge"]').first());
@@ -284,7 +298,7 @@ test.describe('コマの頭上表示', () => {
     const piece = newCharacterPiece(page);
     await selectBuffView(page, '詳細');
 
-    const rows = piece.locator('[game-data-element-buff]').filter({ hasText: 'R' });
+    const rows = buffRows(piece);
     await expect(rows.first()).toBeVisible({ timeout: 5000 });
 
     const count = await rows.count();

@@ -47,7 +47,7 @@ test.describe('ウィジェットと言語切替', () => {
   });
 
   test('ミニプレイヤーはウィジェットの小窓から出し入れできること', async ({ page }) => {
-    // 時計と違い、こちらは要素を残したまま hidden で隠す。
+    // 時計と違い、こちらは要素を残したままhiddenで隠す。
     const player = page.locator('app-mini-jukebox > *');
     await expect(player).toBeVisible();
 

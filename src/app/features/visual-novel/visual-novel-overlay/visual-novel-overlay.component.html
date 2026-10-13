@@ -191,7 +191,7 @@
       class="absolute bottom-0 -translate-x-1/2 transition-[left,scale,filter] duration-300"
       [class]="
         chara.isActive
-          ? 'z-10 scale-105 brightness-100 saturate-100 ' + portraitEmoteClass()
+          ? classes('z-10 scale-105 brightness-100 saturate-100', portraitEmoteClass())
           : 'scale-100 brightness-[0.55] saturate-[0.85]'
       "
       [class.animate-vn-leave]="chara.isLeaving && isLeavingLine()"
@@ -201,9 +201,11 @@
         <img
           class="w-auto max-w-none drop-shadow-[0_8px_24px_rgba(0,0,0,0.6)]"
           [class]="
-            (isCompact() ? 'h-[46dvh] ' : 'h-[56dvh] ') +
-            (chara.isActive ? speakClass() : '') +
-            (chara.isFlipped ? ' -scale-x-100' : '')
+            classes(
+              isCompact() ? 'h-[46dvh]' : 'h-[56dvh]',
+              chara.isActive ? speakClass() : '',
+              chara.isFlipped ? '-scale-x-100' : ''
+            )
           "
           [src]="chara.url | safe: 'resourceUrl'"
           [alt]="chara.name"
@@ -249,7 +251,7 @@
     @for (message of currentMessageList(); track message.identifier) {
       <div
         class="relative w-max max-w-[min(26rem,78vw)] min-w-32 wrap-break-word text-gray-900"
-        [class]="bubbleBoxClass() + ' ' + bubbleEnterClass() + ' ' + bubbleTextSizeClass()"
+        [class]="classes(bubbleBoxClass(), bubbleEnterClass(), bubbleTextSizeClass())"
       >
         @if (isShoutShape()) {
           <span class="vn-bubble-shout-bg pointer-events-none absolute -inset-x-9 -inset-y-7 bg-white/95"></span>
@@ -288,7 +290,7 @@
     @for (message of currentMessageList(); track message.identifier) {
       <div
         class="rounded-ui-lg relative mx-auto max-w-4xl border border-solid border-white/25 bg-black/70 px-6 py-4 wrap-break-word text-white/95 shadow-xl backdrop-blur-md"
-        [class]="bubbleEnterClass() + ' ' + narrationTextSizeClass()"
+        [class]="classes(bubbleEnterClass(), narrationTextSizeClass())"
       >
         @if (speakerName().length > 0) {
           <span

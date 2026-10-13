@@ -13,7 +13,7 @@ const base = process.env['DOCS_BASE'] ?? '/udonarium_axe/';
 // spelled out here. Change it together with the Pages settings.
 const siteUrl = process.env['DOCS_SITE_URL'] ?? `https://xelltis.github.io${base}`;
 const siteName = 'Udonarium Axe';
-const siteDescription = 'ブラウザで動く TRPG オンラインセッション支援ツール — 利用ガイド';
+const siteDescription = 'ブラウザで動くTRPGオンラインセッション支援ツールの利用ガイド';
 const ogImage = `${siteUrl}og.jpg`;
 
 /**
@@ -206,7 +206,7 @@ export default defineConfig({
           text: 'ロールと公開範囲',
           items: [
             { text: 'ロール（GM / PL / 見学）', link: '/manual/roles' },
-            { text: 'PL ツールバー', link: '/manual/pl-tools' },
+            { text: 'PLツールバー', link: '/manual/pl-tools' },
             { text: 'ホットバー', link: '/manual/hotbar' },
             { text: '情報の公開範囲', link: '/manual/disclosure' },
             { text: 'オブジェクト一覧（GM）', link: '/manual/gm-object-list' },
@@ -222,9 +222,12 @@ export default defineConfig({
             { text: 'テーブル設定', link: '/manual/table-setting' },
             { text: '暗闇・視界・光源', link: '/manual/vision-lighting' },
             { text: '移動範囲', link: '/manual/move-range' },
+            { text: '交戦エリア', link: '/manual/engagement-zone' },
+            { text: '乗り物に乗る', link: '/manual/ride' },
             { text: '同行（パーティ）', link: '/manual/party' },
             { text: '地形', link: '/manual/terrain' },
             { text: 'スイッチ', link: '/manual/switch' },
+            { text: 'ダンジョンドリィマスターモード', link: '/manual/dungeondry-master' },
             { text: 'マップマスク', link: '/manual/map-mask' },
             { text: 'ホワイトボード', link: '/manual/white-board' },
           ],
@@ -260,6 +263,7 @@ export default defineConfig({
           items: [
             { text: '画像', link: '/manual/images' },
             { text: 'ジュークボックス', link: '/manual/jukebox' },
+            { text: '音の設定', link: '/manual/sound-settings' },
             { text: 'カットイン', link: '/manual/cut-in' },
             { text: 'マップ演出（エフェクト）', link: '/manual/map-effects' },
             { text: 'ビジュアルノベルモード', link: '/manual/visual-novel' },
@@ -282,6 +286,19 @@ export default defineConfig({
           text: 'リリースノート',
           items: [
             { text: '一覧', link: '/release-notes/' },
+            { text: 'v1.66.0', link: '/release-notes/v1.66.0' },
+            { text: 'v1.65.2', link: '/release-notes/v1.65.2' },
+            { text: 'v1.65.1', link: '/release-notes/v1.65.1' },
+            { text: 'v1.65.0', link: '/release-notes/v1.65.0' },
+            { text: 'v1.64.1', link: '/release-notes/v1.64.1' },
+            { text: 'v1.64.0', link: '/release-notes/v1.64.0' },
+            { text: 'v1.63.0', link: '/release-notes/v1.63.0' },
+            { text: 'v1.62.3', link: '/release-notes/v1.62.3' },
+            { text: 'v1.62.2', link: '/release-notes/v1.62.2' },
+            { text: 'v1.62.1', link: '/release-notes/v1.62.1' },
+            { text: 'v1.62.0', link: '/release-notes/v1.62.0' },
+            { text: 'v1.61.1', link: '/release-notes/v1.61.1' },
+            { text: 'v1.61.0', link: '/release-notes/v1.61.0' },
             { text: 'v1.60.0', link: '/release-notes/v1.60.0' },
             { text: 'v1.59.0', link: '/release-notes/v1.59.0' },
             { text: 'v1.58.0', link: '/release-notes/v1.58.0' },
@@ -364,9 +381,9 @@ export default defineConfig({
           ],
         },
         {
-          text: 'Axe について',
+          text: 'Axeについて',
           items: [
-            { text: 'Udonarium Axe とは', link: '/guide/getting-started' },
+            { text: 'Udonarium Axeとは', link: '/guide/getting-started' },
             { text: 'できること', link: '/guide/features' },
           ],
         },

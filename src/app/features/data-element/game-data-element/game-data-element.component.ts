@@ -1,4 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  ElementRef,
+  inject,
+  Injector,
+  input,
+  signal,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { EffectCastService } from '@axe/application/effect/effect-cast.service';
 import { EffectLibraryService } from '@axe/application/effect/effect-library.service';
@@ -7,22 +18,16 @@ import { PointerDeviceService } from '@axe/application/input/pointer-device.serv
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { RangeShapeInvokeService } from '@axe/application/tabletop/range-shape-invoke.service';
+import { BottomSheetService } from '@axe/application/ui/bottom-sheet.service';
 import { ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { DataElementDragService } from '@axe/application/ui/data-element-drag.service';
 import { ModalService } from '@axe/application/ui/modal.service';
 import { PanelService } from '@axe/application/ui/panel.service';
-import { buildReorderContextMenu } from '@axe/application/ui/reorder-context-menu';
 import { UiSignalService } from '@axe/application/ui/ui-signal.service';
+import { ViewportService } from '@axe/application/ui/viewport.service';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { GameCharacter } from '@axe/domain/character/game-character';
-import {
-  playsEffectOnChange,
-  playsSoundOnChange,
-  RESOURCE_SOUND_SET_OPTIONS,
-  ResourceSoundSet,
-  soundSetOnChange,
-} from '@axe/domain/character/resource-feedback';
 import { ResourceSliderRange, resourceSliderRange, showsResourceSlider } from '@axe/domain/character/resource-slider';
 import {
   DataElement,
@@ -34,13 +39,6 @@ import {
 } from '@axe/domain/data/data-element';
 import { calcSourceIdentifiers, evaluateCalcElement } from '@axe/domain/data/data-element-calc-env';
 import {
-  duplicateDataElement,
-  findElementTemplateHolder,
-  findElementTemplateOwner,
-  readElementTemplates,
-  saveElementTemplate,
-} from '@axe/domain/data/data-element-templates';
-import {
   buildTableColumnHeaderGroups,
   canRenderAsTable as canRenderAsTableShared,
   getRawTableRows,
@@ -51,21 +49,44 @@ import {
   type TableColumnHeaderGroup as DataElementTableColumnHeaderGroup,
 } from '@axe/domain/data/table-layout';
 import {
-  canAcceptChildRole,
+  openAddFieldPicker,
+  openDataElementEditor,
+} from '@axe/features/data-element/data-element-editor/open-data-element-editor';
+import {
+  buildContainerActions,
+  buildFieldActions,
+  buildMoveActions,
+  type DataElementAction,
+  type DataElementActionId,
+  toContextMenuActions,
+} from '@axe/features/data-element/game-data-element/data-element-actions';
+import { DataElementEditService } from '@axe/features/data-element/game-data-element/data-element-edit.service';
+import {
+  HEADING_ICON_GROUPS,
+  type HeadingIconGroup,
+} from '@axe/features/data-element/game-data-element/data-element-icons';
+import { IN_DATA_ELEMENT_SHEET } from '@axe/features/data-element/game-data-element/data-element-sheet-host';
+import { DataElementTouchDrag } from '@axe/features/data-element/game-data-element/data-element-touch-drag';
+import { FIELD_TYPE_CATALOG } from '@axe/features/data-element/game-data-element/field-type-catalog';
+import {
   canDropStructureElement,
   type DataElementDropPosition,
   resolveDropPosition as resolveDropPositionShared,
 } from '@axe/features/data-element/game-data-element/game-data-element-structure-drop';
 import {
-  createFieldElement,
-  createGroupElement,
-  insertElementAfter,
   moveStructureElement,
-  type NewElementNames,
-  placeElementTemplate,
+  type SiblingMove,
 } from '@axe/features/data-element/game-data-element/game-data-element-structure-ops';
 import { GameDataElementTableViewComponent } from '@axe/features/data-element/game-data-element/game-data-element-table-view.component';
-import { escapeHtml, isUrlText } from '@axe/features/data-element/game-data-element/game-data-element-utils';
+import {
+  escapeHtml,
+  fieldHasOptions,
+  isTableCellField as isTableCellFieldShared,
+  isUrlText,
+  tableCellLineage,
+} from '@axe/features/data-element/game-data-element/game-data-element-utils';
+import { canStep, numericInputMode, stepValue } from '@axe/features/data-element/game-data-element/value-stepper';
+import { GameDataElementFieldOptionsComponent } from '@axe/features/data-element/game-data-element-field-options/game-data-element-field-options.component';
 import { GameDataElementRangeShapeComponent } from '@axe/features/data-element/game-data-element-range-shape/game-data-element-range-shape.component';
 import { FileSelecterComponent } from '@axe/ui/components/file-selecter/file-selecter.component';
 import { NgSelectWindowDirective } from '@axe/ui/directives/ng-select-window.directive';
@@ -73,6 +94,9 @@ import { LinkifyPipe } from '@axe/ui/pipes/linkify.pipe';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
 import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
+
+/** How long after the last press of a ± its change is written, so a run of presses is one change. */
+export const STEP_COMMIT_MS = 450;
 
 @Component({
   selector: 'game-data-element, [game-data-element]',
@@ -88,6 +112,7 @@ import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
     GameDataElementTableViewComponent,
     TranslocoModule,
     GameDataElementRangeShapeComponent,
+    GameDataElementFieldOptionsComponent,
   ],
   host: {
     class:
@@ -100,6 +125,7 @@ import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
     '[class.elm-drop-after]': "structureDropPosition() === 'after'",
     '[class.elm-drop-inside]': "structureDropPosition() === 'inside'",
     '[attr.inert]': "isReadOnly() ? '' : null",
+    '[attr.data-gde-id]': 'gameDataElement().identifier',
   },
 })
 export class GameDataElementComponent {
@@ -115,6 +141,15 @@ export class GameDataElementComponent {
   private readonly effectLibrary = inject(EffectLibraryService);
   private readonly effectCast = inject(EffectCastService);
   private readonly rolePermission = inject(RolePermissionService);
+  private readonly edit = inject(DataElementEditService);
+  private readonly bottomSheet = inject(BottomSheetService);
+  private readonly hostElement = inject<ElementRef<HTMLElement>>(ElementRef);
+  /** Whether the screen is a touch screen, where a handle is dragged by the finger rather than the browser. */
+  protected readonly isTouch = inject(ViewportService).isTouch;
+  private touchDrag: DataElementTouchDrag | null = null;
+  private readonly injector = inject(Injector);
+  /** Whether this row is drawn on a full sheet, which gives it ± buttons and an editor of its own. */
+  protected readonly inSheet = inject(IN_DATA_ELEMENT_SHEET, { optional: true }) ?? false;
 
   readonly isReadOnly = computed(() => {
     this.objectChange.trackMyCursor();
@@ -146,7 +181,6 @@ export class GameDataElementComponent {
 
   readonly structureDropPosition = signal<DataElementDropPosition | null>(null);
   readonly fieldOptionsOpen = signal(false);
-  readonly soundSetOptions = RESOURCE_SOUND_SET_OPTIONS;
 
   private trackTableDependencies(): void {
     const element = this.gameDataElement();
@@ -301,6 +335,60 @@ export class GameDataElementComponent {
     }
   }
 
+  /**
+   * Whether this row shows ± buttons beside its number: on a sheet, while it is read rather than
+   * edited. The buttons themselves show only on a narrow sheet or a touch screen.
+   */
+  showsSteppers(): boolean {
+    return this.inSheet && !this.isEdit() && !this.isImage();
+  }
+
+  /** The keyboard a number box asks a phone for, given the lowest it may go. */
+  inputModeFor(min: string): 'decimal' | null {
+    return numericInputMode(min);
+  }
+
+  /** Whether a ± on a number would change it, so one against its bound is greyed out. */
+  canStepValue(delta: number): boolean {
+    return (
+      !this.isValueLocked() && canStep(this._value(), delta, { min: this.valueMinAttr(), max: this.valueMaxAttr() })
+    );
+  }
+
+  /** Whether a ± on what is left of a resource would change it. */
+  canStepCurrentValue(delta: number): boolean {
+    return (
+      !this.isValueLocked() &&
+      canStep(this._currentValue(), delta, { min: this.currentValueMinAttr(), max: this.currentValueMaxAttr() })
+    );
+  }
+
+  /**
+   * Moves a number one step from its ± button.
+   *
+   * The change is written a moment after the last press, so a run of presses reaches the room, and
+   * the piece, as one change rather than one for every press.
+   */
+  stepNumberValue(delta: number): void {
+    if (this.isValueLocked()) return;
+    const next = stepValue(this._value(), delta, { min: this.valueMinAttr(), max: this.valueMaxAttr() });
+    if (next === null) return;
+    this._value.set(next);
+    this.setUpdateTimer(STEP_COMMIT_MS);
+  }
+
+  /** Moves what is left of a resource one step from its ± button, written as one change after a run of presses. */
+  stepCurrentValue(delta: number): void {
+    if (this.isValueLocked()) return;
+    const next = stepValue(this._currentValue(), delta, {
+      min: this.currentValueMinAttr(),
+      max: this.currentValueMaxAttr(),
+    });
+    if (next === null) return;
+    this._currentValue.set(next);
+    this.setUpdateTimer(STEP_COMMIT_MS);
+  }
+
   private clampNumeric(input: number | string, minStr: string, maxStr: string): number | string {
     if (input === '' || input == null) return input;
     const num = Number(input);
@@ -329,98 +417,18 @@ export class GameDataElementComponent {
     if (el) el.setAttribute('cs-icon', value.trim());
   }
 
-  /**
-   * The choices a select field offers, as written in its settings. Setting blank text removes them.
-   */
-  get choicesText(): string {
-    return this.attrText(DataElementAttribute.CHOICES);
-  }
-  set choicesText(value: string) {
-    this.setFieldAttribute(DataElementAttribute.CHOICES, value);
-  }
-
   /** The unit shown after a number or resource field's value. Setting blank text removes it. */
   get unitText(): string {
     return this.attrText(DataElementAttribute.UNIT);
   }
-  set unitText(value: string) {
-    this.setFieldAttribute(DataElementAttribute.UNIT, value);
-  }
-
   /** The lowest value a number field takes, as written in its settings; empty for no limit. */
   get minText(): string {
     return this.attrText(DataElementAttribute.MIN);
   }
-  set minText(value: string | number | null | undefined) {
-    this.setFieldAttribute(DataElementAttribute.MIN, value);
-  }
-
   /** The highest value a number field takes, as written in its settings; empty for no limit. */
   get maxText(): string {
     return this.attrText(DataElementAttribute.MAX);
   }
-  set maxText(value: string | number | null | undefined) {
-    this.setFieldAttribute(DataElementAttribute.MAX, value);
-  }
-
-  /**
-   * A resource's minimum before its correction is added, reading the plain minimum where no base is
-   * set. Setting blank text removes it.
-   */
-  get minBaseText(): string {
-    return this.attrText(DataElementAttribute.MIN_BASE, DataElementAttribute.MIN);
-  }
-  set minBaseText(value: string | number | null | undefined) {
-    this.setFieldAttribute(DataElementAttribute.MIN_BASE, value);
-  }
-
-  /** The amount added to a resource's minimum base; empty for none. */
-  get minCorrectionText(): string {
-    return this.attrText(DataElementAttribute.MIN_CORRECTION);
-  }
-  set minCorrectionText(value: string | number | null | undefined) {
-    this.setFieldAttribute(DataElementAttribute.MIN_CORRECTION, value);
-  }
-
-  /**
-   * A resource's maximum before its correction is added, reading the plain maximum where no base is
-   * set. Setting it also moves the resource's maximum to the new effective one.
-   */
-  get maxBaseText(): string {
-    return this.attrText(DataElementAttribute.MAX_BASE, DataElementAttribute.MAX);
-  }
-  set maxBaseText(value: string | number | null | undefined) {
-    this.setFieldAttribute(DataElementAttribute.MAX_BASE, value);
-    this.syncCurrentMaxToEffective();
-  }
-
-  /**
-   * The amount added to a resource's maximum base. Setting it also moves the resource's maximum to
-   * the new effective one.
-   */
-  get maxCorrectionText(): string {
-    return this.attrText(DataElementAttribute.MAX_CORRECTION);
-  }
-  set maxCorrectionText(value: string | number | null | undefined) {
-    this.setFieldAttribute(DataElementAttribute.MAX_CORRECTION, value);
-    this.syncCurrentMaxToEffective();
-  }
-
-  /**
-   * After a max-base or max-correction edit, push the current max (value SyncVar)
-   * to the new effective max so the displayed "/X" follows the configured maximum.
-   */
-  private syncCurrentMaxToEffective(): void {
-    const el = this.gameDataElement();
-    if (!el) return;
-    const newEffectiveMax = el.effectiveMax;
-    if (newEffectiveMax == null) return;
-    if (this._value() !== newEffectiveMax) {
-      this._value.set(newEffectiveMax);
-      this.setUpdateTimer();
-    }
-  }
-
   /**
    * The minimum in force once base and correction are added up, as text; empty when there is none.
    */
@@ -444,61 +452,6 @@ export class GameDataElementComponent {
     this.setFieldAttribute(DataElementAttribute.FORMULA, value);
   }
 
-  /** The label a check field in a table carries beside its box. Setting blank text removes it. */
-  get tableCellText(): string {
-    return this.attrText(DataElementAttribute.CELL_TEXT);
-  }
-  set tableCellText(value: string) {
-    this.setFieldAttribute(DataElementAttribute.CELL_TEXT, value);
-  }
-
-  /** The heading of the column this field makes in a table. Setting blank text removes it. */
-  get columnLabelText(): string {
-    return this.attrText(DataElementAttribute.COLUMN_LABEL);
-  }
-  set columnLabelText(value: string) {
-    this.setFieldAttribute(DataElementAttribute.COLUMN_LABEL, value);
-  }
-
-  /**
-   * The heading that gathers this field's column together with its neighbours above a table's
-   * column headings.
-   */
-  get columnGroupText(): string {
-    return this.attrText(DataElementAttribute.COLUMN_GROUP);
-  }
-  set columnGroupText(value: string) {
-    this.setFieldAttribute(DataElementAttribute.COLUMN_GROUP, value);
-  }
-
-  /** The heading over the column of row names while this group or section is shown as a table. */
-  get rowHeaderLabelText(): string {
-    return this.attrText(DataElementAttribute.ROW_HEADER_LABEL);
-  }
-  set rowHeaderLabelText(value: string) {
-    this.setFieldAttribute(DataElementAttribute.ROW_HEADER_LABEL, value);
-  }
-
-  /**
-   * Whether this table field is a gap cell, which makes its column a gap between skill columns in
-   * judgement. Turning it on gives the field a default column heading where it has none.
-   */
-  get isGapCell(): boolean {
-    return this.attrText(DataElementAttribute.CELL_KIND) === 'gap';
-  }
-  set isGapCell(value: boolean) {
-    const element = this.gameDataElement();
-    if (value) {
-      element.setAttribute(DataElementAttribute.CELL_KIND, 'gap');
-      if (!element.getAttribute(DataElementAttribute.COLUMN_LABEL).trim()) {
-        element.setAttribute(DataElementAttribute.COLUMN_LABEL, this.t('feature.dataElement.defaults.gapCellLabel'));
-      }
-    } else {
-      element.removeAttribute(DataElementAttribute.CELL_KIND);
-    }
-    this.objectChange.notifyChanged(element.identifier);
-  }
-
   readonly calcResult = computed(() => {
     const el = this.gameDataElement();
     // The result reads the whole sheet, so it goes stale on a change to any part of it, and on
@@ -511,71 +464,17 @@ export class GameDataElementComponent {
   readonly iconPickerOpen = signal(false);
   readonly templateMenuOpen = signal(false);
 
-  static readonly ICON_GROUPS: { labelKey: string; icons: string[] }[] = [
-    {
-      labelKey: 'feature.dataElement.iconGroup.character',
-      icons: [
-        'person',
-        'face',
-        'account_circle',
-        'groups',
-        'man',
-        'woman',
-        'child_care',
-        'elderly',
-        'back_hand',
-        'accessibility',
-        'roller_skating',
-      ],
-    },
-    {
-      labelKey: 'feature.dataElement.iconGroup.combat',
-      icons: [
-        'shield',
-        'security',
-        'gavel',
-        'sports_martial_arts',
-        'local_fire_department',
-        'bolt',
-        'whatshot',
-        'flash_on',
-      ],
-    },
-    {
-      labelKey: 'feature.dataElement.iconGroup.status',
-      icons: ['favorite', 'health_and_safety', 'star', 'grade', 'bar_chart', 'trending_up', 'speed', 'military_tech'],
-    },
-    {
-      labelKey: 'feature.dataElement.iconGroup.item',
-      icons: ['inventory_2', 'backpack', 'category', 'sell', 'local_pharmacy', 'build', 'key', 'lock'],
-    },
-    {
-      labelKey: 'feature.dataElement.iconGroup.magic',
-      icons: ['auto_awesome', 'flare', 'nights_stay', 'wb_sunny', 'blur_on', 'casino', 'psychology', 'emoji_events'],
-    },
-    {
-      labelKey: 'feature.dataElement.iconGroup.memo',
-      icons: ['info', 'note', 'description', 'edit_note', 'comment', 'chat', 'sticky_note_2', 'assignment'],
-    },
-  ];
+  static readonly ICON_GROUPS: readonly HeadingIconGroup[] = HEADING_ICON_GROUPS;
 
   readonly iconGroups = GameDataElementComponent.ICON_GROUPS.map((group) => ({
     label: this.t(group.labelKey),
     icons: group.icons,
   }));
 
-  readonly fieldTypeItems: { type: DataElementFieldTypeValue; label: string }[] = [
-    { type: DataElementFieldType.TEXT, label: this.t('feature.dataElement.fieldType.text') },
-    { type: DataElementFieldType.NUMBER, label: this.t('feature.dataElement.fieldType.number') },
-    { type: DataElementFieldType.RESOURCE, label: this.t('feature.dataElement.fieldType.resource') },
-    { type: DataElementFieldType.LONG_TEXT, label: this.t('feature.dataElement.fieldType.longText') },
-    { type: DataElementFieldType.CHECK, label: this.t('feature.dataElement.fieldType.check') },
-    { type: DataElementFieldType.SELECT, label: this.t('feature.dataElement.fieldType.select') },
-    { type: DataElementFieldType.CALC, label: this.t('feature.dataElement.fieldType.calc') },
-    { type: DataElementFieldType.IMAGE, label: this.t('feature.dataElement.fieldType.image') },
-    { type: DataElementFieldType.RANGE_SHAPE, label: this.t('feature.dataElement.fieldType.rangeShape') },
-    { type: DataElementFieldType.EFFECT, label: this.t('feature.dataElement.fieldType.effect') },
-  ];
+  readonly fieldTypeItems: { type: DataElementFieldTypeValue; label: string }[] = FIELD_TYPE_CATALOG.map((entry) => ({
+    type: entry.type,
+    label: this.t(entry.labelKey),
+  }));
 
   /** The effects on offer, held by name so the same row works in any room. */
   readonly effectNames = computed<string[]>(() => this.effectLibrary.presets().map((preset) => preset.name));
@@ -601,6 +500,7 @@ export class GameDataElementComponent {
   private updateTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => this.touchDrag?.cancel());
     effect(() => {
       const element = this.gameDataElement();
       if (element) {
@@ -656,12 +556,8 @@ export class GameDataElementComponent {
    * element cannot hold a field.
    */
   addElement() {
-    const parentElement = this.gameDataElement();
     if (!this.canAddChildFieldElement()) return;
-
-    const fieldElement = createFieldElement(parentElement, this.newElementNames());
-    parentElement.appendChild(fieldElement);
-    this.notifyStructureChanged(parentElement, fieldElement);
+    this.edit.addFieldInside(this.gameDataElement());
   }
 
   /**
@@ -669,12 +565,7 @@ export class GameDataElementComponent {
    * parent cannot hold a field.
    */
   addSiblingElement() {
-    const parentElement = this.getDataElementParent();
-    if (!parentElement || !canAcceptChildRole(parentElement, DataElementRole.FIELD)) return;
-
-    const fieldElement = createFieldElement(parentElement, this.newElementNames());
-    insertElementAfter(fieldElement, this.gameDataElement(), parentElement);
-    this.notifyStructureChanged(parentElement, fieldElement);
+    this.edit.addFieldAfter(this.gameDataElement());
   }
 
   /**
@@ -682,28 +573,23 @@ export class GameDataElementComponent {
    * this element cannot hold a group.
    */
   addGroupElement() {
-    const parentElement = this.gameDataElement();
     if (!this.canAddChildGroupElement()) return;
-
-    const groupElement = createGroupElement(parentElement, this.newElementNames());
-    parentElement.appendChild(groupElement);
-    this.notifyStructureChanged(parentElement, groupElement);
+    this.edit.addGroupInside(this.gameDataElement());
   }
 
   /** Whether this element may hold a new group, which shows the button for adding one. */
   canAddChildGroupElement(): boolean {
-    return canAcceptChildRole(this.gameDataElement(), DataElementRole.GROUP);
+    return this.edit.canAddGroupInside(this.gameDataElement());
   }
 
   /** Whether this element may hold a new field, which shows the button for adding one inside it. */
   canAddChildFieldElement(): boolean {
-    return canAcceptChildRole(this.gameDataElement(), DataElementRole.FIELD);
+    return this.edit.canAddFieldInside(this.gameDataElement());
   }
 
   /** Whether a new field may go in beside this one, which shows the add row button on a field. */
   canAddSiblingFieldElement(): boolean {
-    const parentElement = this.getDataElementParent();
-    return !!parentElement && canAcceptChildRole(parentElement, DataElementRole.FIELD);
+    return this.edit.canAddFieldAfter(this.gameDataElement());
   }
 
   /**
@@ -711,7 +597,7 @@ export class GameDataElementComponent {
    * long as it has a parent to go into.
    */
   canDuplicateElement(): boolean {
-    return !this.isImage() && this.getDataElementParent() !== null;
+    return !this.isImage() && this.edit.canDuplicate(this.gameDataElement());
   }
 
   /**
@@ -719,14 +605,8 @@ export class GameDataElementComponent {
    * picture in an image list or an element with no parent.
    */
   duplicateElement(): void {
-    const element = this.gameDataElement();
-    const parentElement = this.getDataElementParent();
-    if (!parentElement || this.isImage()) return;
-
-    const copy = duplicateDataElement(element, parentElement);
-    if (!copy) return;
-    insertElementAfter(copy, element, parentElement);
-    this.notifyStructureChanged(parentElement, copy);
+    if (this.isImage()) return;
+    this.edit.duplicate(this.gameDataElement());
   }
 
   /**
@@ -734,10 +614,7 @@ export class GameDataElementComponent {
    * an object that keeps templates, such as a character, rather than inside a saved template.
    */
   canSaveAsTemplate(): boolean {
-    const element = this.gameDataElement();
-    const role = element.fieldRole;
-    if (this.isImage() || (role !== DataElementRole.GROUP && role !== DataElementRole.SECTION)) return false;
-    return findElementTemplateOwner(element) !== null;
+    return !this.isImage() && this.edit.canSaveAsTemplate(this.gameDataElement());
   }
 
   /**
@@ -745,25 +622,13 @@ export class GameDataElementComponent {
    * again from the template menu.
    */
   saveAsTemplate(): void {
-    if (!this.canSaveAsTemplate()) return;
-    const owner = findElementTemplateOwner(this.gameDataElement());
-    if (!owner) return;
-    const template = saveElementTemplate(owner, this.gameDataElement());
-    const holder = template?.parent;
-    if (template && holder instanceof DataElement) this.notifyStructureChanged(holder, template);
-    this.objectChange.notifyChanged(owner.identifier);
+    if (this.canSaveAsTemplate()) this.edit.saveAsTemplate(this.gameDataElement());
   }
 
   readonly elementTemplates = computed<DataElement[]>(() => {
     const element = this.gameDataElement();
     this.objectChange.versionOf(element.identifier)();
-    if (this.isImage() || element.fieldRole === DataElementRole.FIELD) return [];
-    const owner = findElementTemplateOwner(element);
-    if (!owner) return [];
-    this.objectChange.versionOf(owner.identifier)();
-    const holder = findElementTemplateHolder(owner);
-    if (holder) this.objectChange.versionOf(holder.identifier)();
-    return readElementTemplates(owner);
+    return this.isImage() ? [] : this.edit.templatesFor(element);
   });
 
   /**
@@ -774,9 +639,7 @@ export class GameDataElementComponent {
    */
   insertTemplate(template: DataElement): void {
     this.templateMenuOpen.set(false);
-    const placed = placeElementTemplate(template, this.gameDataElement());
-    if (!placed) return;
-    this.notifyStructureChanged(placed.parent, placed.element);
+    this.edit.insertTemplate(template, this.gameDataElement());
   }
 
   /**
@@ -785,17 +648,8 @@ export class GameDataElementComponent {
    */
   deleteTemplate(template: DataElement, event: Event): void {
     event.stopPropagation();
-    const holder = template.parent;
-    template.destroy();
-    if (holder instanceof DataElement) this.notifyStructureChanged(holder);
+    this.edit.deleteTemplate(template);
     if (this.elementTemplates().length < 1) this.templateMenuOpen.set(false);
-  }
-
-  private newElementNames(): NewElementNames {
-    return {
-      field: this.t('feature.dataElement.defaults.newTag'),
-      group: this.t('feature.dataElement.defaults.newGroup'),
-    };
   }
 
   /**
@@ -879,31 +733,155 @@ export class GameDataElementComponent {
    */
   onStructureHandleContextMenu(event: MouseEvent): void {
     if (!this.isEdit() || this.isImage() || !this.pointerDeviceService.isAllowedToOpenContextMenu) return;
-    const element = this.gameDataElement();
-    const parent = this.getDataElementParent(element);
-    if (!parent) return;
-    const siblings = parent.children.filter((child): child is DataElement => child instanceof DataElement);
-    const index = siblings.indexOf(element);
-    if (index < 0) return;
-    const move = (target: DataElement, position: 'before' | 'after') => {
-      if (canDropStructureElement(element, target, position, this.depth())) {
-        this.applyStructureMove(element, target, position);
-      }
-    };
-    const actions = buildReorderContextMenu(
-      { index, count: siblings.length },
-      {
-        moveToTop: () => move(siblings[0], 'before'),
-        moveUp: () => move(siblings[index - 1], 'before'),
-        moveDown: () => move(siblings[index + 1], 'after'),
-        moveToBottom: () => move(siblings[siblings.length - 1], 'after'),
-      },
-      this.t
-    );
-    if (actions.length === 0) return;
+    const moves = this.moveActions();
+    if (moves.length === 0) return;
     event.preventDefault();
     event.stopPropagation();
-    this.contextMenuService.open(this.pointerDeviceService.pointers[0], actions, element.name);
+    const actions = toContextMenuActions(moves, (id) => this.runAction(id), this.t);
+    this.contextMenuService.open(this.pointerDeviceService.pointers[0], actions, this.gameDataElement().name);
+  }
+
+  /**
+   * Opens this row's editor in a sheet from the bottom, from its name or its "⋯" on a narrow sheet,
+   * where its buttons have no room beside it.
+   */
+  openEditor(event?: Event, options: { focusName?: boolean } = {}): void {
+    openDataElementEditor(this.bottomSheet, this.t, this.gameDataElement(), {
+      host: event?.currentTarget instanceof Element ? event.currentTarget : null,
+      injector: this.injector,
+      focusName: options.focusName,
+    });
+  }
+
+  /**
+   * Opens the choice of kind for a field to add at the end of this group, from the "+" a narrow
+   * sheet puts there; the field's editor takes over once a kind is picked.
+   */
+  openAddField(event?: Event): void {
+    openAddFieldPicker(this.bottomSheet, this.t, this.gameDataElement(), {
+      host: event?.currentTarget instanceof Element ? event.currentTarget : null,
+      injector: this.injector,
+    });
+  }
+
+  /** Adds a group at the end of this section and opens its editor with the name ready to be typed over. */
+  addGroupAndEdit(event?: Event): void {
+    const group = this.edit.addGroupInside(this.gameDataElement());
+    if (!group) return;
+    openDataElementEditor(this.bottomSheet, this.t, group, {
+      host: event?.currentTarget instanceof Element ? event.currentTarget : null,
+      injector: this.injector,
+      focusName: true,
+    });
+  }
+
+  /** The actions of this field row, in the order its bar shows them. */
+  fieldActions(): DataElementAction[] {
+    return buildFieldActions({
+      isPopup: this.isPopupDataElement(),
+      hasFieldOptions: this.shouldShowFieldOptions(),
+      fieldOptionsOpen: this.fieldOptionsOpen(),
+      canAddSibling: this.canAddSiblingFieldElement(),
+      canDuplicate: this.canDuplicateElement(),
+    });
+  }
+
+  /** The actions of this group or section heading, in the order its bar shows them. */
+  containerActions(): DataElementAction[] {
+    return buildContainerActions({
+      isImage: this.isImage(),
+      isPopup: this.isPopupDataElement(),
+      canToggleTableView: this.canToggleTableViewMode(),
+      isTableView: this.isTableViewMode(),
+      hasTableSettings: this.shouldShowContainerOptions(),
+      settingsOpen: this.fieldOptionsOpen(),
+      canDuplicate: this.canDuplicateElement(),
+      canSaveTemplate: this.canSaveAsTemplate(),
+      canAddGroup: this.canAddChildGroupElement(),
+      hasTemplates: this.elementTemplates().length > 0,
+      templateMenuOpen: this.templateMenuOpen(),
+      canAddField: this.canAddChildFieldElement(),
+    });
+  }
+
+  /** The moves this element can make among the ones beside it. */
+  moveActions(): DataElementAction[] {
+    const siblings = this.siblingElements();
+    const index = siblings.indexOf(this.gameDataElement());
+    if (index < 0) return [];
+    return buildMoveActions({ index, count: siblings.length, hasMoveTargets: false });
+  }
+
+  /** Does what an action of this row or heading stands for. */
+  runAction(id: DataElementActionId, event?: MouseEvent): void {
+    switch (id) {
+      case 'copyReference':
+        return this.copyReferencePath(event);
+      case 'togglePopup':
+        return this.togglePopupDataElement(event);
+      case 'fieldOptions':
+      case 'tableSettings':
+        return this.toggleFieldOptions();
+      case 'addSibling':
+        return this.addSiblingElement();
+      case 'tableView':
+        return this.toggleTableViewMode();
+      case 'duplicate':
+        return this.duplicateElement();
+      case 'saveTemplate':
+        return this.saveAsTemplate();
+      case 'addImage':
+        return this.addImageElement();
+      case 'addGroup':
+        return this.addGroupElement();
+      case 'addFromTemplate':
+        this.templateMenuOpen.update((isOpen) => !isOpen);
+        return;
+      case 'addField':
+        return this.addElement();
+      case 'moveToTop':
+      case 'moveUp':
+      case 'moveDown':
+      case 'moveToBottom':
+        return this.moveAmongSiblings(id);
+      case 'moveTo':
+        return;
+      case 'delete':
+        return this.deleteElement();
+    }
+  }
+
+  private siblingElements(): DataElement[] {
+    const parent = this.getDataElementParent();
+    if (!parent) return [];
+    return parent.children.filter((child): child is DataElement => child instanceof DataElement);
+  }
+
+  /** Moves this element to the top, up one, down one or to the bottom of the ones beside it. */
+  private moveAmongSiblings(move: SiblingMove): void {
+    this.edit.move(this.gameDataElement(), move);
+  }
+
+  /**
+   * Starts carrying this row by its handle with a finger or a pen, among the rows beside it. The
+   * browser's own drag, which a mouse uses, does not start from a touch.
+   */
+  onHandlePointerDown(event: PointerEvent): void {
+    if (event.pointerType === 'mouse' || !this.isEdit() || this.isImage() || this.isReadOnly()) return;
+    this.touchDrag?.cancel();
+    this.touchDrag = new DataElementTouchDrag(
+      this.gameDataElement().identifier,
+      event.currentTarget as HTMLElement,
+      this.hostElement.nativeElement,
+      event,
+      {
+        onStart: () => this.pointerDeviceService.cancelPendingContextMenu(),
+        onDrop: (targetId, side) => {
+          const target = this.objectStore.get<DataElement>(targetId);
+          if (target) this.edit.moveBeside(this.gameDataElement(), target, side);
+        },
+      }
+    );
   }
 
   private getDraggedElement(event: DragEvent): DataElement | null {
@@ -943,18 +921,12 @@ export class GameDataElementComponent {
   }
 
   private notifyStructureChanged(...elements: (DataElement | undefined)[]): void {
-    const notifiedIds = new Set<string>();
-    for (const element of elements) {
-      if (!element || notifiedIds.has(element.identifier)) continue;
-      element.update();
-      this.objectChange.notifyChanged(element.identifier);
-      notifiedIds.add(element.identifier);
-    }
+    this.edit.notify(...elements);
   }
 
-  /** Destroys this element and everything under it. */
+  /** Destroys this element and everything under it, leaving a notice that offers to put it back. */
   deleteElement() {
-    this.gameDataElement().destroy();
+    this.edit.delete(this.gameDataElement());
   }
 
   /**
@@ -981,9 +953,7 @@ export class GameDataElementComponent {
    * settings.
    */
   setElementFieldType(fieldType: DataElementFieldTypeValue) {
-    const element = this.gameDataElement();
-    element.setFieldType(fieldType);
-    element.setAttribute('type', DataElement.dataTypeFromFieldType(fieldType));
+    this.edit.setFieldType(this.gameDataElement(), fieldType);
     this.fieldOptionsOpen.set(false);
   }
 
@@ -998,15 +968,9 @@ export class GameDataElementComponent {
    */
   shouldShowFieldOptions(): boolean {
     if (!this.isEdit() || this.isImage()) return false;
-    const fieldType = this.gameDataElement().fieldType;
-    return (
-      this.isTableCellField() ||
-      fieldType === DataElementFieldType.SELECT ||
-      fieldType === DataElementFieldType.NUMBER ||
-      fieldType === DataElementFieldType.RESOURCE ||
-      fieldType === DataElementFieldType.CALC ||
-      fieldType === DataElementFieldType.IMAGE
-    );
+    const element = this.gameDataElement();
+    for (const node of tableCellLineage(element)) this.objectChange.versionOf(node.identifier)();
+    return fieldHasOptions(element);
   }
 
   /**
@@ -1033,14 +997,8 @@ export class GameDataElementComponent {
    */
   isTableCellField(): boolean {
     const element = this.gameDataElement();
-    this.objectChange.versionOf(element.identifier)();
-    if (element.fieldRole !== DataElementRole.FIELD) return false;
-
-    const rowElement = element.parent instanceof DataElement ? element.parent : null;
-    const tableElement = rowElement?.parent instanceof DataElement ? rowElement.parent : null;
-    if (rowElement) this.objectChange.versionOf(rowElement.identifier)();
-    if (tableElement) this.objectChange.versionOf(tableElement.identifier)();
-    return rowElement?.fieldRole === DataElementRole.GROUP && tableElement?.viewMode === DataElementViewMode.TABLE;
+    for (const node of tableCellLineage(element)) this.objectChange.versionOf(node.identifier)();
+    return isTableCellFieldShared(element);
   }
 
   /**
@@ -1049,9 +1007,7 @@ export class GameDataElementComponent {
    */
   copyReferencePath(event?: MouseEvent): void {
     event?.stopPropagation();
-    const referencePath = DataElement.formatReferencePath(this.gameDataElement());
-    if (!referencePath) return;
-    void navigator.clipboard?.writeText(referencePath);
+    this.edit.copyReference(this.gameDataElement());
   }
 
   private hasFlag(attribute: string): boolean {
@@ -1079,47 +1035,7 @@ export class GameDataElementComponent {
   togglePopupDataElement(event?: MouseEvent): void {
     event?.stopPropagation();
     if (this.isImage()) return;
-    this.toggleFlag(DataElementAttribute.POPUP);
-  }
-
-  /** Whether this resource is shown as a bar on the piece on the table. */
-  isPieceGauge(): boolean {
-    return this.hasFlag(DataElementAttribute.PIECE_GAUGE);
-  }
-
-  /**
-   * Whether this element is a numeric resource, the only kind that can be shown as a bar on the
-   * piece.
-   */
-  canShowPieceGauge(): boolean {
-    return this.gameDataElement().isNumberResource;
-  }
-
-  /**
-   * Whether this resource grows worse as it rises, such as madness, so the bar on the piece reads
-   * the other way round.
-   */
-  isGaugeInverted(): boolean {
-    return this.hasFlag(DataElementAttribute.GAUGE_INVERTED);
-  }
-
-  /**
-   * Turns the reading of this resource as one that grows worse as it rises on or off. Does nothing
-   * for an element that is not a numeric resource.
-   */
-  toggleGaugeInverted(): void {
-    if (!this.canShowPieceGauge()) return;
-    this.toggleFlag(DataElementAttribute.GAUGE_INVERTED);
-  }
-
-  /**
-   * Shows this resource as a bar on the piece, or takes the bar away. Does nothing for an element
-   * that is not a numeric resource.
-   */
-  togglePieceGauge(event?: MouseEvent): void {
-    event?.stopPropagation();
-    if (!this.canShowPieceGauge()) return;
-    this.toggleFlag(DataElementAttribute.PIECE_GAUGE);
+    this.edit.togglePopup(this.gameDataElement());
   }
 
   /** Whether this resource is moved with a slider as well as typed, here and in the popup over its piece. */
@@ -1127,12 +1043,6 @@ export class GameDataElementComponent {
     const element = this.gameDataElement();
     this.objectChange.versionOf(element.identifier)();
     return showsResourceSlider(element);
-  }
-
-  /** Moves this resource with a slider as well, or stops. Does nothing for an element that is not a numeric resource. */
-  toggleResourceSlider(): void {
-    if (!this.canShowPieceGauge()) return;
-    this.toggleFlag(DataElementAttribute.RESOURCE_SLIDER);
   }
 
   /** The span the slider runs over, the same the current value may be typed within; null with nothing to slide over. */
@@ -1155,79 +1065,6 @@ export class GameDataElementComponent {
   }
 
   /**
-   * Whether this element is a numeric resource, the only kind that can play an effect or a sound
-   * when it changes.
-   */
-  canShowChangeFeedback(): boolean {
-    return this.gameDataElement().isNumberResource;
-  }
-
-  /** Whether a change to this resource plays an effect on the piece. */
-  playsEffectOnChange(): boolean {
-    const element = this.gameDataElement();
-    this.objectChange.versionOf(element.identifier)();
-    return playsEffectOnChange(element);
-  }
-
-  /** Whether a change to this resource plays a sound. */
-  playsSoundOnChange(): boolean {
-    const element = this.gameDataElement();
-    this.objectChange.versionOf(element.identifier)();
-    return playsSoundOnChange(element);
-  }
-
-  /**
-   * Turns the effect played when this resource changes on or off. Does nothing for an element that
-   * is not a numeric resource.
-   */
-  toggleChangeEffect(): void {
-    if (!this.canShowChangeFeedback()) return;
-    const element = this.gameDataElement();
-    element.setAttribute(DataElementAttribute.CHANGE_EFFECT, this.playsEffectOnChange() ? 'false' : 'true');
-    this.objectChange.notifyChanged(element.identifier);
-  }
-
-  /**
-   * Turns the sound played when this resource changes on or off. Does nothing for an element that
-   * is not a numeric resource.
-   */
-  toggleChangeSound(): void {
-    if (!this.canShowChangeFeedback()) return;
-    const element = this.gameDataElement();
-    element.setAttribute(DataElementAttribute.CHANGE_SOUND, this.playsSoundOnChange() ? 'false' : 'true');
-    this.objectChange.notifyChanged(element.identifier);
-  }
-
-  /** Which set of sounds a change to this resource plays. */
-  soundSetOnChange(): ResourceSoundSet {
-    const element = this.gameDataElement();
-    this.objectChange.versionOf(element.identifier)();
-    return soundSetOnChange(element);
-  }
-
-  /**
-   * Chooses the set of sounds a change to this resource plays, anything but `mech` being taken as
-   * `flesh`. Does nothing for an element that is not a numeric resource.
-   */
-  setSoundSetOnChange(value: string): void {
-    if (!this.canShowChangeFeedback()) return;
-    const element = this.gameDataElement();
-    element.setAttribute(DataElementAttribute.CHANGE_SOUND_SET, value === 'mech' ? 'mech' : 'flesh');
-    this.objectChange.notifyChanged(element.identifier);
-  }
-
-  /** Whether this image field's picture is shown at full size in the popup. */
-  isImagePopupOriginal(): boolean {
-    return this.hasFlag(DataElementAttribute.IMAGE_POPUP_ORIGINAL);
-  }
-
-  /** Turns showing this image field's picture at full size in the popup on or off. */
-  toggleImagePopupOriginal(event?: Event): void {
-    event?.stopPropagation();
-    this.toggleFlag(DataElementAttribute.IMAGE_POPUP_ORIGINAL);
-  }
-
-  /**
    * Whether this element can be shown as a table: any group or section, but not a field or a
    * picture in an image list.
    */
@@ -1244,10 +1081,7 @@ export class GameDataElementComponent {
 
   /** Switches this group or section between showing as a table and showing as rows. */
   toggleTableViewMode(): void {
-    if (!this.canToggleTableViewMode()) return;
-    const element = this.gameDataElement();
-    element.setViewMode(this.isTableViewMode() ? DataElementViewMode.NORMAL : DataElementViewMode.TABLE);
-    this.objectChange.notifyChanged(element.identifier);
+    if (this.canToggleTableViewMode()) this.edit.toggleTableView(this.gameDataElement());
   }
 
   /**
@@ -1258,51 +1092,14 @@ export class GameDataElementComponent {
     return this.hasFlag(DataElementAttribute.JUDGE_MODE);
   }
 
-  /** Turns judgement on or off for this table. */
-  toggleJudgeModeEnabled(): void {
-    this.toggleFlag(DataElementAttribute.JUDGE_MODE);
-  }
-
-  /**
-   * How much distance each ticked gap column adds in judgement, as written in the table's settings;
-   * empty counts as 1.
-   */
-  get gapDistanceText(): string {
-    return this.attrText(DataElementAttribute.GAP_DISTANCE);
-  }
-  set gapDistanceText(value: string) {
-    this.setFieldAttribute(DataElementAttribute.GAP_DISTANCE, value);
-  }
-
-  /**
-   * The target a judgement roll starts from before the distance is added, as written in the table's
-   * settings; empty counts as 5.
-   */
-  get baseDifficultyText(): string {
-    return this.attrText(DataElementAttribute.BASE_DIFFICULTY);
-  }
-  set baseDifficultyText(value: string) {
-    this.setFieldAttribute(DataElementAttribute.BASE_DIFFICULTY, value);
-  }
-
   /** Whether distance in judgement runs on from the table's last column round to its first. */
   get loopHorizontal(): boolean {
     return this.attrText(DataElementAttribute.LOOP_HORIZONTAL) === 'true';
   }
-  /** Turns judgement distance running round from the last column to the first on or off. */
-  toggleLoopHorizontal(): void {
-    this.toggleFlag(DataElementAttribute.LOOP_HORIZONTAL);
-  }
-
   /** Whether distance in judgement runs on from the table's last row round to its first. */
   get loopVertical(): boolean {
     return this.attrText(DataElementAttribute.LOOP_VERTICAL) === 'true';
   }
-  /** Turns judgement distance running round from the last row to the first on or off. */
-  toggleLoopVertical(): void {
-    this.toggleFlag(DataElementAttribute.LOOP_VERTICAL);
-  }
-
   /**
    * Whether this element is drawn as a table rather than as rows: out of edit mode, set to show as
    * a table, and with rows and columns to show.
@@ -1347,7 +1144,7 @@ export class GameDataElementComponent {
     this._value.set(object.value);
   }
 
-  private setUpdateTimer() {
+  private setUpdateTimer(delayMs = 66) {
     clearTimeout(this.updateTimer ?? undefined);
     this.updateTimer = setTimeout(() => {
       const element = this.gameDataElement();
@@ -1362,7 +1159,7 @@ export class GameDataElementComponent {
       if (element.currentValue !== this.currentValue) element.currentValue = this.currentValue;
       if (element.value !== this.value) element.value = this.value;
       this.updateTimer = null;
-    }, 66);
+    }, delayMs);
   }
 
   private isDuplicateElementName(name: string, element: DataElement): boolean {

@@ -745,12 +745,15 @@ export class GameTableSettingComponent {
     this.objectChange.versionOf(this.selectedTable?.identifier ?? '')();
     this.objectChange.collectionOf(TableBackgroundLayer.aliasName)();
     const laid = this.selectedTable?.backgroundLayers ?? [];
-    return [...laid.filter((layer) => !layer.placedOver), ...laid.filter((layer) => layer.placedOver)];
+    const placed = (placement: TableLayerPlacement) =>
+      laid.filter((layer) => asTableLayerPlacement(layer.placement) === placement);
+    return [...placed('backdrop'), ...placed('under'), ...placed('over')];
   }
 
   /** The run one layer belongs to, which is what moving it up and down happens within. */
   private backgroundLayerRun(layer: TableBackgroundLayer): TableBackgroundLayer[] {
-    return this.backgroundLayers.filter((laid) => laid.placedOver === layer.placedOver);
+    const placement = asTableLayerPlacement(layer.placement);
+    return this.backgroundLayers.filter((laid) => asTableLayerPlacement(laid.placement) === placement);
   }
 
   /** Its place in that run, counted from one, which is what the heading says. */
@@ -884,6 +887,30 @@ export class GameTableSettingComponent {
       ? Math.min(MAX_BACKGROUND_LAYER_SCALE, Math.max(MIN_BACKGROUND_LAYER_SCALE, scale))
       : 1;
     this.writeBackgroundLayer(layer, () => (layer.scale = clamped));
+  }
+
+  /** How much a backdrop follows the camera, as a percentage. */
+  backgroundLayerFollowPercent(layer: TableBackgroundLayer): number {
+    this.objectChange.versionOf(layer.identifier)();
+    return Math.round(layer.follow * 100);
+  }
+  /** Sets how much a backdrop follows the camera from a percentage held between 0 and 100, and syncs it. */
+  setBackgroundLayerFollowPercent(layer: TableBackgroundLayer, value: number): void {
+    const percent = Number(value);
+    if (!Number.isFinite(percent)) return;
+    this.writeBackgroundLayer(layer, () => (layer.cameraFollow = Math.min(100, Math.max(0, percent)) / 100));
+  }
+
+  /** How high a backdrop stands on the screen, as a percentage from its foot. */
+  backgroundLayerHeightPercent(layer: TableBackgroundLayer): number {
+    this.objectChange.versionOf(layer.identifier)();
+    return Math.round(layer.height * 100);
+  }
+  /** Sets how high a backdrop stands from a percentage held between 0 and 100, and syncs it. */
+  setBackgroundLayerHeightPercent(layer: TableBackgroundLayer, value: number): void {
+    const percent = Number(value);
+    if (!Number.isFinite(percent)) return;
+    this.writeBackgroundLayer(layer, () => (layer.backdropHeight = Math.min(100, Math.max(0, percent)) / 100));
   }
 
   /** Writing is announced, so the board redraws without waiting for something else to happen. */

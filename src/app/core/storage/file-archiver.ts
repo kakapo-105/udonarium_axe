@@ -1,9 +1,17 @@
-import { emitCcfoliaRoomDropped, emitFileLoaded, emitImageDropped, emitXmlLoaded } from '@axe/core/event/domain-events';
+import {
+  emitCcfoliaRoomDropped,
+  emitFileLoaded,
+  emitFilesTooLarge,
+  emitImageDropped,
+  emitXmlLoaded,
+  type FileTooLarge,
+} from '@axe/core/event/domain-events';
 import { Network } from '@axe/core/index';
 import { Logger } from '@axe/core/logging/logger';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
 import * as FileReaderUtil from '@axe/core/storage/file-reader-util';
 import type { ImageFile } from '@axe/core/storage/image-file';
+import { imageTypeOf } from '@axe/core/storage/image-sniff';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import * as MimeType from '@axe/core/storage/mime-type';
 import { isCcfoliaRoomArchive } from '@axe/core/storage/room-archive';
@@ -26,6 +34,11 @@ interface LoadGuard extends GameObject {
 }
 
 const MEGA_BYTE = 1024 * 1024;
+
+/** The largest image a load takes in. */
+export const MAX_LOADED_IMAGE_BYTES = 2 * MEGA_BYTE;
+/** The largest sound a load takes in. */
+export const MAX_LOADED_AUDIO_BYTES = 10 * MEGA_BYTE;
 const DROP_STACK_OFFSET = 20;
 const XML_MIME_TYPE = 'text/xml';
 const INTERNAL_DRAG_TYPE = 'application/x-axe-internal-drag';
@@ -62,6 +75,12 @@ export class FileArchiver {
   }
 
   networkService = Network;
+
+  /**
+   * Whether the reader may bring dropped files in, asked at each drop. A guest may not. Until the
+   * app puts in its own answer, every drop is taken.
+   */
+  mayLoadDrops: () => boolean = () => true;
   /**
    * The guard that asks, during online play, before dropped data overwrites the room settings; null
    * until the domain has put one in the object store.
@@ -69,9 +88,6 @@ export class FileArchiver {
   get reloadCheck(): LoadGuard | null {
     return ObjectStore.instance.get<LoadGuard>('ReloadCheck');
   }
-
-  private maxImageSize = 2 * MEGA_BYTE;
-  private maxAudioSize = 10 * MEGA_BYTE;
 
   private callbackOnDragStart: ((this: HTMLElement, e: DragEvent) => void) | null = null;
   private callbackOnDragEnter: ((this: HTMLElement, e: DragEvent) => void) | null = null;
@@ -138,6 +154,7 @@ export class FileArchiver {
     event.preventDefault();
     // A drop made up rather than made by a browser may carry no list of types at all.
     if (event.dataTransfer?.types?.includes(INTERNAL_DRAG_TYPE)) return;
+    if (!this.mayLoadDrops()) return;
 
     // A drop can arrive before startup finishes, or where no guard exists at all.
     this.reloadCheck?.reloadCheckStart(this.networkService.peerContext?.roomName !== '');
@@ -151,18 +168,24 @@ export class FileArchiver {
    * Loads files as if dropped: images and audio into their stores, XML as room or object data, and
    * zips by loading what is inside.
    *
-   * Images over 2 MB and audio over 10 MB are skipped with a warning. Given a drop point, each
-   * image is announced for placing on the table, the next one offset a little from the last. Images
-   * inside a zip are not placed, and a zip exported as a CCFOLIA room is handed on whole instead.
+   * Images over 2 MB and audio over 10 MB are left out, those inside a zip included, and once the
+   * load is done they are announced together, so the reader learns why they did not appear. An
+   * image left out that was not inside a zip is announced with the file itself and where it was
+   * dropped, so it can be made smaller and added after all. Given a drop point, each image is
+   * announced for placing on the table, the next one offset a little from the last. Images inside
+   * a zip are not placed, and a zip exported as a CCFOLIA room is handed on whole instead.
    */
   async load(files: File[] | FileList, dropPoint?: { x: number; y: number }): Promise<void> {
-    await this.loadFiles(files, dropPoint, true);
+    const tooLarge: FileTooLarge[] = [];
+    await this.loadFiles(files, dropPoint, true, tooLarge);
+    if (tooLarge.length > 0) emitFilesTooLarge({ files: tooLarge });
   }
 
   private async loadFiles(
     files: File[] | FileList,
     dropPoint: { x: number; y: number } | undefined,
-    placesDroppedImages: boolean
+    placesDroppedImages: boolean,
+    tooLarge: FileTooLarge[]
   ): Promise<void> {
     if (!files) return;
     const loadFiles: File[] = files instanceof FileList ? toArrayOfFileList(files) : files;
@@ -170,11 +193,11 @@ export class FileArchiver {
     let droppedImageCount = 0;
     for (const file of loadFiles) {
       const imageDropPoint = placesDroppedImages ? this.offsetDropPoint(dropPoint, droppedImageCount) : undefined;
-      const isImageDropped = await this.handleImage(file, imageDropPoint);
+      const isImageDropped = await this.handleImage(file, imageDropPoint, tooLarge, placesDroppedImages);
       if (isImageDropped) droppedImageCount++;
-      await this.handleAudio(file);
+      await this.handleAudio(file, tooLarge);
       await this.handleText(file, dropPoint);
-      await this.handleZip(file, dropPoint);
+      await this.handleZip(file, dropPoint, tooLarge);
       emitFileLoaded();
     }
   }
@@ -207,28 +230,42 @@ export class FileArchiver {
     return { images, oversized };
   }
 
-  private async handleImage(file: File, dropPoint?: { x: number; y: number }): Promise<boolean> {
+  private async handleImage(
+    file: File,
+    dropPoint: { x: number; y: number } | undefined,
+    tooLarge: FileTooLarge[],
+    handsBackTooLarge: boolean
+  ): Promise<boolean> {
     if (!file.type.startsWith('image/')) return false;
     // With no guard there is nothing to stop it.
     if (!(this.reloadCheck?.isLoadOk() ?? true)) return false;
     const image = await this.storeImage(file);
-    if (!image) return false;
+    if (!image) {
+      tooLarge.push({
+        name: file.name,
+        kind: 'image',
+        limitBytes: MAX_LOADED_IMAGE_BYTES,
+        ...(handsBackTooLarge ? { file, ...(dropPoint ? { dropPoint } : {}) } : {}),
+      });
+      return false;
+    }
     if (dropPoint) emitImageDropped({ identifier: image.identifier, fileName: file.name, dropPoint });
     return dropPoint != null;
   }
 
   private async storeImage(file: File): Promise<ImageFile | null> {
-    if (file.size > this.maxImageSize) {
+    if (file.size > MAX_LOADED_IMAGE_BYTES) {
       Logger.warn(`[FileArchiver] ファイルサイズ制限超過: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
       return null;
     }
     return ImageStorage.instance.addAsync(file);
   }
 
-  private async handleAudio(file: File) {
+  private async handleAudio(file: File, tooLarge: FileTooLarge[]) {
     if (!file.type.startsWith('audio/')) return;
-    if (file.size > this.maxAudioSize) {
+    if (file.size > MAX_LOADED_AUDIO_BYTES) {
       Logger.warn(`[FileArchiver] ファイルサイズ制限超過: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+      tooLarge.push({ name: file.name, kind: 'audio', limitBytes: MAX_LOADED_AUDIO_BYTES });
       return;
     }
     await AudioStorage.instance.addAsync(file);
@@ -259,7 +296,7 @@ export class FileArchiver {
     }
   }
 
-  private async handleZip(file: File, dropPoint?: { x: number; y: number }) {
+  private async handleZip(file: File, dropPoint: { x: number; y: number } | undefined, tooLarge: FileTooLarge[]) {
     if (!file.type.includes('application/') && file.type.length > 0) return;
     let entries: ZipEntry[];
     try {
@@ -273,13 +310,49 @@ export class FileArchiver {
       return;
     }
 
+    // Pictures first, so the room data beside them can be read under the ids they were stored as.
+    const renamed = new Map<string, string>();
+    const rest: File[] = [];
     for (const entry of entries) {
       try {
-        await this.loadFiles([new File([entry.blob], entry.name, { type: entry.type })], dropPoint, false);
+        const type = entry.type || (await imageTypeOf(entry.blob));
+        const file = new File([entry.blob], entry.name, { type });
+        if (type.startsWith('image/') && !SAVED_IMAGE_NAME.test(entry.name)) {
+          await this.loadArchivedImage(file, renamed, tooLarge);
+        } else {
+          rest.push(file);
+        }
       } catch (reason) {
         Logger.warn('[FileArchiver] ZIP展開エラー', reason);
       }
     }
+    for (const entry of rest) {
+      try {
+        const file = renamed.size > 0 && isXmlCandidateFile(entry) ? await withImagesRenamed(entry, renamed) : entry;
+        await this.loadFiles([file], dropPoint, false, tooLarge);
+      } catch (reason) {
+        Logger.warn('[FileArchiver] ZIP展開エラー', reason);
+      }
+    }
+  }
+
+  /**
+   * Stores a picture an archive carries under a name of its own, as any picture is stored: turned
+   * into a WebP where it can be, and known by the hash of what it is stored as. Room data made
+   * elsewhere may name the picture by the hash of the bytes it came as instead; where the two
+   * differ, the one is noted against the other in `renamed`, for that data to be read under the id
+   * the picture is kept under.
+   */
+  private async loadArchivedImage(file: File, renamed: Map<string, string>, tooLarge: FileTooLarge[]): Promise<void> {
+    if (!(this.reloadCheck?.isLoadOk() ?? true)) return;
+    const original = await FileReaderUtil.calcSHA256Async(file);
+    const image = await this.storeImage(file);
+    if (!image) {
+      tooLarge.push({ name: file.name, kind: 'image', limitBytes: MAX_LOADED_IMAGE_BYTES });
+    } else if (image.identifier !== original) {
+      renamed.set(original, image.identifier);
+    }
+    emitFileLoaded();
   }
 
   /** Unpacks a zip into its entries, in a worker where one can be used. */
@@ -320,4 +393,17 @@ async function toUnzipped(entries: readonly ZipEntry[]): Promise<Unzipped> {
 
 function toArrayOfFileList(fileList: FileList): File[] {
   return Array.from(fileList);
+}
+
+/** The name a picture is saved under in a room's archive: the hash it is known by, then its extension. */
+const SAVED_IMAGE_NAME = /^[0-9a-f]{64}\./;
+
+/** A picture's id, as a run of 64 hex digits standing on its own. */
+const IMAGE_ID = /(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])/g;
+
+/** Room data with every picture id in `renamed` given the id the picture was stored under. */
+async function withImagesRenamed(file: File, renamed: ReadonlyMap<string, string>): Promise<File> {
+  const text = await FileReaderUtil.readAsTextAsync(file);
+  const rewritten = text.replace(IMAGE_ID, (id) => renamed.get(id) ?? id);
+  return rewritten === text ? file : new File([rewritten], file.name, { type: file.type });
 }

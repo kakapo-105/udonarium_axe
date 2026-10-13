@@ -1,11 +1,14 @@
 import { inject, TestBed } from '@angular/core/testing';
 import { SaveDataService } from '@axe/application/file/save-data.service';
+import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { FileArchiver } from '@axe/core/storage/file-archiver';
 import { ImageFile, ImageState } from '@axe/core/storage/image-file';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import * as MimeType from '@axe/core/storage/mime-type';
 import { ObjectSerializer } from '@axe/core/sync/object-serializer';
+import { ChatReaction } from '@axe/domain/chat/chat-reaction';
+import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { CutIn } from '@axe/domain/media/cut-in';
 import { CutInLayer } from '@axe/domain/media/cut-in-layer';
 import { CutInScene } from '@axe/domain/media/cut-in-scene';
@@ -218,6 +221,58 @@ describe('SaveDataService', () => {
     });
   });
 
+  describe('a chat log saved as plain text', () => {
+    it('is written as a .txt file of the words, with no pictures prepared and no script', async () => {
+      const service = TestBed.inject(SaveDataService);
+      const tab = ChatTabList.instance.addChatTab('メイン');
+      tab.addMessage({ from: 'someone', name: '誰か', text: 'こんにちは', timestamp: 1000 });
+      const prepare = vi.spyOn(service, 'prepareChatLogImages');
+      const saved: { name: string; blob: Blob }[] = [];
+      let lastBlob: Blob | null = null;
+      vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+        lastBlob = blob as Blob;
+        return 'blob:log';
+      });
+      vi.spyOn(URL, 'revokeObjectURL').mockReturnValue(undefined);
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+        saved.push({ name: this.download, blob: lastBlob! });
+      });
+
+      try {
+        await service.saveChatLog('text', 'tab', [tab], 'メイン');
+      } finally {
+        tab.destroy();
+        vi.restoreAllMocks();
+      }
+
+      expect(prepare).not.toHaveBeenCalled();
+      expect(saved).toHaveLength(1);
+      expect(saved[0].name).toMatch(/_log_メイン_[\d-]+_\d{4}\.txt$/);
+      const text = await saved[0].blob.text();
+      expect(text).toContain('誰か：こんにちは');
+      expect(text).not.toContain('<script');
+    });
+  });
+
+  describe('the stamps put on lines, in a saved log', () => {
+    it('are named and counted for the log, the way the reader sees them', () => {
+      const service = TestBed.inject(SaveDataService);
+      const t = TestBed.inject(TRANSLATE_FN);
+      const tab = ChatTabList.instance.addChatTab('メイン');
+      const message = tab.addMessage({ from: 'someone', name: '誰か', text: 'こんにちは', timestamp: 1000 });
+      const reaction = ChatReaction.create(message.identifier, 'noa', 'ノア');
+      reaction.stamps = 'sfx:creepy';
+      try {
+        const log = service.renderChatLog('text', 'tab', [tab], { resolver: () => '', registryScript: '' });
+
+        expect(log).toContain(`${t('feature.chat.log.labels.reactions')}: ${t('ui.stamp.items.sfx.creepy.label')}×1`);
+      } finally {
+        reaction.destroy();
+        tab.destroy();
+      }
+    });
+  });
+
   describe('hands saving off to the file archiver', () => {
     it('reports a hundred percent when it finishes', async () => {
       const service = TestBed.inject(SaveDataService);
@@ -311,6 +366,21 @@ describe('SaveDataService', () => {
     });
   });
 
+  describe('the pictures stamps are', () => {
+    it('bundles a picture put on a line as a reaction, and one a line was sent as, whether or not a set still holds it', () => {
+      const service = TestBed.inject(SaveDataService);
+      const privateApi = service as unknown as SaveDataServicePrivateApi;
+      for (const picture of ['reacted-cat', 'sent-dog']) ImageStorage.instance.add(ImageFile.createEmpty(picture));
+
+      const found = privateApi.searchImageFiles(
+        '<room><chat-reaction messageIdentifier="line-1" stamps="seal:ok image:reacted-cat"></chat-reaction>' +
+          '<chat stamp="image:sent-dog">［いぬ］</chat></room>'
+      );
+
+      expect(found.map((image) => image.identifier).sort()).toEqual(['reacted-cat', 'sent-dog']);
+    });
+  });
+
   describe('the picture a roller put on their dice', () => {
     it('bundles the picture a chat line’s dice wear, so the line throws them in it when the room is loaded', () => {
       const service = TestBed.inject(SaveDataService);
@@ -386,6 +456,23 @@ describe('SaveDataService', () => {
       hold('bgm-1', 'battle', new Blob(['mp3'], { type: 'audio/mpeg' }));
 
       expect(packed(['bgm-1']).map((file) => file.name)).toEqual(['battle.mp3']);
+    });
+
+    it('keeps an Opus, Ogg audio or FLAC name as it is, which reads back as a sound', () => {
+      hold('bgm-1', 'rain.opus', new Blob(['opus'], { type: 'audio/ogg' }));
+      hold('bgm-2', 'wind.oga', new Blob(['oga'], { type: 'audio/ogg' }));
+      hold('bgm-3', 'hall.flac', new Blob(['flac'], { type: 'audio/flac' }));
+
+      const files = packed(['bgm-1', 'bgm-2', 'bgm-3']);
+
+      expect(files.map((file) => file.name)).toEqual(['rain.opus', 'wind.oga', 'hall.flac']);
+      expect(files.map((file) => file.type)).toEqual(['audio/ogg', 'audio/ogg', 'audio/flac']);
+    });
+
+    it('gives a FLAC without a sound extension its own', () => {
+      hold('bgm-1', 'hall', new Blob(['flac'], { type: 'audio/flac' }));
+
+      expect(packed(['bgm-1']).map((file) => file.name)).toEqual(['hall.flac']);
     });
 
     it('numbers a sound whose name another has taken, so neither is lost', () => {

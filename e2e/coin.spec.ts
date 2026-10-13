@@ -1,10 +1,10 @@
 import { expect, Page, test } from '@playwright/test';
 
-import { openTableContextMenu, waitAppReady } from './helpers';
+import { openTableContextMenu, revealMenuEntry, waitAppReady } from './helpers';
 
 async function createCoin(page: Page) {
   const menu = await openTableContextMenu(page);
-  await menu.getByText('コインを作成').click();
+  await (await revealMenuEntry(page, menu, 'コインを作成')).click();
   await expect(page.locator('coin').first()).toBeAttached({ timeout: 10000 });
 }
 
@@ -78,13 +78,20 @@ test.describe('コイン（動きを止めた画面）', () => {
         );
         return face?.style.transform.includes('rotateY(180deg)') ? '裏' : '表';
       });
-    const results = page.locator('chat-window').getByText(/コイン を投げました → (表|裏)/);
+    // The chat draws only the lines that fill it while it follows the bottom, so a throw's line is
+    // told by the mark left on the last line before it rather than by how many lines are drawn.
+    const latest = page
+      .locator('chat-window')
+      .getByText(/コイン を投げました → (表|裏)/)
+      .last();
 
     for (let thrown = 0; thrown < 12; thrown++) {
+      if (thrown > 0) await latest.evaluate((line) => line.setAttribute('data-read', ''));
       const menu = await openCoinMenu(page);
       await menu.getByText('コインを投げる').click();
-      await expect(results).toHaveCount(thrown + 1, { timeout: 10000 });
-      const result = (await results.last().innerText()).match(/→ (表|裏)/)![1];
+      await expect(latest).toBeVisible({ timeout: 10000 });
+      await expect(latest).not.toHaveAttribute('data-read', { timeout: 10000 });
+      const result = (await latest.innerText()).match(/→ (表|裏)/)![1];
 
       await expect.poll(shown, { timeout: 2000 }).toBe(result);
       if (result === '裏') return;

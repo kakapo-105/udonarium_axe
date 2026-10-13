@@ -1,5 +1,6 @@
 import type { ImageFile } from '@axe/core/storage/image-file';
 import type { ChatMessage } from '@axe/domain/chat/chat-message';
+import { rubyMarkupOfLine } from '@axe/domain/chat/chat-ruby-notation';
 import { vnBodyOf } from '@axe/domain/visual-novel/vn-emote';
 
 export type ChatLogLine = Pick<
@@ -27,7 +28,18 @@ export type ChatLogLine = Pick<
   | 'isDicebot'
   | 'rollDetail'
   | 'isOutOfStory'
->;
+  | 'isPseudoDeleted'
+> &
+  Partial<Pick<ChatMessage, 'identifier'>>;
+
+/** A stamp on a line as a log writes it: what it is called, and how many put it on. */
+export interface ChatLogReaction {
+  readonly label: string;
+  readonly count: number;
+}
+
+/** The stamps on a line, by the line's identifier, in the order a log lists them. */
+export type ChatLogReactionResolver = (messageIdentifier: string) => readonly ChatLogReaction[];
 
 export interface ChatLogTab {
   readonly name: string;
@@ -86,8 +98,8 @@ export class ChatLogExporter {
     if (typeof value !== 'string') {
       return String(value);
     }
-    const escaped = value.replace(/[&'`"<>]/g, (match) => HTML_ESCAPE_MAP[match] ?? match);
-    return escaped.replace(/[|｜]([^|｜\s]+?)《(.+?)》/g, '<ruby>$1<rt>$2</rt></ruby>').replace(/\s/g, ' ');
+    const escape = (text: string) => text.replace(/[&'`"<>]/g, (match) => HTML_ESCAPE_MAP[match] ?? match);
+    return rubyMarkupOfLine(value, escape).replace(/\s/g, ' ');
   }
 
   /**
@@ -105,8 +117,8 @@ export class ChatLogExporter {
    * One line in the standard log layout: the tab name and the time when asked for, the portrait,
    * any quoted or replied-to line, then the name and text in the speaker's colour.
    *
-   * A secret roll the reader did not make shows as `（シークレットダイス）`, and an edited line is marked
-   * `(編集済)`. `userId` is the reader; without it, the local user.
+   * A secret roll the reader did not make shows as `（シークレットダイス）`, an edited line is marked
+   * `(編集済)`, and a deleted line `(削除済)`. `userId` is the reader; without it, the local user.
    */
   static formatMessageStandard(
     isTime: boolean,
@@ -114,7 +126,8 @@ export class ChatLogExporter {
     message: ChatLogLine,
     userId?: string,
     imageSrcResolver?: ChatLogImageSrcResolver,
-    textDecoder?: ChatLogTextDecoder
+    textDecoder?: ChatLogTextDecoder,
+    reactionsOf?: ChatLogReactionResolver
   ): string {
     if (!message) return '';
     let str = '<div class="m">';
@@ -132,7 +145,7 @@ export class ChatLogExporter {
     str += ChatLogExporter.formatPortraitImage(message, imageSrcResolver);
 
     str += '<div class="ct">';
-    str += ChatLogExporter.formatReferenceBlock(message, textDecoder);
+    str += ChatLogExporter.formatReferenceBlock(message, userId, textDecoder);
     str += "<font color='";
     if (message.messColor) str += message.messColor.toLowerCase();
     str += "'>";
@@ -148,10 +161,13 @@ export class ChatLogExporter {
       const decodedText = vnBodyOf(message.vnEmote, ChatLogExporter.decode(message.text, textDecoder));
       if (decodedText) str += ChatLogExporter.escapeHtmlLines(decodedText);
       str += ChatLogExporter.formatAttachmentImages(message, imageSrcResolver);
+      const reactions = ChatLogExporter.reactionSummary(message, reactionsOf);
+      if (reactions) str += ` 〔${ChatLogExporter.escapeHtml(reactions)}〕`;
     } else {
       str += '（シークレットダイス）';
     }
     if (message.fixd) str += ' (編集済)';
+    if (message.isPseudoDeleted) str += ' (削除済)';
     str += '</font>';
     str += '</div></div>\n';
     return str;
@@ -161,8 +177,8 @@ export class ChatLogExporter {
    * One line in the classic layout other log tools can read: the tab name, the portrait, any quoted
    * or replied-to line, then the name and text in the speaker's colour.
    *
-   * Secret rolls and edits are marked as in the standard layout, and arrows in the text are written
-   * as `＞`.
+   * Secret rolls, edits and deleted lines are marked as in the standard layout, and arrows in the text
+   * are written as `＞`.
    */
   static formatMessageCoc(
     tabName: string,
@@ -178,7 +194,7 @@ export class ChatLogExporter {
     str += `      ${ChatLogExporter.formatPortraitImage(message, imageSrcResolver)}\n`;
     str += '      <div class="ct">\n';
     str += '        ';
-    const refBlock = ChatLogExporter.formatReferenceBlock(message, textDecoder);
+    const refBlock = ChatLogExporter.formatReferenceBlock(message, userId, textDecoder);
     if (refBlock) str += refBlock;
     const decodedName = ChatLogExporter.decode(message.name, textDecoder);
     str += `<span>${ChatLogExporter.escapeHtml(decodedName).replace('<', '').replace('>', '')}</span> `;
@@ -192,6 +208,7 @@ export class ChatLogExporter {
       str += '（シークレットダイス）';
     }
     if (message.fixd) str += ' (編集済)';
+    if (message.isPseudoDeleted) str += ' (削除済)';
     str += '\n';
 
     str += '      </div>\n';
@@ -218,6 +235,14 @@ export class ChatLogExporter {
   }
 
   /**
+   * Whether what a line says is kept from the reader, as a secret roll is from everyone but the one
+   * who made it. Without `userId` the reader is the local user.
+   */
+  static isSealed(message: ChatLogLine, userId?: string): boolean {
+    return message.isSecret && !ChatLogExporter.canSee(message, userId);
+  }
+
+  /**
    * A whole page in the standard layout for one tab, with times, holding only the lines the reader
    * may see.
    */
@@ -225,7 +250,8 @@ export class ChatLogExporter {
     tab: ChatLogTab,
     userId?: string,
     imageSrcResolver?: ChatLogImageSrcResolver,
-    textDecoder?: ChatLogTextDecoder
+    textDecoder?: ChatLogTextDecoder,
+    reactionsOf?: ChatLogReactionResolver
   ): string {
     const head = `<?xml version='1.0' encoding='UTF-8'?>
 <!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.0 Transitional//EN' 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'>
@@ -239,7 +265,9 @@ export class ChatLogExporter {
     const parts: string[] = [];
     for (const mess of tab.chatMessages) {
       if (!ChatLogExporter.isVisibleMessage(mess, userId)) continue;
-      parts.push(ChatLogExporter.formatMessageStandard(true, '', mess, userId, imageSrcResolver, textDecoder));
+      parts.push(
+        ChatLogExporter.formatMessageStandard(true, '', mess, userId, imageSrcResolver, textDecoder, reactionsOf)
+      );
     }
     return head + parts.join('') + '\n  </body>\n</html>';
   }
@@ -288,7 +316,8 @@ export class ChatLogExporter {
     showTime: number | boolean,
     userId?: string,
     imageSrcResolver?: ChatLogImageSrcResolver,
-    textDecoder?: ChatLogTextDecoder
+    textDecoder?: ChatLogTextDecoder,
+    reactionsOf?: ChatLogReactionResolver
   ): string {
     const head = `<?xml version='1.0' encoding='UTF-8'?>
 <!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.0 Transitional//EN' 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'>
@@ -302,7 +331,15 @@ export class ChatLogExporter {
     const main = ChatLogExporter.mergeTabMessages(
       ChatLogExporter.spokenTabs(tabs),
       (tabName, message) =>
-        ChatLogExporter.formatMessageStandard(!!showTime, tabName, message, userId, imageSrcResolver, textDecoder),
+        ChatLogExporter.formatMessageStandard(
+          !!showTime,
+          tabName,
+          message,
+          userId,
+          imageSrcResolver,
+          textDecoder,
+          reactionsOf
+        ),
       userId
     );
     return head + main + '\n  </body>\n</html>';
@@ -413,9 +450,9 @@ export class ChatLogExporter {
 
   // The message quoted or replied to is put in front of the body as a small quotation,
   // trimmed to about the length the chat itself previews.
-  private static formatReferenceBlock(message: ChatLogLine, textDecoder?: ChatLogTextDecoder): string {
-    const quote = message.quoteOf ? message.quoteOfMessage : null;
-    const reply = message.replyTo ? message.replyToMessage : null;
+  private static formatReferenceBlock(message: ChatLogLine, userId?: string, textDecoder?: ChatLogTextDecoder): string {
+    const quote = ChatLogExporter.referencedLine(message.quoteOf ? message.quoteOfMessage : null, userId);
+    const reply = ChatLogExporter.referencedLine(message.replyTo ? message.replyToMessage : null, userId);
     if (!quote && !reply) return '';
 
     const blocks: string[] = [];
@@ -426,6 +463,7 @@ export class ChatLogExporter {
           icon: '❝',
           target: quote,
           maxTextLength: 280,
+          userId,
           textDecoder,
         })
       );
@@ -437,11 +475,45 @@ export class ChatLogExporter {
           icon: '↩',
           target: reply,
           maxTextLength: 120,
+          userId,
           textDecoder,
         })
       );
     }
     return blocks.join('');
+  }
+
+  /**
+   * A line quoted or replied to, as far as the reader's log may show it: a whisper the reader was
+   * not part of, an after-the-fact one included, does not live on in the answers to it, and nor does
+   * a pseudo-deleted line, which the room was shown as never said.
+   */
+  static referencedLine(target: ChatLogLine | null, userId?: string): ChatLogLine | null {
+    if (!target || target.isPseudoDeleted) return null;
+    return ChatLogExporter.isVisibleMessage(target, userId) ? target : null;
+  }
+
+  /**
+   * The stamps on a line as a log writes them, each with how many put it on, a space between each;
+   * empty for a line nobody answered so, or where nothing says what the stamps are.
+   */
+  static reactionSummary(message: ChatLogLine, reactionsOf?: ChatLogReactionResolver): string {
+    if (!reactionsOf || !message.identifier) return '';
+    return reactionsOf(message.identifier)
+      .map((reaction) => `${reaction.label}×${reaction.count}`)
+      .join(' ');
+  }
+
+  /**
+   * The tabs with their deleted lines left out, for a log that should not hold them.
+   * The tabs themselves are left as they are.
+   */
+  static withoutDeleted(tabs: readonly ChatLogTab[]): ChatLogTab[] {
+    return tabs.map((tab) => ({
+      name: tab.name,
+      isSystemTab: tab.isSystemTab,
+      chatMessages: tab.chatMessages.filter((message) => !message.isPseudoDeleted),
+    }));
   }
 
   /**
@@ -460,11 +532,14 @@ export class ChatLogExporter {
     icon: string;
     target: ChatLogLine;
     maxTextLength: number;
+    userId?: string;
     textDecoder?: ChatLogTextDecoder;
   }): string {
-    const { label, icon, target, maxTextLength, textDecoder } = opts;
+    const { label, icon, target, maxTextLength, userId, textDecoder } = opts;
     const rawName = ChatLogExporter.decode(target.name, textDecoder);
-    const truncated = ChatLogExporter.referenceExcerpt(target, maxTextLength, textDecoder);
+    const truncated = ChatLogExporter.isSealed(target, userId)
+      ? '（シークレットダイス）'
+      : ChatLogExporter.referenceExcerpt(target, maxTextLength, textDecoder);
     const name = ChatLogExporter.escapeHtml(rawName || label);
     const text = ChatLogExporter.escapeHtml(truncated);
     // It is drawn as a pale block with a rule down its left, so it reads apart from the body.

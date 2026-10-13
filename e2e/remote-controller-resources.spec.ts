@@ -52,7 +52,7 @@ test.describe('リモコンに出す数値とリソース', () => {
     const section = page.getByTestId('room-settings-controller-resources');
     await expect(section.locator('input[data-resource="HP"]')).toBeAttached();
 
-    // GM だけが変えられる欄なので、PL には操作の届かない形で出る。
+    // GMだけが変えられる欄なので、PLには操作の届かない形で出る。
     expect(await section.evaluate((el) => el.closest('[inert]') !== null)).toBe(true);
   });
 });

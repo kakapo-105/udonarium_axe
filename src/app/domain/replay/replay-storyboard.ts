@@ -89,6 +89,7 @@ const NARRATED_KINDS: ReadonlySet<ReplayEventKind> = new Set([
   ReplayEventKind.VoteFinish,
   ReplayEventKind.MediaCutIn,
   ReplayEventKind.MediaBgm,
+  ReplayEventKind.MediaBackgroundSound,
   ReplayEventKind.EffectCast,
   ReplayEventKind.ObjectMove,
   ReplayEventKind.ObjectCreate,

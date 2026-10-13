@@ -1,3 +1,4 @@
+import { backgroundSoundLevel } from '@axe/domain/media/background-sound-level';
 import {
   diffSyncData,
   flattenSyncData,
@@ -55,6 +56,7 @@ const CHAT_ALIAS = 'chat';
 const DATA_ALIAS = 'data';
 const CUT_IN_LAUNCHER_ALIAS = 'cut-in-launcher';
 const JUKEBOX_ALIAS = 'jukebox';
+const BACKGROUND_SOUND_ALIAS = 'background-sound';
 const VN_STAGE_ALIAS = 'vn-stage';
 const TURN_STATE_ALIAS = 'TurnState';
 const VOTE_ALIAS = 'Vote';
@@ -244,6 +246,10 @@ function describeChange(
     const table = describeTableChange(before, after);
     if (table) return table;
   }
+  if (aliasName === BACKGROUND_SOUND_ALIAS) {
+    const sound = describeBackgroundSound(before, after, keys);
+    if (sound) return sound;
+  }
   if (!before) return { kind: ReplayEventKind.ObjectCreate, detail: { aliasName } };
 
   if (hasChangedKey(keys, 'location') || hasChangedKey(keys, 'posZ')) return describeMove(before, after);
@@ -379,6 +385,24 @@ function describeBgm(
       isPlaying: Boolean(syncValueOf(after, 'isPlaying')),
       startTime: Number(syncValueOf(after, 'startTime') ?? 0),
     },
+  };
+}
+
+/**
+ * A background sound started or stopped: one first sent already playing, or one switched on or off.
+ * A change of its volume alone is left to the patch.
+ */
+function describeBackgroundSound(
+  before: SyncData | null,
+  after: SyncData,
+  keys: ReadonlySet<string>
+): { kind: ReplayEventKind; detail: Record<string, unknown>; targetIdentifier?: string } | null {
+  const isPlaying = syncValueOf(after, 'isPlaying') === true;
+  if (before ? !hasChangedKey(keys, 'isPlaying') : !isPlaying) return null;
+  return {
+    kind: ReplayEventKind.MediaBackgroundSound,
+    targetIdentifier: asString(syncValueOf(after, 'audioIdentifier')),
+    detail: { isPlaying, volume: backgroundSoundLevel(syncValueOf(after, 'volume')) },
   };
 }
 

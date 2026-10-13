@@ -12,15 +12,19 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { PersonalVolumeService } from '@axe/application/media/personal-volume.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { AudioFile } from '@axe/core/storage/audio-file';
-import { AudioPlayer } from '@axe/core/storage/audio-player';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { AudioTag } from '@axe/domain/media/audio-tag';
 import { Jukebox } from '@axe/domain/media/jukebox';
-import { Config } from '@axe/domain/peer/config';
-import { formatTrackTime, JukeboxPlaybackService } from '@axe/features/media/jukebox-playback.service';
+import { BackgroundSoundPlaybackService } from '@axe/features/media/background-sound-playback.service';
+import {
+  formatTrackLength,
+  formatTrackTime,
+  JukeboxPlaybackService,
+} from '@axe/features/media/jukebox-playback.service';
 import { DraggableDirective } from '@axe/ui/directives/draggable.directive';
 import { TranslocoModule } from '@jsverse/transloco';
 
@@ -36,6 +40,8 @@ export class MiniJukeboxComponent {
   private readonly audioStorage = inject(AudioStorage);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly playback = inject(JukeboxPlaybackService);
+  protected readonly backgroundSounds = inject(BackgroundSoundPlaybackService);
+  private readonly personalVolumes = inject(PersonalVolumeService);
 
   readonly isPlaylistOpen = signal(false);
   readonly isMinimized = signal(false);
@@ -96,10 +102,6 @@ export class MiniJukeboxComponent {
     return this.objectStore.get<Jukebox>('Jukebox') ?? null;
   }
 
-  private get config(): Config | null {
-    return this.objectStore.get<Config>('Config') ?? null;
-  }
-
   readonly isPlaying = this.playback.isPlaying;
   readonly isPaused = this.playback.isPaused;
   readonly isShuffled = this.playback.isShuffled;
@@ -130,6 +132,19 @@ export class MiniJukeboxComponent {
   });
 
   readonly repeatMode = this.playback.repeatMode;
+  /** Whether this player may change what the room plays, which a guest may not. */
+  readonly canOperate = this.playback.canOperate;
+  /** Whether this player may turn shuffle and repeat, which only the game master may. */
+  readonly canChangeModes = this.playback.canChangeModes;
+
+  /** The names of the background sounds playing, one after another, for the line under the controls. */
+  readonly backgroundNames = computed(() =>
+    this.backgroundSounds
+      .playing()
+      .map((sound) => sound.name)
+      .filter((name) => name.length > 0)
+      .join(' · ')
+  );
 
   readonly artworkUrl = computed(() => {
     this._tick();
@@ -155,7 +170,7 @@ export class MiniJukeboxComponent {
     if (!this.isPlaying() && !this.isPaused()) return '—';
     const dur = this.playback.duration();
     const ct = this.isSeeking() ? this.seekPreview() * dur : this.playback.position();
-    return `${formatTrackTime(ct)} / ${dur > 0 ? formatTrackTime(dur) : '—'}`;
+    return `${formatTrackTime(ct)} / ${dur > 0 ? formatTrackLength(dur) : '—'}`;
   });
 
   /** The tracks the room plays through, as listed. */
@@ -225,7 +240,7 @@ export class MiniJukeboxComponent {
    * Locks or unlocks the seek bar; the lock is kept on the jukebox, so it holds for the whole room.
    */
   toggleSeekLock() {
-    if (this.jukebox) this.jukebox.isSeekLocked = !this.jukebox.isSeekLocked;
+    if (this.jukebox && this.canOperate()) this.jukebox.isSeekLocked = !this.jukebox.isSeekLocked;
   }
 
   /**
@@ -256,16 +271,15 @@ export class MiniJukeboxComponent {
   }
 
   /**
-   * The music volume from the player's slider, 0.5 until one is set.
+   * The music volume from the player's slider, the same one the jukebox panel sets.
    *
-   * Setting it changes what this browser plays at, scaled by the room volume; it is not sent to
-   * other peers.
+   * Setting it changes what this browser plays at, scaled by the room volume, and is remembered in
+   * this browser; it is not sent to other peers.
    */
   get volume(): number {
-    return this.jukebox?.volume ?? 0.5;
+    return this.personalVolumes.get('bgm');
   }
   set volume(v: number) {
-    if (this.jukebox) this.jukebox.volume = v;
-    AudioPlayer.volume = v * (this.config?.roomVolume ?? 1);
+    this.personalVolumes.set('bgm', v);
   }
 }

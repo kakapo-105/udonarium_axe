@@ -14,6 +14,7 @@ import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { DataElement, DataElementFieldType } from '@axe/domain/data/data-element';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
+import { ChatTabComponent } from '@axe/features/chat/chat-tab/chat-tab.component';
 import { ChatWindowComponent } from '@axe/features/chat/chat-window/chat-window.component';
 import { expectPanelDragRecovery, PanelDragTestHostComponent } from '@axe/testing/panel-drag-recovery';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
@@ -92,6 +93,79 @@ describe('ChatWindowComponent', () => {
       });
 
       expect(shown).toHaveBeenCalledTimes(1);
+    } finally {
+      tab.destroy();
+    }
+  });
+
+  it('sends a stamp with nothing said as a line of its own, past everything a line of words goes through', () => {
+    const tab = ChatTabList.instance.addChatTab('卓上');
+    try {
+      component.chatTabidentifier = tab.identifier;
+      fixture.detectChanges();
+      const service = TestBed.inject(ChatMessageService);
+      const words = vi.spyOn(service, 'sendMessage');
+      const stamp = vi.spyOn(service, 'sendStamp');
+
+      component.sendChat({
+        text: '',
+        gameSystem: null,
+        sendFrom: PeerCursor.myCursor.identifier,
+        sendTo: '',
+        portraitIndex: 0,
+        messColor: '#000000',
+        replyTo: '',
+        quoteOf: '',
+        toTicker: false,
+        stamp: { id: 'sfx:creepy', words: '［ゾワッ］' },
+      });
+
+      expect(words).not.toHaveBeenCalled();
+      expect(stamp).toHaveBeenCalledWith(
+        tab,
+        'sfx:creepy',
+        '［ゾワッ］',
+        PeerCursor.myCursor.identifier,
+        '',
+        0,
+        '#000000',
+        { light: '', dark: '' }
+      );
+      expect(tab.chatMessages.map((message) => message.sentStamp)).toEqual(['sfx:creepy']);
+    } finally {
+      tab.destroy();
+    }
+  });
+
+  it('sends a stamp with words under them, through everything a line of words goes through', () => {
+    const tab = ChatTabList.instance.addChatTab('卓上');
+    try {
+      component.chatTabidentifier = tab.identifier;
+      fixture.detectChanges();
+      const service = TestBed.inject(ChatMessageService);
+      const words = vi.spyOn(service, 'sendMessage');
+      const stamp = vi.spyOn(service, 'sendStamp');
+      const crit = { id: 'roll:critical', words: '［クリティカル!］' };
+
+      component.sendChat({
+        text: 'いくぞ！',
+        gameSystem: null,
+        sendFrom: PeerCursor.myCursor.identifier,
+        sendTo: '',
+        portraitIndex: 0,
+        messColor: '#000000',
+        replyTo: '',
+        quoteOf: '',
+        toTicker: false,
+        stamp: crit,
+      });
+
+      expect(stamp).not.toHaveBeenCalled();
+      expect(words.mock.calls[0][1]).toBe('いくぞ！');
+      expect(words.mock.calls[0][13]).toEqual(crit);
+      expect(tab.chatMessages.map((message) => [message.saidWithStamp, message.sentStamp])).toEqual([
+        ['いくぞ！', 'roll:critical'],
+      ]);
     } finally {
       tab.destroy();
     }
@@ -572,6 +646,172 @@ describe('ChatWindowComponent', () => {
       expect(component.newMessageCount()).toBe(3);
       expect(component.hasNewMessage()).toBe(true);
       expect(component.isNearBottom()).toBe(true);
+    });
+  });
+
+  describe('finding words in the tab', () => {
+    const searchBox = () =>
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>('[data-testid="chat-search-input"]');
+
+    function controlF(target: EventTarget): KeyboardEvent {
+      const event = new KeyboardEvent('keydown', {
+        key: 'f',
+        code: 'KeyF',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      target.dispatchEvent(event);
+      return event;
+    }
+
+    beforeEach(() => {
+      document.body.appendChild(fixture.nativeElement);
+      fixture.detectChanges();
+    });
+
+    afterEach(() => {
+      component.stopListeningForSearch();
+      (fixture.nativeElement as HTMLElement).remove();
+    });
+
+    it('opens on Ctrl+F inside the window, in place of the browser’s find, with the caret in it', async () => {
+      const event = controlF(fixture.nativeElement);
+      await fixture.whenStable();
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(searchBox()).not.toBeNull();
+      expect(document.activeElement).toBe(searchBox());
+    });
+
+    it('puts the caret back in the box on Ctrl+F while it is open', async () => {
+      component.openSearch();
+      await fixture.whenStable();
+      (fixture.nativeElement as HTMLElement).focus();
+
+      controlF(fixture.nativeElement);
+      await fixture.whenStable();
+
+      expect(document.activeElement).toBe(searchBox());
+    });
+
+    it('closes on Escape and hands the keyboard back to the window', async () => {
+      component.openSearch();
+      await fixture.whenStable();
+
+      searchBox()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await fixture.whenStable();
+
+      expect(component.searchOpen()).toBe(false);
+      expect(searchBox()).toBeNull();
+      expect((fixture.nativeElement as HTMLElement).contains(document.activeElement)).toBe(true);
+    });
+
+    it('opens on Ctrl+F from elsewhere while the pointer is over the window, and not once it has left', async () => {
+      fixture.nativeElement.dispatchEvent(new Event('pointerenter'));
+      const over = controlF(document.body);
+      await fixture.whenStable();
+      expect(over.defaultPrevented).toBe(true);
+      expect(component.searchOpen()).toBe(true);
+
+      component.closeSearch();
+      fixture.nativeElement.dispatchEvent(new Event('pointerleave'));
+      const away = controlF(document.body);
+      await fixture.whenStable();
+      expect(away.defaultPrevented).toBe(false);
+      expect(component.searchOpen()).toBe(false);
+    });
+
+    it('opens and closes from its button', async () => {
+      const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+        '[data-testid="chat-search-toggle"]'
+      )!;
+
+      button.click();
+      await fixture.whenStable();
+      expect(searchBox()).not.toBeNull();
+      expect(button.getAttribute('aria-pressed')).toBe('true');
+
+      button.click();
+      await fixture.whenStable();
+      expect(searchBox()).toBeNull();
+    });
+  });
+
+  describe('going back to a marked line', () => {
+    const tabs: ChatTab[] = [];
+    const byTestId = (id: string) =>
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(`[data-testid="${id}"]`);
+
+    function addTab(name: string): ChatTab {
+      const tab = ChatTabList.instance.addChatTab(name);
+      tabs.push(tab);
+      return tab;
+    }
+
+    beforeEach(() => {
+      document.body.appendChild(fixture.nativeElement);
+      fixture.detectChanges();
+    });
+
+    afterEach(() => {
+      for (const tab of tabs.splice(0)) tab.destroy();
+      (fixture.nativeElement as HTMLElement).remove();
+      vi.restoreAllMocks();
+    });
+
+    it('opens the list from its button in place of the search, and closes it again', async () => {
+      component.openSearch();
+      await fixture.whenStable();
+
+      byTestId('chat-bookmarks-toggle')!.click();
+      await fixture.whenStable();
+      expect(component.searchOpen()).toBe(false);
+      expect(byTestId('chat-bookmarks')).not.toBeNull();
+      expect(byTestId('chat-bookmarks-empty')).not.toBeNull();
+
+      byTestId('chat-bookmarks-close')!.click();
+      await fixture.whenStable();
+      expect(byTestId('chat-bookmarks')).toBeNull();
+    });
+
+    it('closes the list when the search is opened', async () => {
+      component.toggleBookmarks();
+      await fixture.whenStable();
+
+      component.openSearch();
+      await fixture.whenStable();
+
+      expect(component.bookmarksOpen()).toBe(false);
+    });
+
+    it('counts the marks on its button', async () => {
+      const tab = addTab('メイン');
+      tab.addMessage({ from: 'someone', name: 'ノア', text: '証言A', timestamp: 1000 }).bookmark(1000);
+      await fixture.whenStable();
+
+      expect(byTestId('chat-bookmarks-toggle-count')?.textContent?.trim()).toBe('1');
+    });
+
+    it('turns to the tab of the line, draws the log around it and lights it up', async () => {
+      const here = addTab('メイン');
+      const there = addTab('雑談');
+      const line = there.addMessage({ from: 'someone', name: 'ノア', text: '証言A', timestamp: 1000 });
+      line.bookmark(1000);
+      component.chatTabidentifier = here.identifier;
+      fixture.detectChanges();
+      const drawn = document.createElement('chat-message');
+      const reveal = vi.spyOn(ChatTabComponent.prototype, 'reveal').mockResolvedValue(drawn);
+      const flash = vi.spyOn(ChatTabComponent.prototype, 'flash');
+      component.toggleBookmarks();
+      await fixture.whenStable();
+
+      byTestId('chat-bookmark-open')!.click();
+      await vi.waitFor(() => expect(reveal).toHaveBeenCalledWith(line));
+
+      expect(component.chatTabidentifier).toBe(there.identifier);
+      expect(component.bookmarksOpen()).toBe(false);
+      await vi.waitFor(() => expect(flash).toHaveBeenCalledWith(line));
     });
   });
 

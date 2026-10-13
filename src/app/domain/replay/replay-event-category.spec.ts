@@ -18,6 +18,7 @@ describe('replay event categories', () => {
     expect(replayEventCategory(event(ReplayEventKind.Marker))).toBe('story');
     expect(replayEventCategory(event(ReplayEventKind.MediaCutIn))).toBe('story');
     expect(replayEventCategory(event(ReplayEventKind.VnScene))).toBe('story');
+    expect(replayEventCategory(event(ReplayEventKind.MediaBackgroundSound))).toBe('story');
   });
 
   it('counts what happened to the pieces as the board', () => {

@@ -10,12 +10,16 @@ import {
 import { ReplayStagingService } from '@axe/application/replay/replay-staging.service';
 import { isNetworkIsolated, setNetworkIsolated } from '@axe/core/network/network-isolation';
 import { networkMessage$ } from '@axe/core/network/network-messaging';
+import { AudioFile } from '@axe/core/storage/audio-file';
+import { AudioStorage } from '@axe/core/storage/audio-storage';
+import { LoopPlayer } from '@axe/core/storage/loop-player';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { ObjectSynchronizer } from '@axe/core/sync/object-synchronizer';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { ChatMessage } from '@axe/domain/chat/chat-message';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { DataElement } from '@axe/domain/data/data-element';
+import { BackgroundSound } from '@axe/domain/media/background-sound';
 import { CutIn } from '@axe/domain/media/cut-in';
 import { createReplayEntry, retextReplayEvent } from '@axe/domain/replay/replay-edit';
 import { PUBLIC_VISIBILITY, type ReplayEvent, ReplayEventKind } from '@axe/domain/replay/replay-event';
@@ -187,6 +191,77 @@ describe('ReplayPlaybackService', () => {
 
     expect(characterX()).toBe(10);
     expect(objectStore.get<GameCharacter>('c2')?.version).toBe(version);
+  });
+
+  describe('background sounds', () => {
+    const rainStarted: ReplayEvent = {
+      seq: 2,
+      at: 2000,
+      t: 2000,
+      kind: ReplayEventKind.MediaBackgroundSound,
+      actorId: 'alice',
+      targetId: 'rain',
+      detail: { isPlaying: true, volume: 1 },
+      patch: {
+        identifier: 'bgs_rain',
+        aliasName: 'background-sound',
+        before: {},
+        after: { audioIdentifier: 'rain', isPlaying: true, volume: 1, startedAt: 2000 },
+      },
+      visibility: PUBLIC_VISIBILITY,
+    };
+
+    let sounding: Map<LoopPlayer, string>;
+
+    function addAudio(identifier: string): void {
+      const audio = AudioFile.createEmpty(identifier);
+      const context = (audio as unknown as { context: Record<string, unknown> }).context;
+      context['blob'] = new Blob(['x']);
+      context['url'] = `blob:${identifier}`;
+      AudioStorage.instance.add(audio);
+    }
+
+    function heardLoops(): string[] {
+      return [...sounding.values()].sort();
+    }
+
+    beforeEach(() => {
+      sounding = new Map();
+      vi.spyOn(LoopPlayer.prototype, 'start').mockImplementation(function (this: LoopPlayer, audio: AudioFile) {
+        sounding.set(this, audio.identifier);
+      });
+      vi.spyOn(LoopPlayer.prototype, 'stop').mockImplementation(function (this: LoopPlayer) {
+        sounding.delete(this);
+      });
+      vi.spyOn(LoopPlayer.prototype, 'dispose').mockImplementation(function (this: LoopPlayer) {
+        sounding.delete(this);
+      });
+      vi.spyOn(LoopPlayer.prototype, 'isActive', 'get').mockImplementation(function (this: LoopPlayer) {
+        return sounding.has(this);
+      });
+      addAudio('rain');
+      addAudio('fire');
+      library.load.mockResolvedValue({ manifest: null, events: [moveEvent(1, 10, 0), rainStarted] });
+    });
+
+    afterEach(() => {
+      AudioStorage.instance.audios.forEach((audio) => AudioStorage.instance.delete(audio.identifier));
+    });
+
+    it('plays the ones of the recording on the table, and the room’s own again once it is left', async () => {
+      BackgroundSound.start('fire');
+      expect(heardLoops()).toEqual(['fire']);
+
+      await service.open(1);
+      await service.enterBoardMode();
+      expect(heardLoops()).toEqual([]);
+
+      await service.next();
+      expect(heardLoops()).toEqual(['rain']);
+
+      await service.exitBoardMode();
+      expect(heardLoops()).toEqual(['fire']);
+    });
   });
 
   it('sounds the effect again on a single step forward', async () => {

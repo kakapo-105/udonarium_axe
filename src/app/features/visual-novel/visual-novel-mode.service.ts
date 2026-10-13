@@ -1,6 +1,6 @@
 import { DestroyRef, inject, Injectable, signal } from '@angular/core';
 import { localDispatch, networkMessage$ } from '@axe/core/network/network-messaging';
-import { VN_MODE_EVENT } from '@axe/domain/visual-novel/vn-stage';
+import { VN_MODE_EVENT } from '@axe/domain/visual-novel/vn-mode-event';
 
 export { VN_MODE_EVENT };
 

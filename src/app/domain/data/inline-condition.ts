@@ -87,3 +87,11 @@ export function fillInRollReferences(text: string, answers: readonly number[]): 
   });
   return missing ? null : filled;
 }
+
+/**
+ * Whether a line holds an `if(...)` or a `$n` reference to a roll, which a resource edit works out
+ * itself before handing the rest to the dice bot.
+ */
+export function holdsInlineCondition(text: string): boolean {
+  return findConditions(text).length > 0 || /[$＄][0-9０-９]/.test(text);
+}
