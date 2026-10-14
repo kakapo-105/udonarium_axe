@@ -414,6 +414,100 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       },
     },
     {
+      name: 'switch_list',
+      read: true,
+      description:
+        'List the switches on the table in view: ground laid to be pressed and blocks made switches, with where each stands (x, y, w, h in cells), what it does (its actions), how often it can be pressed (repeat) and whether it has been pressed. Game master only. Use it to find what to change, reset or remove with switch_set.',
+      shape: {},
+    },
+    {
+      name: 'switch_set',
+      read: false,
+      description:
+        "Make something on the table in view into a switch the players press by clicking, for a chest, a lever, a place to search or a trap that goes off when pressed, so the master need not be asked. Without identifier it lays ground at x, y (w, h wide in cells, default 1) named name, shown to shownTo (room: everyone, sight: whoever sees it, master: only the master, which players cannot press). With identifier (from terrain_list or switch_list) it writes the switch of a block or of that ground, and fixes the block so it can be pressed. actions run in order, each after delayMs: say (text, said aloud in the chat, dice and {references} work), secret (text, to presser = the presser and master, or master = master only; for what a search turns up), sound / effect / cutIn (name of one the room holds), reveal / conceal (target: identifier of a hidden or visible piece, block or note, to bring out or put away; hide a monster or a hidden door first with piece_conceal or terrain_list's concealed ones), removeSelf (take the switch's own block or ground away last). speaker says who speaks: presser (default), host (the block's own name) or system. range is how near the presser's piece must stand in cells (0 anywhere), needsSight asks that they see it, repeat is always, once (spent by the first press), oncePerPiece or oncePerRound. remove: true takes a switch away; reset: true lets a used-up one be pressed again. What a switch does is kept in the room data, so say nothing in its text that the players must not read before they press it. Game master only; requires the prepare_room browser grant.",
+      shape: {
+        ...retry,
+        identifier: id.optional(),
+        x: z.number().finite().min(0).optional(),
+        y: z.number().finite().min(0).optional(),
+        w: z.number().finite().positive().optional(),
+        h: z.number().finite().positive().optional(),
+        name: z.string().min(1).max(256).optional(),
+        shownTo: z.enum(['room', 'sight', 'master']).optional(),
+        color: z
+          .string()
+          .regex(/^#[0-9a-fA-F]{6}$/)
+          .optional(),
+        remove: z.boolean().optional(),
+        reset: z.boolean().optional(),
+        label: z.string().max(256).optional(),
+        speaker: z.enum(['presser', 'host', 'system']).optional(),
+        range: z.number().int().min(0).max(99).optional(),
+        needsSight: z.boolean().optional(),
+        guests: z.boolean().optional(),
+        repeat: z.enum(['always', 'once', 'oncePerPiece', 'oncePerRound']).optional(),
+        actions: z
+          .array(
+            z
+              .object({
+                kind: z.enum(['say', 'secret', 'sound', 'effect', 'cutIn', 'reveal', 'conceal', 'removeSelf']),
+                text: z.string().max(2000).optional(),
+                to: z.enum(['presser', 'master']).optional(),
+                name: z.string().min(1).max(256).optional(),
+                target: id.optional(),
+                delayMs: z.number().int().min(0).max(10000).optional(),
+              })
+              .strict()
+          )
+          .min(1)
+          .max(20)
+          .optional(),
+      },
+    },
+    {
+      name: 'ambience_list',
+      read: true,
+      description: `List the weather over the table in view and the area effects laid on it (a marsh, a bank of fog, a pond…), with each one's kind, place (x, y, w, h in cells), thickness, who sees it, whether it blocks sight, its brightness and, for water, its depth and murk. Game master only.`,
+      shape: {},
+    },
+    {
+      name: 'ambience_set',
+      read: false,
+      description: `Set the scene's air and ground as a drawn effect, as the map's own settings do. Weather over a whole table: weather is none, or one of fog, rain, storm, snow, ash, ember, sand, miasma, bloom, underwater (table: a table's identifier, default the one in view; weatherDensity thin / normal / thick; weatherColor #rrggbb). An area effect on the table in view: without identifier it lays one of kind swamp (poison marsh), blaze (burning ground), vent (steam), fog, miasma, lava, frost, bloom (glowing moss) or water at x, y (top-left cell), w, h cells (default 4 by 4, 1 to 100); with identifier (from ambience_list) it changes or, with remove: true, takes away that area. density thin / normal / thick, color #rrggbb, shownTo room (everyone, default) / sight (whoever sees it, for what the party has yet to come upon) / master, blocksSight makes its edge stop sight like a wall (a wall of fog), brightness none / dark / dim / bright sets how bright the ground under it is whatever the rest of the table is lit by (works only where darkness or fog of war is on). Water also takes surfaceHeight (cells, 0 to 10), turbidity, dirtiness, floatingLeaves, flowSpeed (0 to 1) and flowDirection (degrees clockwise from the top). Use it for the look of a place; the rules effect (a penalty, damage) is still the master's to rule. Game master only; requires the prepare_room browser grant.`,
+      shape: {
+        ...retry,
+        table: id.optional(),
+        weather: z.string().min(1).max(32).optional(),
+        weatherDensity: z.enum(['thin', 'normal', 'thick']).optional(),
+        weatherColor: z
+          .string()
+          .regex(/^(#[0-9a-fA-F]{6})?$/)
+          .optional(),
+        identifier: id.optional(),
+        remove: z.boolean().optional(),
+        kind: z.enum(['swamp', 'blaze', 'vent', 'fog', 'miasma', 'lava', 'frost', 'bloom', 'water']).optional(),
+        name: z.string().min(1).max(256).optional(),
+        x: z.number().finite().min(0).optional(),
+        y: z.number().finite().min(0).optional(),
+        w: z.number().finite().min(1).max(100).optional(),
+        h: z.number().finite().min(1).max(100).optional(),
+        density: z.enum(['thin', 'normal', 'thick']).optional(),
+        color: z
+          .string()
+          .regex(/^(#[0-9a-fA-F]{6})?$/)
+          .optional(),
+        shownTo: z.enum(['room', 'sight', 'master']).optional(),
+        blocksSight: z.boolean().optional(),
+        brightness: z.enum(['none', 'dark', 'dim', 'bright']).optional(),
+        surfaceHeight: z.number().finite().min(0).max(10).optional(),
+        turbidity: z.number().finite().min(0).max(1).optional(),
+        dirtiness: z.number().finite().min(0).max(1).optional(),
+        floatingLeaves: z.number().finite().min(0).max(1).optional(),
+        flowSpeed: z.number().finite().min(0).max(1).optional(),
+        flowDirection: z.number().finite().min(0).max(359).optional(),
+      },
+    },
+    {
       name: 'range_list',
       read: true,
       description:

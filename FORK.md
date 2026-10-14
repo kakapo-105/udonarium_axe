@@ -42,7 +42,7 @@ git push                 # → 自動でビルド＆公開
 - テーブルごとの BGM — テーブル設定で曲を選んでおくと、一覧からそのテーブルを選んだときにジュークボックスで全員に流れる（[website/manual/table-setting.md](website/manual/table-setting.md#テーブルごとの-bgm)）
 - キャラクター一覧 — 卓のキャラクターを画面の端にリソースのバーと値で並べるウィジェット。項目はポップアップ表示と同じ。キャラごとに一覧から外せる（[website/manual/character.md](website/manual/character.md#画面の端のキャラクター一覧)）
 - マニュアル — 利用ガイドをアプリの隣（`docs/`）に公開し、アプリのメニューに「マニュアル」を追加
-- MCP による AI 操作 — okamichi さんの `feat/mcp`（1.50.0 ベース）を 1.57.1 へ移植。独自にシート・チャットパレット・バフの操作を追加し、「AI操作」パネルをドラッグで動かせるよう変更。MCP サーバーは `tools/mcp-server` の独立パッケージ（[tools/mcp-server/README.md](tools/mcp-server/README.md)）
+- MCP による AI 操作 — okamichi さんの `feat/mcp`（1.50.0 ベース）を 1.57.1 へ移植。独自にシート・チャットパレット・バフの操作を追加し、「AI操作」パネルをドラッグで動かせるよう変更。MCP サーバーは `tools/mcp-server` の独立パッケージ（[tools/mcp-server/README.md](tools/mcp-server/README.md)）、`switch_set` / `ambience_set`（押せる仕掛けと環境エフェクト・天候を AI が置く）
 
 ## 上流から削除したワークフロー
 

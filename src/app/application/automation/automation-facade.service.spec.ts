@@ -34,7 +34,9 @@ import { fogMemoryOn } from '@axe/domain/tabletop/fog/fog-memory';
 import { GameTable } from '@axe/domain/tabletop/game-table';
 import { LightSource } from '@axe/domain/tabletop/light-source';
 import { RangeArea } from '@axe/domain/tabletop/range';
+import { TableAmbience } from '@axe/domain/tabletop/table-ambience';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
+import { TableTrigger } from '@axe/domain/tabletop/table-trigger';
 import { DoorStyle, Terrain } from '@axe/domain/tabletop/terrain';
 import { TextNote } from '@axe/domain/tabletop/text-note';
 import { decodeVnEmote } from '@axe/domain/visual-novel/vn-emote';
@@ -1218,11 +1220,134 @@ describe('AutomationFacadeService', () => {
         error(await call('light_place', { x: 4, y: 5, kind: 'laser' }), 'INVALID_ARGUMENT');
       });
 
+      it('lays ground that does something when pressed, and takes it away again', async () => {
+        beGameMaster();
+
+        const laid = await call('switch_set', {
+          x: 2,
+          y: 3,
+          w: 2,
+          name: '古い宝箱',
+          shownTo: 'room',
+          repeat: 'once',
+          range: 2,
+          actions: [
+            { kind: 'say', text: '蓋がきしむ' },
+            { kind: 'secret', text: '底に鍵がある', to: 'presser', delayMs: 500 },
+          ],
+        });
+        expect(laid).toMatchObject({ ok: true, data: { kind: 'ground', name: '古い宝箱', x: 2, y: 3, w: 2, h: 1 } });
+        const identifier = (laid as { data: { identifier: string } }).data.identifier;
+        const ground = store.get<TableTrigger>(identifier)!;
+        expect(ground.parent).toBe(table);
+        expect(ground.moment).toBe('press');
+        expect(ground.pressSwitch?.def).toMatchObject({
+          repeat: 'once',
+          range: 2,
+          actions: [
+            { kind: 'say', text: '蓋がきしむ' },
+            { kind: 'secret', to: 'presser', delayMs: 500 },
+          ],
+        });
+
+        expect(await call('switch_list')).toMatchObject({
+          ok: true,
+          data: { items: [{ identifier, kind: 'ground', name: '古い宝箱', repeat: 'once', pressed: false }] },
+        });
+
+        expect(await call('switch_set', { identifier, label: '調べる' })).toMatchObject({
+          ok: true,
+          data: { label: '調べる', repeat: 'once' },
+        });
+
+        expect(await call('switch_set', { identifier, remove: true })).toMatchObject({
+          ok: true,
+          data: { removed: true },
+        });
+        expect(store.get(identifier)).toBeNull();
+      });
+
+      it('lays an area effect and sets the weather', async () => {
+        beGameMaster();
+
+        const laid = await call('ambience_set', {
+          kind: 'swamp',
+          x: 3,
+          y: 2,
+          w: 5,
+          h: 4,
+          density: 'thick',
+          shownTo: 'sight',
+          blocksSight: true,
+          name: '毒の沼',
+        });
+        expect(laid).toMatchObject({ ok: true, data: { kind: 'swamp', name: '毒の沼', x: 3, y: 2, w: 5, h: 4 } });
+        const identifier = (laid as { data: { identifier: string } }).data.identifier;
+        const area = store.get<TableAmbience>(identifier)!;
+        expect(area.parent).toBe(table);
+        expect(area.ambienceDensity).toBe(1);
+        expect(area.shows).toBe('sight');
+        expect(area.blocksSight).toBe(true);
+
+        expect(
+          await call('ambience_set', { identifier, kind: 'water', surfaceHeight: 1.5, brightness: 'dim' })
+        ).toMatchObject({
+          ok: true,
+          data: { kind: 'water' },
+        });
+        expect(area.surface).toBe(1.5);
+        expect(area.shade).toBe('dim');
+        expect(await call('ambience_list')).toMatchObject({
+          ok: true,
+          data: { weather: null, areas: [{ identifier, kind: 'water', surfaceHeight: 1.5, brightness: 'dim' }] },
+        });
+
+        expect(await call('ambience_set', { weather: 'rain', weatherDensity: 'thin' })).toMatchObject({
+          ok: true,
+          data: { weather: 'rain', density: 0.3 },
+        });
+        expect(table.weatherKind).toBe('rain');
+        await call('ambience_set', { weather: 'none' });
+        expect(table.weatherKind).toBe('');
+
+        expect(await call('ambience_set', { identifier, remove: true })).toMatchObject({
+          ok: true,
+          data: { removed: true },
+        });
+        expect(store.get(identifier)).toBeNull();
+      });
+
+      it('refuses an area effect that is not one', async () => {
+        beGameMaster();
+
+        error(await call('ambience_set', { x: 1, y: 1 }), 'INVALID_ARGUMENT');
+        error(await call('ambience_set', { kind: 'rain', x: 1, y: 1 }), 'INVALID_ARGUMENT');
+        error(await call('ambience_set', { kind: 'swamp', x: 1, y: 1, w: 500 }), 'INVALID_ARGUMENT');
+        error(await call('ambience_set', { weather: 'swamp' }), 'INVALID_ARGUMENT');
+        error(await call('ambience_set', { identifier: 'nothing', density: 'thin' }), 'NOT_FOUND');
+      });
+
+      it('refuses a switch that is not a switch', async () => {
+        beGameMaster();
+
+        error(await call('switch_set', { x: 1, y: 1, name: 'x' }), 'INVALID_ARGUMENT');
+        error(await call('switch_set', { x: 1, y: 1, name: 'x', actions: [{ kind: 'carry' }] }), 'INVALID_ARGUMENT');
+        error(
+          await call('switch_set', { x: 1, y: 1, name: 'x', repeat: 'often', actions: [{ kind: 'say', text: 'a' }] }),
+          'INVALID_ARGUMENT'
+        );
+        error(await call('switch_set', { identifier: 'nothing', label: 'a' }), 'NOT_FOUND');
+      });
+
       it('keeps the ground plan and the doors to the game master', async () => {
         policy.setScope('prepare_room', true);
         error(await call('terrain_list'), 'FORBIDDEN');
         error(await call('fog_reveal', { x: 0, y: 0, w: 1, h: 1 }), 'FORBIDDEN');
         error(await call('light_place', { x: 0, y: 0 }), 'FORBIDDEN');
+        error(await call('switch_list'), 'FORBIDDEN');
+        error(await call('ambience_list'), 'FORBIDDEN');
+        error(await call('ambience_set', { weather: 'rain' }), 'FORBIDDEN');
+        error(await call('switch_set', { x: 0, y: 0, name: 'a', actions: [{ kind: 'say', text: 'a' }] }), 'FORBIDDEN');
       });
     });
 

@@ -1,4 +1,5 @@
 import { inject, Injectable } from '@angular/core';
+import { AmbienceAreaRequest, AmbienceCommandService } from '@axe/application/automation/ambience-command.service';
 import { automationAudiosOf } from '@axe/application/automation/automation-audio.service';
 import { AutomationAuditService } from '@axe/application/automation/automation-audit.service';
 import {
@@ -31,6 +32,7 @@ import { RangeCommandService, RangePlace } from '@axe/application/automation/ran
 import { RoomPrepCommandService } from '@axe/application/automation/room-prep-command.service';
 import { RoomTemplateCommandService } from '@axe/application/automation/room-template-command.service';
 import { SessionCommandService } from '@axe/application/automation/session-command.service';
+import { SwitchCommandService, SwitchRequest } from '@axe/application/automation/switch-command.service';
 import { VnStageCommandService } from '@axe/application/automation/vn-stage-command.service';
 import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
@@ -82,6 +84,8 @@ const ROOM_PREP_WRITES: readonly AutomationCommand[] = [
   'fog_reveal',
   'door_set',
   'light_place',
+  'switch_set',
+  'ambience_set',
   'vn_stage',
   'range_set',
   'table_set',
@@ -273,6 +277,8 @@ export class AutomationFacadeService {
   private readonly exploration = inject(ExplorationCommandService);
   private readonly vnStage = inject(VnStageCommandService);
   private readonly ranges = inject(RangeCommandService);
+  private readonly switches = inject(SwitchCommandService);
+  private readonly ambience = inject(AmbienceCommandService);
   private readonly audit = inject(AutomationAuditService);
   private readonly store = inject(ObjectStore);
   private readonly tables = inject(TableSelecter);
@@ -424,7 +430,13 @@ export class AutomationFacadeService {
       if (args['concealed'] === true) this.policy.requireGameMaster();
     }
     // The ground plan, hidden doors and all, is the master's to read.
-    if (request.command === 'terrain_list' || request.command === 'range_list') this.policy.requireGameMaster();
+    if (
+      request.command === 'terrain_list' ||
+      request.command === 'range_list' ||
+      request.command === 'switch_list' ||
+      request.command === 'ambience_list'
+    )
+      this.policy.requireGameMaster();
     if (ROOM_PREP_WRITES.includes(request.command)) {
       this.policy.require('prepare_room');
       this.policy.requireGameMaster();
@@ -809,6 +821,131 @@ export class AutomationFacadeService {
           kind as LightKind,
           a['name'] === undefined ? String(kind) : textArgument(a['name']).trim()
         );
+      }
+      case 'switch_list':
+        onlyKeys(a, []);
+        return this.switches.list();
+      case 'switch_set': {
+        onlyKeys(a, [
+          'identifier',
+          'x',
+          'y',
+          'w',
+          'h',
+          'name',
+          'shownTo',
+          'color',
+          'remove',
+          'reset',
+          'label',
+          'speaker',
+          'range',
+          'needsSight',
+          'guests',
+          'repeat',
+          'actions',
+        ]);
+        const request: SwitchRequest = {
+          label: a['label'] === undefined ? undefined : textArgument(a['label']),
+          speaker: a['speaker'] === undefined ? undefined : textArgument(a['speaker'], 32),
+          range: a['range'] === undefined ? undefined : numberArgument(a['range']),
+          needsSight: a['needsSight'] === undefined ? undefined : booleanOf(a['needsSight'], 'needsSight'),
+          guests: a['guests'] === undefined ? undefined : booleanOf(a['guests'], 'guests'),
+          repeat: a['repeat'] === undefined ? undefined : textArgument(a['repeat'], 32),
+          actions:
+            a['actions'] === undefined
+              ? undefined
+              : (Array.isArray(a['actions'])
+                  ? (a['actions'] as unknown[])
+                  : fail('INVALID_ARGUMENT', 'actions must be a list.')
+                ).map((one) => record(one)),
+        };
+        if (a['identifier'] === undefined) {
+          if (a['x'] === undefined || a['y'] === undefined)
+            fail('INVALID_ARGUMENT', 'Give an identifier, or x and y to lay pressed ground.');
+          return this.switches.lay(
+            {
+              x: numberArgument(a['x']),
+              y: numberArgument(a['y']),
+              w: a['w'] === undefined ? 1 : numberArgument(a['w']),
+              h: a['h'] === undefined ? 1 : numberArgument(a['h']),
+              name: textArgument(a['name']).trim(),
+              shownTo: a['shownTo'] === undefined ? 'room' : textArgument(a['shownTo'], 16),
+              color: a['color'] === undefined ? undefined : textArgument(a['color'], 7),
+            },
+            request
+          );
+        }
+        const target = this.switches.find(textArgument(a['identifier']));
+        if (booleanOf(a['remove'], 'remove')) return this.switches.remove(target);
+        if (booleanOf(a['reset'], 'reset')) return this.switches.reset(target);
+        return this.switches.set(target, request);
+      }
+      case 'ambience_list':
+        onlyKeys(a, []);
+        return this.ambience.list();
+      case 'ambience_set': {
+        onlyKeys(a, [
+          'table',
+          'weather',
+          'weatherDensity',
+          'weatherColor',
+          'identifier',
+          'remove',
+          'kind',
+          'name',
+          'x',
+          'y',
+          'w',
+          'h',
+          'density',
+          'color',
+          'shownTo',
+          'blocksSight',
+          'brightness',
+          'surfaceHeight',
+          'turbidity',
+          'dirtiness',
+          'floatingLeaves',
+          'flowSpeed',
+          'flowDirection',
+        ]);
+        const text = (key: string, max = 64) => (a[key] === undefined ? undefined : textArgument(a[key], max));
+        const number = (key: string) => (a[key] === undefined ? undefined : numberArgument(a[key]));
+        if (a['weather'] !== undefined) {
+          const table =
+            a['table'] === undefined ? this.tables.viewTable : this.roomPrep.table(textArgument(a['table']));
+          if (!table) fail('NOT_READY', 'No usable table.');
+          return this.ambience.weather(
+            table,
+            textArgument(a['weather'], 32),
+            text('weatherDensity', 16),
+            a['weatherColor'] === undefined ? undefined : String(a['weatherColor']).slice(0, 7)
+          );
+        }
+        const request: AmbienceAreaRequest = {
+          kind: text('kind', 32),
+          name: text('name', 256),
+          x: number('x'),
+          y: number('y'),
+          w: number('w'),
+          h: number('h'),
+          density: text('density', 16),
+          color: a['color'] === undefined ? undefined : String(a['color']).slice(0, 7),
+          shownTo: text('shownTo', 16),
+          blocksSight: a['blocksSight'] === undefined ? undefined : booleanOf(a['blocksSight'], 'blocksSight'),
+          brightness: text('brightness', 16),
+          surfaceHeight: number('surfaceHeight'),
+          turbidity: number('turbidity'),
+          dirtiness: number('dirtiness'),
+          floatingLeaves: number('floatingLeaves'),
+          flowSpeed: number('flowSpeed'),
+          flowDirection: number('flowDirection'),
+        };
+        if (a['identifier'] === undefined) return this.ambience.place(request);
+        const area = this.ambience.area(textArgument(a['identifier']));
+        if (booleanOf(a['remove'], 'remove')) return this.ambience.remove(area);
+        return this.ambience.change(area, request);
       }
       case 'range_list':
         onlyKeys(a, []);

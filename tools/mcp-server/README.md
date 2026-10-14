@@ -149,6 +149,10 @@ GMであっても所有物への限定は自動では外れません。ゲスト
 | `vn_stage`            | ビジュアルノベル表示を全員で開く・閉じる、背景を替える。GM のみ                            |
 | `range_list`          | 卓の上と共有インベントリにある範囲（乱戦エリア・射程など）の一覧。GM のみ                  |
 | `range_set`           | 範囲を卓に出す・動かす・駒に追従させる・共有インベントリにしまう。GM のみ                  |
+| `ambience_list`       | 卓の天候と、地面の環境エフェクト（毒沼・濃霧・水域など）の一覧。GM のみ                    |
+| `ambience_set`        | 環境エフェクトを置く・変える・消す、卓全体の天候を決める。GM のみ                          |
+| `switch_list`         | 卓のスイッチ（押すと何かが起きる地面・ブロック）の一覧。GM のみ                            |
+| `switch_set`          | 押せる地面を置く、またはブロックをスイッチにする。発言・秘密の結果・伏せた物を出す等を並べる。GM のみ |
 
 座標の基準はコマの左上です。マス座標 `(3, 2)` は、左から3マス・上から2マスの位置を指します。
 移動できるのは床面側にいて浮いていないキャラクターで、コマ全体が盤内に収まる必要があります。
@@ -340,6 +344,13 @@ Udonarium Axe で作って保存したルームを、テンプレートとして
 - 画像フォルダの `index.json` に、絵ごとの種類（`background`・`portrait`・`texture`・`wall`）・タグ・メモを書いておくと、
   `room_template_list` がそれを返し、AI が絵を選べます
 
+- 宝箱・レバー・調べる場所・罠は、`switch_set` で押せる地面（x, y, w, h と `name`）を置き、PL がクリックしたときの動作（`say` 発言、`secret` 押した人と GM だけの結果、
+  `reveal` / `conceal` 伏せた物を出す・伏せる、`removeSelf`、`sound` / `effect` / `cutIn`）を `actions` に並べます。`repeat` で回数、`range` で押せる距離を決めます。
+  既存のブロックは `identifier` を渡すと固定されてスイッチになります。`switch_list` で一覧を読み、`remove` / `reset` で外す・押し直せるようにします。
+  動作の文章は部屋のデータに入るので、押す前の PL に読ませたくないことは書かないでください
+- 毒沼・濃霧・溶岩・水域などの危険地帯は、`ambience_set` で `kind`・`x`・`y`・`w`・`h` を渡して置きます（`shownTo: "sight"` なら PL の視界に入るまで見えません）。
+  `blocksSight: true` で霧の壁、`brightness` で区画の暗さ、水は `surfaceHeight`・`turbidity` などで深さと濁りを決めます。卓全体の天候は `weather`（`rain`・`snow`・`fog` など、`none` で消す）です。
+  効果は見た目で、ルール上のペナルティやダメージは GM が裁定します
 - 範囲（乱戦エリアや魔法の射程）は `range_list` で探し、`range_set` で動かします。ルームテンプレートの範囲は共有インベントリに入っているので、
   `place: "table"` で卓に出し、`x`・`y`（マス）で中心を決めます。`follow` に駒の ID を渡すと、その駒が動くたびに付いていきます。
   使い終わったら `place: "common"` でしまいます
@@ -411,7 +422,7 @@ SkyWayの実回線・認証・部屋への参加は検証対象に含めてい�
 - `automationPreset=gm` で、起動したときから GM として全部を許可した状態にできるようにしました
 - 保存したルームをテンプレートとして足す `room_template_load` と一覧の `room_template_list`、BGM を流す `bgm_play`、読み込んだ部屋に音声を戻す `room_audio_restore` を加えました。
 - 盤面での探索・描写のために、`table_view` / `view_focus` / `fog_reveal` / `terrain_list` / `door_set` / `light_place` / `vn_stage`、
-  `range_list` / `range_set` / `table_set` / `self_set`、`chat_wait` の `pieces`、`chat_send` の `style`、`table_create` の床・壁・背景の指定を加えました。画像は `UDONARIUM_IMAGE_DIR` のフォルダから渡します
+  `range_list` / `range_set` / `switch_list` / `switch_set` / `ambience_list` / `ambience_set` / `table_set` / `self_set`、`chat_wait` の `pieces`、`chat_send` の `style`、`table_create` の床・壁・背景の指定を加えました。画像は `UDONARIUM_IMAGE_DIR` のフォルダから渡します
   保存データに入らない音声は、手元のフォルダから中身の SHA-256 で探して登録します
 - `character_create` で、Udonarium Axe の駒 XML と、それが使う画像を受け付けるようにしました。画像は SHA-256 を確かめてから登録します
 - 2 画面テストの土台で、本物の接続を始めないようにしました。届かない接続先への再試行が尽きると接続終了と扱われ、長いテストの途中でAI操作が止まっていたためです
