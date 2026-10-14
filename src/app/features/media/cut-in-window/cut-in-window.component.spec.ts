@@ -118,7 +118,7 @@ describe('CutInWindowComponent', () => {
       expect(component.videoVolume).toBe(50);
     });
 
-    it('follows the listener’s own cut-in volume, counting from the half it starts at', () => {
+    it('follows the listener’s own cut-in volume, counting from the quarter it starts at', () => {
       vi.spyOn(AudioPlayer, 'setChannelVolume').mockImplementation(() => {});
       const volumes = TestBed.inject(PersonalVolumeService);
       const cutIn = new CutIn('personal-volume-test');
@@ -126,7 +126,7 @@ describe('CutInWindowComponent', () => {
       cutIn.videoVolume = 60;
       component.cutIn = cutIn;
 
-      volumes.set('cutIn', 0.25);
+      volumes.set('cutIn', 0.125);
       expect(component.videoVolume).toBe(30);
 
       volumes.set('cutIn', 1);

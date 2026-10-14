@@ -31,6 +31,7 @@ import { ChatMessage } from '@axe/domain/chat/chat-message';
 import { canRoleSpeakTab } from '@axe/domain/chat/chat-tab-permission';
 import { DataElement } from '@axe/domain/data/data-element';
 import { DiceBot } from '@axe/domain/dice/dice-bot';
+import { Config } from '@axe/domain/peer/config';
 import { Jukebox } from '@axe/domain/media/jukebox';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
@@ -264,11 +265,18 @@ export class VisualNovelOverlayComponent {
    * same setting the chat input uses.
    */
   get gameType(): string {
-    return this.chatMessageService.gameType.length > 0 ? this.chatMessageService.gameType : 'DiceBot';
+    const picked = this.chatMessageService.gameType;
+    // Until someone picks a dice bot, the plain one stands for "the room's default", as in the chat input.
+    if ((picked.length === 0 || picked === 'DiceBot') && !this.isGameTypeByUser) {
+      return this.objectStore.get<Config>('Config')?.defaultDiceBot || 'DiceBot';
+    }
+    return picked.length > 0 ? picked : 'DiceBot';
   }
   set gameType(gameType: string) {
+    this.isGameTypeByUser = true;
     this.chatMessageService.gameType = gameType;
   }
+  private isGameTypeByUser = false;
 
   private readonly diceBotCatalog = inject(DiceBotCatalogService);
 

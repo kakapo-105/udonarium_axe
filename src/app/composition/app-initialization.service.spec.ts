@@ -60,7 +60,7 @@ describe('AppInitializationService', () => {
     const jukebox = TestBed.inject(ObjectStore).get<Jukebox>('Jukebox')!;
     expect(jukebox.volume).toBe(0.2);
     expect(jukebox.backgroundVolume).toBe(0.3);
-    expect(jukebox.seVolume).toBe(0.5);
+    expect(jukebox.seVolume).toBe(0.25);
   });
 
   describe('initialize()', () => {

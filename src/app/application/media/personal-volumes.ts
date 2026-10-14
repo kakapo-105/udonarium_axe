@@ -28,14 +28,14 @@ export const PERSONAL_VOLUME_KINDS: readonly PersonalVolumeKind[] = [
 ];
 
 export const DEFAULT_PERSONAL_VOLUMES: PersonalVolumes = {
-  audition: 0.5,
-  bgm: 0.5,
-  se: 0.5,
-  background: 0.5,
-  cutIn: 0.5,
-  notification: 0.5,
-  handling: 0.5,
-  effect: 0.5,
+  audition: 0.25,
+  bgm: 0.25,
+  se: 0.25,
+  background: 0.25,
+  cutIn: 0.25,
+  notification: 0.25,
+  handling: 0.25,
+  effect: 0.25,
 };
 
 /** The listener's own sound settings: a volume for each kind, and the kinds turned off. */

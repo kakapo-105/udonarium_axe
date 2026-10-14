@@ -32,11 +32,11 @@ describe('PersonalVolumeService', () => {
     vi.restoreAllMocks();
   });
 
-  it('starts every volume at half, with nothing turned off', () => {
+  it('starts every volume at a quarter, with nothing turned off', () => {
     channels();
     const volumes = reopened();
 
-    expect(PERSONAL_VOLUME_KINDS.map((kind) => volumes.get(kind))).toEqual(PERSONAL_VOLUME_KINDS.map(() => 0.5));
+    expect(PERSONAL_VOLUME_KINDS.map((kind) => volumes.get(kind))).toEqual(PERSONAL_VOLUME_KINDS.map(() => 0.25));
     expect(PERSONAL_VOLUME_KINDS.some((kind) => volumes.isMuted(kind))).toBe(false);
   });
 
@@ -48,7 +48,7 @@ describe('PersonalVolumeService', () => {
     const volumes = reopened();
     expect(volumes.get('se')).toBe(0.2);
     expect(volumes.get('handling')).toBe(0.7);
-    expect(volumes.get('bgm')).toBe(0.5);
+    expect(volumes.get('bgm')).toBe(0.25);
   });
 
   it('makes a volume heard at once on its own channel, scaled by the room volume, and puts it on the jukebox', () => {
@@ -119,7 +119,7 @@ describe('PersonalVolumeService', () => {
     jukebox.setNewVolume();
 
     expect(heard(VolumeType.CUT_IN)).toBe(0);
-    expect(heard(VolumeType.SE)).toBeCloseTo(0.75);
+    expect(heard(VolumeType.SE)).toBeCloseTo(0.375);
   });
 
   it('hands the remembered volumes to the jukebox and the players as the app starts', () => {
@@ -140,7 +140,7 @@ describe('PersonalVolumeService', () => {
     expect(heard(VolumeType.AUDITION)).toBe(0.1);
     expect(heard(VolumeType.CUT_IN)).toBe(0.6);
     expect(heard(VolumeType.EFFECT)).toBe(0);
-    expect(heard(VolumeType.HANDLING)).toBe(0.5);
+    expect(heard(VolumeType.HANDLING)).toBe(0.25);
   });
 
   it('keeps a volume for the session when the browser refuses to write it down', () => {
@@ -167,7 +167,7 @@ describe('parsePersonalSound()', () => {
     }
   });
 
-  it('reads what a version that knew only four kinds wrote down, with the rest at half', () => {
+  it('reads what a version that knew only four kinds wrote down, with the rest at a quarter', () => {
     const read = parsePersonalSound(JSON.stringify({ audition: 0.1, bgm: 0.2, se: 0.3, background: 0.4 }));
 
     expect(read.volumes).toEqual({
@@ -175,20 +175,20 @@ describe('parsePersonalSound()', () => {
       bgm: 0.2,
       se: 0.3,
       background: 0.4,
-      cutIn: 0.5,
-      notification: 0.5,
-      handling: 0.5,
-      effect: 0.5,
+      cutIn: 0.25,
+      notification: 0.25,
+      handling: 0.25,
+      effect: 0.25,
     });
     expect(read.muted).toEqual([]);
   });
 
   it('takes the default for a volume missing, not a number or outside 0 to 1, and keeps the rest', () => {
     expect(parsePersonalVolumes(JSON.stringify({ bgm: 0.25, se: '0.3', audition: 2, background: -1 }))).toMatchObject({
-      audition: 0.5,
+      audition: 0.25,
       bgm: 0.25,
-      se: 0.5,
-      background: 0.5,
+      se: 0.25,
+      background: 0.25,
     });
   });
 

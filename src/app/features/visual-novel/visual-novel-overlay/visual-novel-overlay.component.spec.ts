@@ -15,6 +15,7 @@ import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { DataElement } from '@axe/domain/data/data-element';
 import { DiceBot } from '@axe/domain/dice/dice-bot';
+import { Config } from '@axe/domain/peer/config';
 import { AudioTag } from '@axe/domain/media/audio-tag';
 import { Jukebox } from '@axe/domain/media/jukebox';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
@@ -798,6 +799,17 @@ describe('VisualNovelOverlayComponent', () => {
     expect(chatMessageService.gameType).toBe('Cthulhu7th');
     expect(component.gameType).toBe('Cthulhu7th');
     chatMessageService.gameType = 'DiceBot';
+  });
+
+  it("rolls with the room's default dice bot until one is picked", () => {
+    const config = new Config('Config');
+    config.initialize();
+    config.defaultDiceBot = 'SwordWorld2.5';
+    createComponent();
+    expect(component.gameType).toBe('SwordWorld2.5');
+    component.gameType = 'Cthulhu7th';
+    expect(component.gameType).toBe('Cthulhu7th');
+    TestBed.inject(ChatMessageService).gameType = 'DiceBot';
   });
 
   it('holds no more than six on stage', () => {
