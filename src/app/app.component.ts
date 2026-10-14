@@ -20,6 +20,7 @@ import { SaveDataService } from '@axe/application/file/save-data.service';
 import { LanguageService } from '@axe/application/i18n/language.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
+import { AudioAnalysisService } from '@axe/application/media/audio-analysis.service';
 import { CutInService } from '@axe/application/media/cut-in.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
@@ -82,8 +83,10 @@ import { HotbarBarComponent } from '@axe/features/hotbar/hotbar-bar/hotbar-bar.c
 import { InviteJoinComponent } from '@axe/features/lobby/invite-join/invite-join.component';
 import { NetworkEventHandlerService } from '@axe/features/lobby/network-event-handler.service';
 import { NetworkIndicatorComponent } from '@axe/features/lobby/network-indicator/network-indicator.component';
+import { BeatLightComponent } from '@axe/features/media/beat-light/beat-light.component';
 import { CutInEventHandlerService } from '@axe/features/media/cut-in-event-handler.service';
 import { MiniJukeboxComponent } from '@axe/features/media/mini-jukebox/mini-jukebox.component';
+import { MixEventHandlerService } from '@axe/features/media/mix-event-handler.service';
 import {
   isMenuGroupView,
   MenuCommandService,
@@ -156,6 +159,7 @@ const FAB_MARGIN_PX = 12;
     AutomationControlComponent,
     VoiceStatusComponent,
     CharacterRosterComponent,
+    BeatLightComponent,
     GameTableComponent,
     FirstPersonViewComponent,
     NetworkIndicatorComponent,
@@ -471,6 +475,7 @@ export class AppComponent {
     inject(EffectChatEventHandlerService);
     inject(VoteEventHandlerService);
     inject(CutInEventHandlerService);
+    inject(MixEventHandlerService);
     inject(NetworkEventHandlerService);
     inject(RoomArchiveEventHandlerService);
     inject(ReplayEventHandlerService);
@@ -481,6 +486,7 @@ export class AppComponent {
     inject(FogMemoryWriterService);
     inject(SharedFocusService);
     inject(CutInService);
+    inject(AudioAnalysisService);
     inject(SpeechBubbleService);
     inject(GravityService);
     inject(LegacyScratchMaskMigrationService);

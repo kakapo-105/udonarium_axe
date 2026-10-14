@@ -226,6 +226,7 @@ export default defineConfig({
             { text: '乗り物に乗る', link: '/manual/ride' },
             { text: '同行（パーティ）', link: '/manual/party' },
             { text: '地形', link: '/manual/terrain' },
+            { text: '水域と水中', link: '/manual/water' },
             { text: 'スイッチ', link: '/manual/switch' },
             { text: 'ダンジョンドリィマスターモード', link: '/manual/dungeondry-master' },
             { text: 'マップマスク', link: '/manual/map-mask' },
@@ -263,6 +264,7 @@ export default defineConfig({
           items: [
             { text: '画像', link: '/manual/images' },
             { text: 'ジュークボックス', link: '/manual/jukebox' },
+            { text: 'DJデッキ', link: '/manual/dj-deck' },
             { text: '音の設定', link: '/manual/sound-settings' },
             { text: 'カットイン', link: '/manual/cut-in' },
             { text: 'マップ演出（エフェクト）', link: '/manual/map-effects' },
@@ -286,6 +288,7 @@ export default defineConfig({
           text: 'リリースノート',
           items: [
             { text: '一覧', link: '/release-notes/' },
+            { text: 'v1.67.0', link: '/release-notes/v1.67.0' },
             { text: 'v1.66.0', link: '/release-notes/v1.66.0' },
             { text: 'v1.65.2', link: '/release-notes/v1.65.2' },
             { text: 'v1.65.1', link: '/release-notes/v1.65.1' },
