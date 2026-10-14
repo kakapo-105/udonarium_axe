@@ -157,6 +157,15 @@ function buffCommandsOf(value: unknown): string[] {
 }
 
 /** How long a chat_wait may wait, in seconds: a whole number from 1 to the cap, a minute when left out. */
+/** How long chat must be quiet before a wait hands it over, from none to ten seconds. */
+function settleSecondsOf(value: unknown): number {
+  if (value === undefined) return 0;
+  const seconds = numberArgument(value);
+  if (!Number.isInteger(seconds) || seconds < 0 || seconds > 10)
+    fail('INVALID_ARGUMENT', 'settleSeconds must be a whole number from 0 to 10.');
+  return seconds;
+}
+
 function waitSecondsOf(value: unknown): number {
   if (value === undefined) return DEFAULT_WAIT_SECONDS;
   const seconds = numberArgument(value);
@@ -582,7 +591,7 @@ export class AutomationFacadeService {
         };
       }
       case 'chat_wait': {
-        onlyKeys(a, ['tabIds', 'waitSeconds', 'limit', 'pieces']);
+        onlyKeys(a, ['tabIds', 'waitSeconds', 'limit', 'pieces', 'settleSeconds']);
         const visible = this.store.getObjects<ChatTab>(ChatTab).filter((tab) => canRoleViewTab(tab, PeerCursor.myRole));
         const tabs =
           a['tabIds'] === undefined
@@ -603,6 +612,7 @@ export class AutomationFacadeService {
           {
             waitMs: waitSecondsOf(a['waitSeconds']) * 1000,
             limit: pageSize(a['limit'], 50),
+            settleMs: settleSecondsOf(a['settleSeconds']) * 1000,
             pieces,
           },
           guard

@@ -7,6 +7,8 @@ import { ChatTab } from '@axe/domain/chat/chat-tab';
 const POLL_MS = 500;
 /** How long a piece must stand still before its move counts: a drag passes through many places. */
 export const SETTLE_MS = 1500;
+/** As long as a wait keeps gathering lines after the first one came, however long they keep coming. */
+export const CHAT_SETTLE_CAP_MS = 20000;
 
 /** A piece that was moved and has come to rest, in pixels of the table. */
 export interface PieceMove {
@@ -89,12 +91,16 @@ export class ChatWaitService {
    * The public messages in `tabs` not yet handed over, oldest first and at most `limit` of them,
    * as soon as there is at least one; none once `waitMs` has passed.
    *
+   * With `settleMs`, a wait that has found chat keeps watching until nothing new has come for that
+   * long (or {@link CHAT_SETTLE_CAP_MS} has passed since the first line) and hands over what it has
+   * gathered at once, so speech that arrives in fragments is one answer rather than many.
+   *
    * `guard` runs before every look, so a withdrawn permission ends the wait.
    */
   async wait(
     tabs: readonly ChatTab[],
     allTabs: readonly ChatTab[],
-    options: { waitMs: number; limit: number; pieces?: () => readonly GameCharacter[] },
+    options: { waitMs: number; limit: number; settleMs?: number; pieces?: () => readonly GameCharacter[] },
     guard: () => void
   ) {
     if (!this.primed) {
@@ -102,10 +108,27 @@ export class ChatWaitService {
       this.primed = true;
     }
     const until = Date.now() + options.waitMs;
+    const settleMs = options.settleMs ?? 0;
+    let gathered = 0;
+    let firstAt = 0;
+    let changedAt = 0;
     for (;;) {
       guard();
       const moves = options.pieces ? this.movesOf(options.pieces()) : [];
       const fresh = this.freshIn(tabs);
+      if (fresh.length > 0 && settleMs > 0 && moves.length === 0) {
+        const now = Date.now();
+        if (fresh.length !== gathered) {
+          if (gathered === 0) firstAt = now;
+          gathered = fresh.length;
+          changedAt = now;
+        }
+        const quiet = now - changedAt >= settleMs || now - firstAt >= CHAT_SETTLE_CAP_MS;
+        if (!quiet) {
+          await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+          continue;
+        }
+      }
       if (fresh.length > 0 || moves.length > 0) {
         const messages = fresh.slice(0, options.limit);
         this.remember(messages);

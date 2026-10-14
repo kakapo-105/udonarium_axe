@@ -683,6 +683,31 @@ describe('AutomationFacadeService', () => {
     }
     beforeEach(() => vi.useFakeTimers());
 
+    it('gathers speech that arrives in pieces when asked to settle', async () => {
+      await wait();
+
+      const pending = call('chat_wait', { waitSeconds: 30, settleSeconds: 3 });
+      await vi.advanceTimersByTimeAsync(1000);
+      say('ちょっと');
+      await vi.advanceTimersByTimeAsync(2000);
+      say('進めてください');
+      await vi.advanceTimersByTimeAsync(2000);
+      let answered = false;
+      void pending.finally(() => (answered = true));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(answered).toBe(false);
+      await vi.advanceTimersByTimeAsync(1500);
+
+      expect((await pending) as unknown).toMatchObject({
+        ok: true,
+        data: { messages: [{ text: 'ちょっと' }, { text: '進めてください' }], timedOut: false },
+      });
+    });
+
+    it('refuses a settle time that is out of range', async () => {
+      error(await call('chat_wait', { settleSeconds: 11 }), 'INVALID_ARGUMENT');
+    });
+
     it('hands over what arrives after the first wait began, each message once', async () => {
       say('before');
       expect((await wait()).data).toMatchObject({ messages: [], timedOut: true });
