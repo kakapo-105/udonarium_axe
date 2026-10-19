@@ -9,6 +9,8 @@ import { SharedFocusService } from '@axe/application/tabletop/shared-focus.servi
 import { VisionService } from '@axe/application/tabletop/vision.service';
 import { LocalModePreferenceService } from '@axe/application/ui/local-mode-preference.service';
 import { Network } from '@axe/core/network/network';
+import { IPeerContext } from '@axe/core/network/peer-context';
+import { resetPeerContextProvider, setPeerContextProvider } from '@axe/core/network/peer-context-source';
 import { setNetworkIsolated } from '@axe/core/network/network-isolation';
 import { localDispatch, networkMessage$ } from '@axe/core/network/network-messaging';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
@@ -714,6 +716,39 @@ describe('AutomationFacadeService', () => {
     }
     beforeEach(() => vi.useFakeTimers());
 
+    it('does not hand over the answers to what it said itself, but does hand over a player roll', async () => {
+      const me = 'automation-user';
+      setPeerContextProvider({
+        peerContext: { userId: me } as IPeerContext,
+        peerContexts: [],
+        peerIds: [],
+        peerId: 'peer',
+      });
+      try {
+        say('prime');
+        await wait({ waitSeconds: 1 });
+        tab.addMessage({
+          name: '<BCDice：GM>',
+          text: 'own answer',
+          from: 'System-BCDice',
+          originFrom: me,
+          tag: 'system',
+          timestamp: at++,
+        });
+        tab.addMessage({
+          name: '<BCDice：Player>',
+          text: 'player answer',
+          from: 'System-BCDice',
+          originFrom: 'player',
+          tag: 'system',
+          timestamp: at++,
+        });
+        const result = await wait();
+        expect(result).toMatchObject({ ok: true, data: { messages: [{ text: 'player answer' }] } });
+      } finally {
+        resetPeerContextProvider();
+      }
+    });
     it('gathers speech that arrives in pieces when asked to settle', async () => {
       await wait();
 

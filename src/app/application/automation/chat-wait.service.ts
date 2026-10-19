@@ -1,4 +1,5 @@
 import { inject, Injectable } from '@angular/core';
+import { getPeerContext } from '@axe/core/network/peer-context-source';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { ChatMessage } from '@axe/domain/chat/chat-message';
@@ -222,11 +223,22 @@ export class ChatWaitService {
     return moves;
   }
 
+  /** Whether this reader said the line, or it answers a line this reader said. Without an identity nothing is its own. */
+  private isOwn(message: ChatMessage): boolean {
+    const me = getPeerContext().userId;
+    return me.length > 0 && message.isSentBy(me);
+  }
+
   private freshIn(tabs: readonly ChatTab[]): ChatMessage[] {
-    return tabs
-      .flatMap((tab) => tab.chatMessages)
-      .filter((message) => !this.handed.has(message.identifier) && isPublicMessage(message))
-      .sort((l, r) => l.timestamp - r.timestamp);
+    return (
+      tabs
+        .flatMap((tab) => tab.chatMessages)
+        // What automation said, and the dice bot's and the table's answers to it, are not news to it: the answers
+        // that come in time are handed over with the send, and any that come later (a resource change reports after
+        // the roll) would only be read twice.
+        .filter((message) => !this.handed.has(message.identifier) && isPublicMessage(message) && !this.isOwn(message))
+        .sort((l, r) => l.timestamp - r.timestamp)
+    );
   }
 
   private remember(messages: readonly ChatMessage[]): void {
