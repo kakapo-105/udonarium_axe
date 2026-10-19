@@ -313,6 +313,13 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       shape: { ...retry, identifier: id, disclosure: z.enum(['all', 'gm']), dryRun: z.boolean().optional() },
     },
     {
+      name: 'piece_rename',
+      read: false,
+      description:
+        "Rename one of your own characters on the table or out of sight. The palette's lines, the name it speaks under and the target a hit names all follow, so a monster set out under a false name can be given its own once a monster knowledge check succeeds. Chat already said keeps the old name. Requires the create_piece browser grant.",
+      shape: { ...retry, identifier: id, name: z.string().min(1).max(64), dryRun: z.boolean().optional() },
+    },
+    {
       name: 'piece_remove',
       read: false,
       description: `Send 1 to ${MAX_PIECES} of your own pieces, on the table or out of sight, to the graveyard, where they can still be brought back. Pieces you do not own are refused. Requires the create_piece browser grant.`,

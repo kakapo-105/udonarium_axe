@@ -967,6 +967,26 @@ describe('AutomationFacadeService', () => {
       expect(store.get<GameCharacter>(piece.identifier)!.disclosureMode).toBe('all');
     });
 
+    it('renames a character, so what speaks for it follows, and refuses an empty name', async () => {
+      PeerCursor.myCursor.role = PeerRole.GameMaster;
+      facade.health();
+      policy.enable();
+      grant();
+      const [piece] = created(await call('character_create', { pieces: [goblin()], x: 0, y: 0 }));
+
+      expect(await call('piece_rename', { identifier: piece.identifier, name: '  青い肌の巨人 ' })).toMatchObject({
+        ok: true,
+        data: { name: '青い肌の巨人' },
+      });
+      expect(store.get<GameCharacter>(piece.identifier)!.name).toBe('青い肌の巨人');
+      error(await call('piece_rename', { identifier: piece.identifier, name: '   ' }), 'INVALID_ARGUMENT');
+      expect(await call('piece_rename', { identifier: piece.identifier, name: 'x', dryRun: true })).toMatchObject({
+        ok: true,
+        data: { dryRun: true },
+      });
+      expect(store.get<GameCharacter>(piece.identifier)!.name).toBe('青い肌の巨人');
+    });
+
     it('builds nothing when a sheet cannot be read, the row runs off the table, or on a dry run', async () => {
       grant();
       const before = store.getObjects(GameCharacter).length;

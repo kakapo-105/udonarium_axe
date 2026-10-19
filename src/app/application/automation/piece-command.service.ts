@@ -207,6 +207,18 @@ export class PieceCommandService {
     return { identifier: piece.identifier, disclosure: mode };
   }
 
+  /**
+   * Gives a character a new name, as the name box of its sheet does. Everything that speaks for the piece, the
+   * palette's lines and the target a hit names, reads it from here, so one call renames all of it. Chat already
+   * said keeps the name it was said under.
+   */
+  rename(piece: GameCharacter, name: string) {
+    const before = piece.name;
+    piece.name = name;
+    piece.update();
+    return { identifier: piece.identifier, name, before };
+  }
+
   /** Sends the pieces to the graveyard, as the context menu does, so they can still be brought back. */
   remove(pieces: readonly OwnedThing[]) {
     GameObject.batch(() => pieces.forEach((piece) => piece.setLocation('graveyard')));

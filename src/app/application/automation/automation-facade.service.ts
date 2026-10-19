@@ -462,6 +462,11 @@ export class AutomationFacadeService {
       this.policy.canCreatePieces();
       this.pieceCommands.own(textArgument(args['identifier']));
     }
+    if (request.command === 'piece_rename') {
+      this.policy.require('create_piece');
+      this.policy.canCreatePieces();
+      this.pieceCommands.own(textArgument(args['identifier']));
+    }
     if (request.command === 'piece_remove') {
       this.policy.require('create_piece');
       this.policy.canCreatePieces();
@@ -744,6 +749,16 @@ export class AutomationFacadeService {
         const disclosure = disclosureOf(a['disclosure']);
         if (booleanOf(a['dryRun'], 'dryRun')) return { identifier: piece.identifier, disclosure, dryRun: true };
         return this.pieceCommands.disclose(piece, disclosure);
+      }
+      case 'piece_rename': {
+        onlyKeys(a, ['identifier', 'name', 'dryRun']);
+        const piece = this.pieceCommands.own(textArgument(a['identifier']));
+        if (!(piece instanceof GameCharacter)) fail('INVALID_ARGUMENT', 'Only a character can be renamed.');
+        const name = textArgument(a['name'], 64).trim();
+        if (name.length < 1) fail('INVALID_ARGUMENT', 'name must not be empty.');
+        if (booleanOf(a['dryRun'], 'dryRun'))
+          return { identifier: piece.identifier, name, before: piece.name, dryRun: true };
+        return this.pieceCommands.rename(piece, name);
       }
       case 'piece_remove': {
         onlyKeys(a, ['identifiers', 'dryRun']);
