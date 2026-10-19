@@ -219,6 +219,20 @@ export class PieceCommandService {
     return { identifier: piece.identifier, name, before };
   }
 
+  /**
+   * Locks or unlocks pieces and notes, as the context menu does. A lock keeps the players from dragging what the
+   * game master has set out (a monster, an NPC, a handout); the one who owns it can still move it through automation.
+   */
+  lock(pieces: readonly OwnedThing[], locked: boolean) {
+    GameObject.batch(() =>
+      pieces.forEach((piece) => {
+        piece.isLock = locked;
+        piece.update();
+      })
+    );
+    return { locked, identifiers: pieces.map((piece) => piece.identifier) };
+  }
+
   /** Sends the pieces to the graveyard, as the context menu does, so they can still be brought back. */
   remove(pieces: readonly OwnedThing[]) {
     GameObject.batch(() => pieces.forEach((piece) => piece.setLocation('graveyard')));

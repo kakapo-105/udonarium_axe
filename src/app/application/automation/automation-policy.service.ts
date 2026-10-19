@@ -89,7 +89,8 @@ export class AutomationPolicyService {
   canControl(piece: GameCharacter): void {
     if (!this.role.canEditTabletop) fail('FORBIDDEN', 'Guests cannot control pieces.');
     if (!this.canSee(piece)) fail('NOT_FOUND', 'Visible piece not found.');
-    if (piece.isLock) fail('LOCKED', 'The piece is locked.');
+    // A lock keeps others from moving a piece; whoever owns it can still move it through automation.
+    if (piece.isLock && !this.isMine(piece.owner)) fail('LOCKED', 'The piece is locked.');
     const ownedOnly = this.store.get<Config>('Config')?.automationOwnedOnly !== false;
     if (ownedOnly && !this.isMine(piece.owner)) {
       fail('FORBIDDEN', 'Only your own pieces may be controlled.');

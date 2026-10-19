@@ -320,6 +320,18 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       shape: { ...retry, identifier: id, name: z.string().min(1).max(64), dryRun: z.boolean().optional() },
     },
     {
+      name: 'piece_lock',
+      read: false,
+      description:
+        'Lock (default) or unlock your own pieces and notes on the table, as the context menu does. A locked piece cannot be dragged by the players, so lock the monsters, NPCs and handouts you set out and leave the pieces the players own alone; you can still move what you own through piece_move. Requires the create_piece browser grant.',
+      shape: {
+        ...retry,
+        identifiers: z.array(id).min(1).max(50),
+        locked: z.boolean().optional(),
+        dryRun: z.boolean().optional(),
+      },
+    },
+    {
       name: 'piece_remove',
       read: false,
       description: `Send 1 to ${MAX_PIECES} of your own pieces, on the table or out of sight, to the graveyard, where they can still be brought back. Pieces you do not own are refused. Requires the create_piece browser grant.`,

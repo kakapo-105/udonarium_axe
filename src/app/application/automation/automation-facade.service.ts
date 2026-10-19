@@ -467,6 +467,12 @@ export class AutomationFacadeService {
       this.policy.canCreatePieces();
       this.pieceCommands.own(textArgument(args['identifier']));
     }
+    if (request.command === 'piece_lock') {
+      this.policy.require('create_piece');
+      this.policy.canCreatePieces();
+      for (const identifier of textsOf(args['identifiers'], 'identifiers', MAX_CREATED_PIECES))
+        this.pieceCommands.own(identifier);
+    }
     if (request.command === 'piece_remove') {
       this.policy.require('create_piece');
       this.policy.canCreatePieces();
@@ -759,6 +765,16 @@ export class AutomationFacadeService {
         if (booleanOf(a['dryRun'], 'dryRun'))
           return { identifier: piece.identifier, name, before: piece.name, dryRun: true };
         return this.pieceCommands.rename(piece, name);
+      }
+      case 'piece_lock': {
+        onlyKeys(a, ['identifiers', 'locked', 'dryRun']);
+        const pieces = textsOf(a['identifiers'], 'identifiers', MAX_CREATED_PIECES).map((identifier) =>
+          this.pieceCommands.own(identifier)
+        );
+        const locked = a['locked'] === undefined ? true : booleanOf(a['locked'], 'locked');
+        if (booleanOf(a['dryRun'], 'dryRun'))
+          return { locked, identifiers: pieces.map((piece) => piece.identifier), dryRun: true };
+        return this.pieceCommands.lock(pieces, locked);
       }
       case 'piece_remove': {
         onlyKeys(a, ['identifiers', 'dryRun']);

@@ -152,7 +152,12 @@ describe('AutomationFacadeService', () => {
   });
   it('rejects locked pieces, guests, missing scopes and stale versions', async () => {
     piece.isLock = true;
+    expect((await move()).ok).toBe(true); // a lock keeps others out, not the one who owns the piece
+    piece.owner = 'another';
+    Config.instance.automationOwnedOnly = false;
     error(await move(), 'LOCKED');
+    piece.owner = PeerCursor.myCursor.userId;
+    Config.instance.automationOwnedOnly = true;
     piece.isLock = false;
     error(await move({ expectedVersion: 0 }), 'CONFLICT');
     policy.setScope('move_piece', false);
@@ -985,6 +990,28 @@ describe('AutomationFacadeService', () => {
         data: { dryRun: true },
       });
       expect(store.get<GameCharacter>(piece.identifier)!.name).toBe('青い肌の巨人');
+    });
+
+    it('locks and unlocks its own pieces, and still moves a piece it locked', async () => {
+      PeerCursor.myCursor.role = PeerRole.GameMaster;
+      facade.health();
+      policy.enable();
+      grant();
+      const [piece] = created(await call('character_create', { pieces: [goblin()], x: 0, y: 0 }));
+
+      expect(await call('piece_lock', { identifiers: [piece.identifier] })).toMatchObject({
+        ok: true,
+        data: { locked: true },
+      });
+      expect(store.get<GameCharacter>(piece.identifier)!.isLock).toBe(true);
+      policy.setScope('move_piece', true);
+      // Whatever the table's movement rules say, the lock is not what stops the one who owns the piece.
+      expect(await call('piece_move', { identifier: piece.identifier, x: 3, y: 3 })).not.toMatchObject({
+        error: { code: 'LOCKED' },
+      });
+
+      await call('piece_lock', { identifiers: [piece.identifier], locked: false });
+      expect(store.get<GameCharacter>(piece.identifier)!.isLock).toBe(false);
     });
 
     it('builds nothing when a sheet cannot be read, the row runs off the table, or on a dry run', async () => {
