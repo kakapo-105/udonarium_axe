@@ -19,16 +19,28 @@ export interface PieceMove {
   y: number;
 }
 
-/** A public message as automation reads it. */
+/**
+ * A public message as automation reads it. A dice bot's answer also says how the roll came out
+ * (`critical`, `fumble`, `success` or `failure`) when the bot told, so a double one needs no reading of the text.
+ */
 export function chatMessageView(message: ChatMessage) {
+  const outcome = message.isDicebot ? (message.rollDetail?.outcome ?? '') : '';
   return {
     identifier: message.identifier,
     tabId: message.tabIdentifier,
     name: message.name.slice(0, 256),
     text: message.text.slice(0, 2000),
     timestamp: message.timestamp,
+    ...(outcome ? { outcome } : {}),
   };
 }
+
+/** Whether a line said holds dice to roll, which is when its answer is worth waiting for. */
+export const ROLL_LIKE = /\d[dD]\d|\d[dD](?![a-zA-Z])|[cC]\(|\[\d*[dD]/;
+/** How long to wait for the dice bot's answer to a line, and how long it must stay quiet before the wait ends. */
+const ROLL_WAIT_MS = 2500;
+const ROLL_QUIET_MS = 350;
+const ROLL_POLL_MS = 100;
 
 /** Whether automation may read a message: shown in the log, and neither a secret roll nor a whisper. */
 export function isPublicMessage(message: ChatMessage): boolean {
@@ -77,6 +89,41 @@ export class ChatWaitService {
    * Nothing from anyone else can arrive while code runs without yielding, so exactly the lines `say`
    * made are counted, whoever's name is on them and whatever the network knows about the sender.
    */
+  /** The identifiers of the lines in a tab now, to tell afterwards which came since. */
+  linesOf(tab: ChatTab): Set<string> {
+    return new Set(tab.chatMessages.map((message) => message.identifier));
+  }
+
+  /**
+   * The dice bot's answers that came into the tab since `before` was taken, handed over at once so a later wait does not
+   * repeat them. Answers arrive a moment after the line is said, so this waits for the first and then for quiet; a line
+   * with no dice in it (`text`) is not waited for at all.
+   */
+  async rollsSince(tab: ChatTab, before: ReadonlySet<string>, text: string, guard: () => void) {
+    if (!ROLL_LIKE.test(text)) return [];
+    const answers = () =>
+      tab.chatMessages.filter(
+        (m) => !before.has(m.identifier) && !this.handed.has(m.identifier) && m.isDicebot && isPublicMessage(m)
+      );
+    const started = Date.now();
+    let count = 0;
+    let lastChange = started;
+    for (;;) {
+      guard();
+      const now = answers().length;
+      if (now !== count) {
+        count = now;
+        lastChange = Date.now();
+      }
+      const elapsed = Date.now() - started;
+      if ((count > 0 && Date.now() - lastChange >= ROLL_QUIET_MS) || elapsed >= ROLL_WAIT_MS) break;
+      await new Promise((resolve) => setTimeout(resolve, ROLL_POLL_MS));
+    }
+    const found = answers();
+    for (const message of found) this.handed.add(message.identifier);
+    return found.map(chatMessageView);
+  }
+
   said<T>(say: () => T): T {
     const lines = () => this.store.getObjects<ChatTab>(ChatTab).flatMap((tab) => tab.chatMessages);
     const before = new Set(lines().map((message) => message.identifier));

@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { AutomationCommand, AutomationResult } from '@axe/application/automation/automation-contract';
 import { AutomationFacadeService } from '@axe/application/automation/automation-facade.service';
 import { AutomationPolicyService } from '@axe/application/automation/automation-policy.service';
+import { ChatWaitService } from '@axe/application/automation/chat-wait.service';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { ConcealmentService } from '@axe/application/tabletop/concealment.service';
 import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
@@ -204,6 +205,31 @@ describe('AutomationFacadeService', () => {
     expect(JSON.stringify(next)).toContain(
       data.objects[0].identifier === piece.identifier ? second.identifier : piece.identifier
     );
+  });
+  it('hands over a dice bot answer that comes after a line, once, with how the roll came out', async () => {
+    const waiter = TestBed.inject(ChatWaitService);
+    const before = waiter.linesOf(tab);
+    setTimeout(() => {
+      tab.addMessage({
+        name: 'SwordWorld2.5',
+        from: 'System-BCDice',
+        tag: 'system',
+        text: 'SwordWorld2.5 : (2D6) → 2[1,1] → 自動的失敗',
+        dicebot: JSON.stringify({
+          system: 'SwordWorld2.5',
+          faces: [{ sides: 6, value: 1, kind: 'normal' }],
+          outcome: 'fumble',
+        }),
+      });
+    }, 150);
+
+    const rolls = await waiter.rollsSince(tab, before, '2d6+5', () => {});
+    expect(rolls).toHaveLength(1);
+    expect(rolls[0]).toMatchObject({ outcome: 'fumble' });
+    expect(rolls[0].text).toContain('自動的失敗');
+    // handed over already, so the next wait does not tell it again; and a line with no dice is not waited for
+    expect(await waiter.rollsSince(tab, before, '2d6+5', () => {})).toEqual([]);
+    expect(await waiter.rollsSince(tab, waiter.linesOf(tab), 'こんにちは', () => {})).toEqual([]);
   });
   it('excludes secret and direct messages, and refuses unreadable tabs', async () => {
     tab.addMessage({ name: 'Public', text: 'hello' });

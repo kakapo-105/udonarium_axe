@@ -225,6 +225,7 @@ export class SessionCommandService {
     if (this.store.get(tab.identifier) !== tab || (character && this.store.get(character.identifier) !== character)) {
       fail('CONFLICT', 'The speaker or chat tab was replaced while preparing the message.');
     }
+    const before = this.chatWait.linesOf(tab);
     const message = this.chatWait.said(() => {
       const said = character
         ? this.macro.send(character, text, { tab, gameSystem, targets: [] })
@@ -233,7 +234,8 @@ export class SessionCommandService {
       return said;
     });
     if (!message) fail('NOT_READY', 'Chat is not ready.');
-    return { identifier: message.identifier, tabId: tab.identifier };
+    const rolls = await this.chatWait.rollsSince(tab, before, message.text, guard);
+    return { identifier: message.identifier, tabId: tab.identifier, ...(rolls.length > 0 ? { rolls } : {}) };
   }
 
   /**
@@ -256,8 +258,15 @@ export class SessionCommandService {
     if (this.store.get(tab.identifier) !== tab || this.store.get(character.identifier) !== character) {
       fail('CONFLICT', 'The speaker or chat tab was replaced while preparing the message.');
     }
+    const before = this.chatWait.linesOf(tab);
     const message = this.chatWait.said(() => this.macro.send(character, line, { tab, gameSystem, targets }));
     if (!message) fail('NOT_READY', 'Chat is not ready.');
-    return { identifier: message.identifier, tabId: tab.identifier, text: message.text.slice(0, 2000) };
+    const rolls = await this.chatWait.rollsSince(tab, before, message.text, guard);
+    return {
+      identifier: message.identifier,
+      tabId: tab.identifier,
+      text: message.text.slice(0, 2000),
+      ...(rolls.length > 0 ? { rolls } : {}),
+    };
   }
 }
