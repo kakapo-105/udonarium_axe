@@ -111,7 +111,8 @@ export class ChatWaitService {
   /**
    * The dice bot's answers that came into the tab since `before` was taken, handed over at once so a later wait does not
    * repeat them. Answers arrive a moment after the line is said, so this waits for the first and then for quiet; a line
-   * with no dice in it (`text`, under the game system's `commandPattern` when given) is not waited for at all.
+   * with no dice in it (`text`, under the game system's `commandPattern` when given) is not waited for at all. The
+   * answer to a secret roll comes back too, marked `secret`, being the roller's own.
    */
   async rollsSince(
     tab: ChatTab,
@@ -121,9 +122,14 @@ export class ChatWaitService {
     commandPattern?: RegExp | null
   ) {
     if (!isRollLine(text, commandPattern)) return [];
+    // A secret roll is answered to its roller alone; automation said the line, so the answer is its own to read.
     const answers = () =>
       tab.chatMessages.filter(
-        (m) => !before.has(m.identifier) && !this.handed.has(m.identifier) && m.isDicebot && isPublicMessage(m)
+        (m) =>
+          !before.has(m.identifier) &&
+          !this.handed.has(m.identifier) &&
+          m.isDicebot &&
+          (isPublicMessage(m) || (m.isSecret && m.isSendFromSelf && m.isDisplayable))
       );
     const started = Date.now();
     let count = 0;
@@ -141,7 +147,7 @@ export class ChatWaitService {
     }
     const found = answers();
     for (const message of found) this.handed.add(message.identifier);
-    return found.map(chatMessageView);
+    return found.map((message) => ({ ...chatMessageView(message), ...(message.isSecret ? { secret: true } : {}) }));
   }
 
   said<T>(say: () => T): T {

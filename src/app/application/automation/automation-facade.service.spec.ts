@@ -9,10 +9,10 @@ import { SharedFocusService } from '@axe/application/tabletop/shared-focus.servi
 import { VisionService } from '@axe/application/tabletop/vision.service';
 import { LocalModePreferenceService } from '@axe/application/ui/local-mode-preference.service';
 import { Network } from '@axe/core/network/network';
-import { IPeerContext } from '@axe/core/network/peer-context';
-import { resetPeerContextProvider, setPeerContextProvider } from '@axe/core/network/peer-context-source';
 import { setNetworkIsolated } from '@axe/core/network/network-isolation';
 import { localDispatch, networkMessage$ } from '@axe/core/network/network-messaging';
+import { IPeerContext } from '@axe/core/network/peer-context';
+import { resetPeerContextProvider, setPeerContextProvider } from '@axe/core/network/peer-context-source';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { calcSHA256Async } from '@axe/core/storage/file-reader-util';
 import { ImageStorage } from '@axe/core/storage/image-storage';
@@ -232,6 +232,27 @@ describe('AutomationFacadeService', () => {
     // handed over already, so the next wait does not tell it again; and a line with no dice is not waited for
     expect(await waiter.rollsSince(tab, before, '2d6+5', () => {})).toEqual([]);
     expect(await waiter.rollsSince(tab, waiter.linesOf(tab), 'こんにちは', () => {})).toEqual([]);
+  });
+  it('hands over the answer to its own secret roll, marked secret, but not to anyone else’s', async () => {
+    const waiter = TestBed.inject(ChatWaitService);
+    const before = waiter.linesOf(tab);
+    const secretAnswer = (originFrom: string, text: string) => ({
+      name: '<Secret-BCDice：KP>',
+      from: 'System-BCDice',
+      originFrom,
+      tag: 'system secret',
+      text,
+      dicebot: JSON.stringify({ system: 'Cthulhu7th', faces: [], outcome: 'success' }),
+    });
+    setTimeout(() => {
+      tab.addMessage(secretAnswer('someone-else', 'Cthulhu7th : (1D100<=60) → 99 → 失敗'));
+      tab.addMessage(secretAnswer(Network.peerContext.userId, 'Cthulhu7th : (1D100<=60) → 12 → ハード成功'));
+    }, 150);
+
+    // The line is a command of the game system's own (its pattern takes the S in front), not NdN dice.
+    const rolls = await waiter.rollsSince(tab, before, 'SCC<=60', () => {}, /^S?CC/i);
+    expect(rolls).toHaveLength(1);
+    expect(rolls[0]).toMatchObject({ secret: true, outcome: 'success', text: expect.stringContaining('ハード成功') });
   });
   it('excludes secret and direct messages, and refuses unreadable tabs', async () => {
     tab.addMessage({ name: 'Public', text: 'hello' });

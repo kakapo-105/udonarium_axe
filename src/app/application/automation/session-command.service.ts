@@ -219,7 +219,10 @@ export class SessionCommandService {
     guard: () => void,
     style: VnMessageKind = 'normal'
   ) {
-    const gameSystem = await DiceBot.loadGameSystemAsync(character?.chatPalette?.dicebot ?? this.chat.gameType);
+    // Rolled under the system a person's line would be: the piece's, else the room's default.
+    const gameSystem = await DiceBot.loadGameSystemAsync(
+      character ? this.macro.gameTypeFor(character) : this.macro.gameTypeForSelf()
+    );
     // Loading dice code yields to the UI; permissions may have been withdrawn in the meantime.
     guard();
     if (this.store.get(tab.identifier) !== tab || (character && this.store.get(character.identifier) !== character)) {

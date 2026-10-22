@@ -123,6 +123,18 @@ export class CharacterMacroService {
   }
 
   /**
+   * The dice system the reader's own lines, with no piece speaking, are rolled under: the one asked
+   * for, else the room's default, else whatever chat is set to.
+   */
+  gameTypeForSelf(requested?: string): string {
+    return (
+      requested ||
+      chosenSystem(this.objectStore.get<Config>('Config')?.defaultDiceBot) ||
+      this.chatMessageService.gameType
+    );
+  }
+
+  /**
    * Speaks a line as the reader themselves, with no piece speaking, as the chat does when nobody
    * is picked.
    *
@@ -136,11 +148,7 @@ export class CharacterMacroService {
     const tab = this.resolveTab(options.tab);
     const cursor = PeerCursor.myCursor;
     if (!tab || !cursor) return null;
-    const gameType =
-      options.gameType ||
-      chosenSystem(this.objectStore.get<Config>('Config')?.defaultDiceBot) ||
-      this.chatMessageService.gameType;
-    const gameSystem = await DiceBot.loadGameSystemAsync(gameType);
+    const gameSystem = await DiceBot.loadGameSystemAsync(this.gameTypeForSelf(options.gameType));
     return this.chatMessageService.sendMessage(
       tab,
       line,
