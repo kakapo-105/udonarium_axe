@@ -234,7 +234,7 @@ export class SessionCommandService {
       return said;
     });
     if (!message) fail('NOT_READY', 'Chat is not ready.');
-    const rolls = await this.chatWait.rollsSince(tab, before, message.text, guard);
+    const rolls = await this.chatWait.rollsSince(tab, before, message.text, guard, gameSystem?.COMMAND_PATTERN);
     return { identifier: message.identifier, tabId: tab.identifier, ...(rolls.length > 0 ? { rolls } : {}) };
   }
 
@@ -261,7 +261,7 @@ export class SessionCommandService {
     const before = this.chatWait.linesOf(tab);
     const message = this.chatWait.said(() => this.macro.send(character, line, { tab, gameSystem, targets }));
     if (!message) fail('NOT_READY', 'Chat is not ready.');
-    const rolls = await this.chatWait.rollsSince(tab, before, message.text, guard);
+    const rolls = await this.chatWait.rollsSince(tab, before, message.text, guard, gameSystem?.COMMAND_PATTERN);
     return {
       identifier: message.identifier,
       tabId: tab.identifier,

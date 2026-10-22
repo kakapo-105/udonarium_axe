@@ -1,6 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { getPeerContext } from '@axe/core/network/peer-context-source';
 import { ObjectStore } from '@axe/core/sync/object-store';
+import { toHalfWidth } from '@axe/core/util/string-util';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { ChatMessage } from '@axe/domain/chat/chat-message';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
@@ -38,6 +39,18 @@ export function chatMessageView(message: ChatMessage) {
 
 /** Whether a line said holds dice to roll, which is when its answer is worth waiting for. */
 export const ROLL_LIKE = /\d[dD]\d|\d[dD](?![a-zA-Z])|[cC]\(|\[\d*[dD]/;
+
+/**
+ * Whether the dice bot will answer a line: dice as {@link ROLL_LIKE} sees them, or a command of the game
+ * system's own, such as Call of Cthulhu's `CCB<=50` or `RESB(12-10)`, read as the dice bot reads it, after
+ * any repeat count.
+ */
+export function isRollLine(text: string, commandPattern?: RegExp | null): boolean {
+  if (ROLL_LIKE.test(text)) return true;
+  if (!commandPattern) return false;
+  const command = /^(?:\d+\s+)?(.*)/s.exec(toHalfWidth(text))?.[1] ?? '';
+  return commandPattern.test(command);
+}
 /** How long to wait for the dice bot's answer to a line, and how long it must stay quiet before the wait ends. */
 const ROLL_WAIT_MS = 2500;
 const ROLL_QUIET_MS = 350;
@@ -98,10 +111,16 @@ export class ChatWaitService {
   /**
    * The dice bot's answers that came into the tab since `before` was taken, handed over at once so a later wait does not
    * repeat them. Answers arrive a moment after the line is said, so this waits for the first and then for quiet; a line
-   * with no dice in it (`text`) is not waited for at all.
+   * with no dice in it (`text`, under the game system's `commandPattern` when given) is not waited for at all.
    */
-  async rollsSince(tab: ChatTab, before: ReadonlySet<string>, text: string, guard: () => void) {
-    if (!ROLL_LIKE.test(text)) return [];
+  async rollsSince(
+    tab: ChatTab,
+    before: ReadonlySet<string>,
+    text: string,
+    guard: () => void,
+    commandPattern?: RegExp | null
+  ) {
+    if (!isRollLine(text, commandPattern)) return [];
     const answers = () =>
       tab.chatMessages.filter(
         (m) => !before.has(m.identifier) && !this.handed.has(m.identifier) && m.isDicebot && isPublicMessage(m)
