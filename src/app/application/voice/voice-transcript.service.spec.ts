@@ -79,12 +79,16 @@ describe('VoiceTranscriptService', () => {
     const stopSend = sendMessage$.subscribe((e) => heard.push(e));
     const stopTable = diceTableMessage$.subscribe((e) => heard.push(e));
 
-    service.post({ type: 'say', id: '1', name: 'たろう', text: '(2D6振りますね)', tab: 'PL' });
+    // Sword World's dice, and Call of Cthulhu's percentile and sanity rolls said aloud.
+    const texts = ['(2D6振りますね)', '(1D100で目星)', '(CCB<=60 図書館)', '(SANチェックします)'];
+    texts.forEach((text, index) =>
+      service.post({ type: 'say', id: String(index + 1), name: 'たろう', text, tab: 'PL' })
+    );
 
     stopSend();
     stopTable();
     expect(heard).toEqual([]);
-    expect(pl.chatMessages[0].tag).toBe('');
+    expect(pl.chatMessages.map((message) => message.tag)).toEqual(texts.map(() => ''));
   });
 
   it('dresses a line in the character it names, the one on the table before one put away', () => {
