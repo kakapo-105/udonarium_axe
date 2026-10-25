@@ -270,7 +270,10 @@ describe('AutomationFacadeService', () => {
     tab.plCanSpeak = false;
     error(await call('chat_send', { tabId: tab.identifier, text: 'hello' }), 'FORBIDDEN');
     tab.plCanSpeak = true;
-    for (const text of [':HP-5', 't:HP-5', 'ｓｔ：HP-5', '{秘密}', '《damage》', '&buff+1']) {
+    const effect = new EffectPreset();
+    effect.name = 'damage';
+    effect.initialize();
+    for (const text of [':HP-5', 't:HP-5', 'ｓｔ：HP-5', '{秘密}', '《damage》', '&buff+1', '笑う @smile']) {
       error(await call('chat_send', { tabId: tab.identifier, characterId: piece.identifier, text }), 'FORBIDDEN');
     }
     policy.setScope('edit_resource', true);
@@ -297,6 +300,25 @@ describe('AutomationFacadeService', () => {
     for (const text of [':HP+6 休息した', '休息した :HP+6', ':HP+6 t:MP+3']) error(await send(text), 'FORBIDDEN');
     error(await send(':HP+6 :MP+3', null), 'FORBIDDEN');
     error(await send(Array.from({ length: 11 }, () => ':HP+1').join(' ')), 'FORBIDDEN');
+  });
+  it('says a feat in 《》 and an @ inside a sentence, and tells how to say what it refuses', async () => {
+    const effect = new EffectPreset();
+    effect.name = '爆発';
+    effect.initialize();
+    const send = (text: string) => call('chat_send', { tabId: tab.identifier, characterId: piece.identifier, text });
+
+    for (const text of [
+      '《斬り返しI》で切り返す！',
+      '|漢字《かんじ》',
+      'メールは a@b にどうぞ。',
+      '@ がつく',
+      '2d6+5 《全力攻撃I》',
+    ]) {
+      expect((await send(text)).ok, text).toBe(true);
+    }
+    const refused = await send('《爆発》！');
+    error(refused, 'FORBIDDEN');
+    expect(JSON.stringify(refused)).toContain('〈爆発〉');
   });
   it('stages a line as narration, a place heading or a scene heading when asked', async () => {
     const sent = await call('chat_send', { tabId: tab.identifier, text: '古い遺跡の入口', style: 'location' });

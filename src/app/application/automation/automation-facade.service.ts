@@ -34,6 +34,8 @@ import { RoomTemplateCommandService } from '@axe/application/automation/room-tem
 import { SessionCommandService } from '@axe/application/automation/session-command.service';
 import { SwitchCommandService, SwitchRequest } from '@axe/application/automation/switch-command.service';
 import { VnStageCommandService } from '@axe/application/automation/vn-stage-command.service';
+import { parsePortraitCommand } from '@axe/application/chat/chat-message-helpers';
+import { EffectLibraryService } from '@axe/application/effect/effect-library.service';
 import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { BuffRemovalRule } from '@axe/domain/character/buff-bulk-removal';
@@ -43,6 +45,7 @@ import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { canRoleSpeakTab, canRoleViewTab } from '@axe/domain/chat/chat-tab-permission';
 import { paletteLineAsChat, PaletteRow, paletteRowsOf } from '@axe/domain/chat/palette-rows';
 import { DisclosureMode } from '@axe/domain/disclosure/disclosure';
+import { parseEffectChatToken } from '@axe/domain/effect/effect-chat-token';
 import { isTextureId, isWallTextureId } from '@axe/domain/media/texture-catalog';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
@@ -291,6 +294,7 @@ export class AutomationFacadeService {
   private readonly switches = inject(SwitchCommandService);
   private readonly ambience = inject(AmbienceCommandService);
   private readonly audit = inject(AutomationAuditService);
+  private readonly effects = inject(EffectLibraryService);
   private readonly store = inject(ObjectStore);
   private readonly tables = inject(TableSelecter);
   private readonly remembered = new Map<string, Remembered>();
@@ -485,10 +489,23 @@ export class AutomationFacadeService {
 
   private validateChat(text: string, asCharacter: boolean): void {
     // References can expand to private data or more commands. Targeting/effect/portrait
-    // macros have side effects outside the MVP's explicitly named speaker.
-    if (/[{}｛｝《》]/u.test(text) || /(?:^|\s)[sSｓＳ]?[tTｔＴ][:&：＆]/u.test(text) || /[@＠]/u.test(text)) {
-      fail('FORBIDDEN', 'References, targets, portraits and effect macros are not supported.');
-    }
+    // macros have side effects outside the MVP's explicitly named speaker. Each is refused only
+    // in the form chat reads as such, so a feat's name in 《》 or an @ in a sentence can be said.
+    if (/[{}｛｝]/u.test(text))
+      fail('FORBIDDEN', 'References ({name}) are not supported; write the value itself, or say a palette line.');
+    if (/(?:^|\s)[sSｓＳ]?[tTｔＴ][:&：＆]/u.test(text))
+      fail('FORBIDDEN', 'Targets (t: and t&) are not supported; use palette_send or buff_send with targetIds.');
+    const effect = parseEffectChatToken(text);
+    if (effect && this.effects.findByName(effect.name))
+      fail(
+        'FORBIDDEN',
+        `《${effect.name}》 names an effect of the room, which it would play; write it as 〈${effect.name}〉 or 「${effect.name}」 instead.`
+      );
+    if (parsePortraitCommand(text).type !== 'none')
+      fail(
+        'FORBIDDEN',
+        'An @word at the end of a line picks a portrait; put words after it or write the @ elsewhere in the line.'
+      );
     if (/(?:^|\s)[sSｓＳ]?[:：&＆]/u.test(text)) {
       this.policy.require('edit_resource');
       // A line of resource commands only, such as `:HP+6 :MP+3` after a rest; never mixed with talk.
