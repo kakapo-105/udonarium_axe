@@ -62,7 +62,10 @@ export function isBuffColorToken(token: string): boolean {
   return DEFAULT_TOKENS.includes(normalized) || resolveBuffColor(normalized).length > 0;
 }
 
-/** Sorts tokens such as a colour name and an icon, in whichever order they come. */
+/**
+ * Sorts tokens such as a colour name and an icon, in whichever order they come. A trigger (`@name`)
+ * with no timing written counts down at the start of that one's turn.
+ */
 export function parseBuffAppearance(tokens: readonly string[]): BuffAppearance {
   const appearance: BuffAppearance = {};
   for (const token of tokens) {
@@ -82,5 +85,8 @@ export function parseBuffAppearance(tokens: readonly string[]): BuffAppearance {
     }
     appearance.icon = value;
   }
+  // A trigger names whose turn counts the buff down, which the end of the round never waits for;
+  // written without a timing, it counts down as that turn starts.
+  if (appearance.trigger !== undefined && appearance.timing === undefined) appearance.timing = 'turnStart';
   return appearance;
 }

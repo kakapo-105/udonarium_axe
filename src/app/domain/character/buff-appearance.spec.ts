@@ -59,4 +59,10 @@ describe('parseBuffAppearance()', () => {
     expect(parseBuffAppearance([])).toEqual({});
     expect(parseBuffAppearance(['', '  '])).toEqual({});
   });
+
+  it('counts a buff with a trigger and no timing down at the start of that turn', () => {
+    // The end of the round waits for nobody's turn, so a trigger left there would never be read.
+    expect(parseBuffAppearance(['@ノア'])).toEqual({ trigger: 'ノア', timing: 'turnStart' });
+    expect(parseBuffAppearance(['手番終了', '@ノア'])).toEqual({ trigger: 'ノア', timing: 'turnEnd' });
+  });
 });

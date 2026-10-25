@@ -261,8 +261,10 @@ function applyCalculatedBuff(command: string, character: GameCharacter, piles: B
 
   const roundText = (parts[4] ?? '').trim();
   const round = roundText.length > 0 && Number.isFinite(Number(roundText)) ? Number(roundText) : 3;
-  const timing = resolveBuffTiming(parts[5] ?? '') ?? undefined;
-  const trigger = (parts[6] ?? '').trim();
+  // Written bare here, but `@name` as a plain buff writes it reads the same.
+  const trigger = (parts[6] ?? '').trim().replace(/^[@＠]/u, '');
+  // A trigger with no timing written counts down as that one's turn starts, as a plain buff's does.
+  const timing = resolveBuffTiming(parts[5] ?? '') ?? (trigger.length > 0 ? 'turnStart' : undefined);
 
   const stacking = piles !== 'none' && request.operator === 'add' && character.buffs.find(name) != null;
   const effect = describeBuffModifier(request);

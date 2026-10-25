@@ -6,7 +6,7 @@ import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { BuffRemovalRule, countBuffRemoval, removeBuffsAcross } from '@axe/domain/character/buff-bulk-removal';
-import { BUFF_TIMINGS, BuffTiming } from '@axe/domain/character/buff-timing';
+import { BUFF_TIMINGS, BuffTiming, buffTimingOf } from '@axe/domain/character/buff-timing';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { DataElement, DataElementAttribute } from '@axe/domain/data/data-element';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
@@ -65,7 +65,8 @@ export class BuffCommandService {
 
   /**
    * Changes one buff in place, as the buff manager's form does: rounds kept whole and at zero or
-   * above, and a buff counted down at the end of the round dropping any trigger it had. Removing it
+   * above, a buff counted down at the end of the round dropping any trigger it had, and a trigger
+   * given alone to such a buff moving its countdown to the start of that turn. Removing it
    * puts back whatever it moved on the sheet.
    */
   edit(buff: DataElement, owner: GameCharacter, changes: BuffChanges) {
@@ -86,6 +87,10 @@ export class BuffCommandService {
       const trigger = changes.trigger.trim();
       if (trigger.length > 0) buff.setAttribute(DataElementAttribute.BUFF_TRIGGER, trigger);
       else buff.removeAttribute(DataElementAttribute.BUFF_TRIGGER);
+      // The end of the round waits for nobody's turn, so a trigger given alone moves the countdown
+      // to the start of that turn.
+      if (trigger.length > 0 && changes.timing === undefined && buffTimingOf(buff) === 'roundEnd')
+        buff.setAttribute(DataElementAttribute.BUFF_TIMING, 'turnStart');
     }
     this.objectChange.notifyChanged(buff.identifier);
     this.objectChange.notifyChanged(owner.identifier);

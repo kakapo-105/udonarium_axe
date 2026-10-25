@@ -637,6 +637,19 @@ describe('AutomationFacadeService', () => {
       await vi.waitFor(() => expect(piece.buffs.snapshot()).toMatchObject([{ name: '猛攻撃', value: 3 }]));
     });
 
+    it('counts a buff sent with a trigger down at the start of that turn', async () => {
+      policy.setScope('edit_buff', true);
+
+      expect((await run(['&マッスルベアー/筋力+2/3/@Piece', '&!ガゼルフット/回避/+/1/3//@Piece'])).ok).toBe(true);
+
+      await vi.waitFor(() =>
+        expect(piece.buffs.snapshot().map((buff) => buff.appearance)).toMatchObject([
+          { timing: 'turnStart', trigger: 'Piece' },
+          { timing: 'turnStart', trigger: 'Piece' },
+        ])
+      );
+    });
+
     it('aims a t& command at the targets named', async () => {
       policy.setScope('edit_buff', true);
       const enemy = GameCharacter.create('Enemy', 1, '');
@@ -699,6 +712,18 @@ describe('AutomationFacadeService', () => {
 
       expect(result).toMatchObject({ ok: true, data: { name: '猛毒', info: '継続3', value: 2 } });
       expect(other.buffs.snapshot()[0].appearance).toMatchObject({ timing: 'turnStart', trigger: 'Other' });
+    });
+
+    it('counts a buff given a trigger and no timing down at the start of that turn', async () => {
+      policy.setScope('edit_buff', true);
+      // As the buff was put on: a trigger with no timing, which counted down at the end of the round.
+      other.buffs.addRound('マッスルベアー', '筋力+2', 3, { trigger: 'Other' });
+      other.buffs.find('マッスルベアー')!.setAttribute('cs-buff-timing', 'roundEnd');
+      const id = (other.buffDataElement!.children[0].children[1] as DataElement).identifier;
+
+      await call('buff_edit', { identifier: id, trigger: 'Other' });
+
+      expect(other.buffs.snapshot()[1].appearance).toMatchObject({ timing: 'turnStart', trigger: 'Other' });
     });
 
     it('drops the trigger when the buff goes back to counting down at the end of the round', async () => {
