@@ -45,6 +45,8 @@ export const AUTOMATION_COMMANDS = [
   'range_set',
   'table_set',
   'self_set',
+  'turn_get',
+  'turn_set',
 ] as const;
 export type AutomationCommand = (typeof AUTOMATION_COMMANDS)[number];
 export const AUTOMATION_SCOPES = [
@@ -90,6 +92,7 @@ export const AUTOMATION_WRITES: readonly AutomationCommand[] = [
   'range_set',
   'table_set',
   'self_set',
+  'turn_set',
 ];
 export type AutomationScope = (typeof AUTOMATION_SCOPES)[number];
 export type AutomationErrorCode =

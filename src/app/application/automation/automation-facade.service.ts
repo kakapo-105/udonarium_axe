@@ -37,6 +37,7 @@ import { VnStageCommandService } from '@axe/application/automation/vn-stage-comm
 import { parsePortraitCommand } from '@axe/application/chat/chat-message-helpers';
 import { EffectLibraryService } from '@axe/application/effect/effect-library.service';
 import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
+import { TurnOrderService } from '@axe/application/turn/turn-order.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { BuffRemovalRule } from '@axe/domain/character/buff-bulk-removal';
 import { GameCharacter } from '@axe/domain/character/game-character';
@@ -295,6 +296,7 @@ export class AutomationFacadeService {
   private readonly ambience = inject(AmbienceCommandService);
   private readonly audit = inject(AutomationAuditService);
   private readonly effects = inject(EffectLibraryService);
+  private readonly turns = inject(TurnOrderService);
   private readonly store = inject(ObjectStore);
   private readonly tables = inject(TableSelecter);
   private readonly remembered = new Map<string, Remembered>();
@@ -437,6 +439,12 @@ export class AutomationFacadeService {
       this.policy.canManage(this.buffCommands.find(textArgument(args['identifier'])).owner);
     }
     if (request.command === 'buff_sweep') this.policy.require('edit_buff');
+    // The round is the table's clock, which counts every buff down: the master's to run.
+    if (request.command === 'turn_get') this.policy.requireGameMaster();
+    if (request.command === 'turn_set') {
+      this.policy.require('edit_buff');
+      this.policy.requireGameMaster();
+    }
     // How automation speaks as itself goes with speaking.
     if (request.command === 'self_set') this.policy.require('send_chat');
     if (request.command === 'character_create') {
@@ -731,6 +739,29 @@ export class AutomationFacadeService {
         this.buffCommands.validate(changes);
         if (a['dryRun'] === true) return { identifier: buff.identifier, owner: owner.identifier, dryRun: true };
         return this.buffCommands.edit(buff, owner, changes);
+      }
+      case 'turn_get':
+        onlyKeys(a, []);
+        return this.turnView();
+      case 'turn_set': {
+        onlyKeys(a, ['identifier', 'endRound', 'reset', 'undo', 'buffDecay']);
+        const actions = ['identifier', 'endRound', 'reset', 'undo'].filter(
+          (key) => a[key] !== undefined && a[key] !== false
+        );
+        if (actions.length > 1) fail('INVALID_ARGUMENT', 'Give one of identifier, endRound, reset or undo.');
+        if (actions.length < 1 && a['buffDecay'] === undefined)
+          fail('INVALID_ARGUMENT', 'Give identifier, endRound, reset, undo or buffDecay.');
+        for (const key of ['endRound', 'reset', 'undo']) booleanOf(a[key], key);
+        const piece = a['identifier'] === undefined ? null : this.piece(textArgument(a['identifier']));
+        if (a['buffDecay'] !== undefined) this.turns.setBuffDecay(booleanOf(a['buffDecay'], 'buffDecay'));
+        if (piece) this.turns.takeTurnOf(piece.identifier);
+        if (a['endRound'] === true) this.turns.endRoundNow();
+        if (a['reset'] === true) this.turns.reset();
+        if (a['undo'] === true) {
+          if (!this.turns.canUndo) fail('CONFLICT', 'There is no step of the round to undo.');
+          this.turns.prev();
+        }
+        return this.turnView();
       }
       case 'buff_sweep': {
         onlyKeys(a, ['kind', 'rounds', 'name', 'dryRun']);
@@ -1197,6 +1228,30 @@ export class AutomationFacadeService {
         );
       }
     }
+  }
+
+  /** Where the round stands: its number, its phase, whose turn it is and who has had theirs, in order. */
+  private turnView() {
+    const turns = this.turns;
+    const name = (identifier: string) => {
+      const piece = this.store.get(identifier);
+      return piece instanceof GameCharacter ? this.describe(piece).name : '';
+    };
+    return {
+      round: turns.round,
+      phase: turns.phase,
+      mode: turns.turnOrderMode,
+      current: turns.currentIdentifier
+        ? { identifier: turns.currentIdentifier, name: name(turns.currentIdentifier) }
+        : null,
+      ...(turns.turnOrderMode === 'faction' && turns.currentSide ? { side: turns.sideName(turns.currentSide) } : {}),
+      buffDecay: turns.buffDecay,
+      order: turns.orderedCharacters().map((piece) => ({
+        identifier: piece.identifier,
+        name: this.describe(piece).name,
+        acted: turns.isActed(piece.identifier),
+      })),
+    };
   }
 
   /** The buffs on one visible piece, as plain data, each with the identifier buff_edit takes. */

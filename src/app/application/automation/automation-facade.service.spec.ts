@@ -42,6 +42,7 @@ import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { TableTrigger } from '@axe/domain/tabletop/table-trigger';
 import { DoorStyle, Terrain } from '@axe/domain/tabletop/terrain';
 import { TextNote } from '@axe/domain/tabletop/text-note';
+import { TurnState } from '@axe/domain/tabletop/turn-state';
 import { decodeVnEmote } from '@axe/domain/visual-novel/vn-emote';
 import { VN_MODE_EVENT, VnStage } from '@axe/domain/visual-novel/vn-stage';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
@@ -751,6 +752,36 @@ describe('AutomationFacadeService', () => {
       becomeRole(PeerRole.Guest);
       error(await edit({ rounds: 1 }), 'FORBIDDEN');
       expect(other.buffs.snapshot()[0].value).toBe(3);
+    });
+
+    it('runs the round piece by piece, counting down the buffs whose turn it is', async () => {
+      const state = TurnState.instance;
+      Object.assign(state, { round: 0, phase: 'idle', currentIdentifier: '', actedIdentifiers: [], history: '[]' });
+      state.buffDecay = true;
+      // マッスルベアー counts down as its caster starts a turn; 毒 at the end of each round.
+      piece.buffs.addRound('マッスルベアー', '筋力+2', 3, { timing: 'turnStart', trigger: 'Piece' });
+      const rounds = () => [piece.buffs.find('マッスルベアー')?.value, other.buffs.find('毒')?.value];
+      error(await call('turn_set', { identifier: piece.identifier }), 'FORBIDDEN');
+      becomeRole(PeerRole.GameMaster);
+
+      expect(await call('turn_set', { identifier: piece.identifier })).toMatchObject({
+        ok: true,
+        data: { round: 1, phase: 'acting', current: { identifier: piece.identifier, name: 'Piece' } },
+      });
+      expect(rounds()).toEqual([2, 3]);
+      await call('turn_set', { identifier: other.identifier });
+      expect(await call('turn_set', { endRound: true })).toMatchObject({ data: { phase: 'roundEnd', current: null } });
+      expect(rounds()).toEqual([2, 2]);
+      expect(await call('turn_get')).toMatchObject({
+        data: { order: expect.arrayContaining([{ identifier: piece.identifier, name: 'Piece', acted: true }]) },
+      });
+
+      await call('turn_set', { identifier: piece.identifier });
+      expect(rounds()).toEqual([1, 2]);
+      expect(await call('turn_set', { undo: true })).toMatchObject({ data: { round: 1, phase: 'roundEnd' } });
+      expect(rounds()).toEqual([2, 2]);
+      error(await call('turn_set', { identifier: piece.identifier, endRound: true }), 'INVALID_ARGUMENT');
+      error(await call('turn_set', {}), 'INVALID_ARGUMENT');
     });
 
     it('sweeps the table only for the game master, counting first on a dry run', async () => {

@@ -279,6 +279,43 @@ export class TurnOrderService {
   }
 
   /**
+   * Gives the turn to one piece and has it taken, whichever way the room takes turns, as a master
+   * calling out who acts next does: a round not begun yet is begun, whoever was up is closed off,
+   * and the piece named opens its turn, so what waits on its start (a buff pinned to it, the ground
+   * under it) goes off. Recorded so it can be undone. Does nothing for a reader who may not take turns.
+   */
+  takeTurnOf(identifier: string): void {
+    if (!this.canTakeTurns) return;
+    const turnState = this.turnState;
+    if (turnState.phase === 'acting' && turnState.currentIdentifier === identifier) return;
+    this.step(() => {
+      if (turnState.phase === 'idle' || turnState.phase === 'roundEnd') this.beginRound(turnState.round + 1);
+      this.closeCurrentPiece();
+      if (this.turnOrderMode === 'faction') {
+        const piece = this.objectStore.get<GameCharacter>(identifier);
+        if (piece) turnState.currentSide = sideOfPiece(piece, this.sideOrder());
+      }
+      this.takeTurn(identifier);
+    });
+  }
+
+  /**
+   * Ends the round there and then, closing whoever is up, without asking about those still waiting:
+   * whoever calls it has decided they are done. The next round is begun by the next turn taken.
+   * Recorded so it can be undone. Does nothing for a reader who may not take turns.
+   */
+  endRoundNow(): void {
+    if (!this.canTakeTurns) return;
+    const turnState = this.turnState;
+    if (turnState.phase !== 'acting' && turnState.phase !== 'roundStart') return;
+    this.step(() => {
+      const held = turnState.currentIdentifier;
+      if (held.length > 0) this.endTurnOf(held);
+      this.finishRound();
+    });
+  }
+
+  /**
    * One press of the round: begins the next round, or closes whoever is up and hands the turn on.
    *
    * Once nobody is waiting the round ends. With buff countdown on, buffs run out at each turn's

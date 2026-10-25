@@ -290,6 +290,27 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       },
     },
     {
+      name: 'turn_get',
+      read: true,
+      description:
+        "Read where the round stands on the room's turn order (the initiative tracker): round, phase (idle, roundStart, acting, roundEnd), mode (piece by piece, or faction: side by side), the piece whose turn it is, the side in play, whether buffs count down as turns pass (buffDecay), and every piece in the order with whether it has acted this round. Game master only.",
+      shape: {},
+    },
+    {
+      name: 'turn_set',
+      read: false,
+      description:
+        "Run the room's turn order as the master calls out who acts, so buffs count down by themselves: identifier gives that piece its turn (a round not begun is begun and announced; whoever was up has their turn closed, so their end-of-turn buffs count down; then this piece's turn opens, so every buff timed to the start of its turn, or pinned to it by a trigger, counts down and drops at 0). endRound: true ends the round, closing whoever is up and counting down the buffs that run out at the end of the round (the next identifier begins the next round). undo: true puts the last step back, buffs and all; reset: true takes the order back to before the first round. buffDecay turns the countdown on or off for the room. Give one of identifier, endRound, undo or reset (buffDecay may come with any). Each step is announced in the main tab. Returns the state as turn_get does. Game master only; requires the edit_buff browser grant.",
+      shape: {
+        ...retry,
+        identifier: id.optional(),
+        endRound: z.boolean().optional(),
+        undo: z.boolean().optional(),
+        reset: z.boolean().optional(),
+        buffDecay: z.boolean().optional(),
+      },
+    },
+    {
       name: 'character_create',
       read: false,
       description: `Put 1 to ${MAX_PIECES} new pieces on the table in a row from x, y (the top-left cell, grid by default), owned by you, from sheets: this tool's own <character> XML (as its save data holds) or the ccfolia clipboard form ({"kind":"character","data":{...}}). Give them inline as pieces, or as sourceUrl on an allowed piece source (such as the rulebook server's /api/udonarium?name=...&count=3), which is fetched here, with the pictures it names, so neither ever passes through the conversation; a picture that cannot be fetched is reported in sourceWarnings and the piece is built without it. disclosure gm leaves the piece and its name on the table but keeps its sheet and numbers to the game master; it is the default for a game master. concealed: true (game master only) makes them out of sight instead, drawn on no table and listed to no player, until piece_reveal brings them out where they were put; this is how monsters are set out before a session. Pieces are shared by every table, so a piece left on the table shows on whichever table is in view. dicebot sets the palette's dice bot, a BCDice game system id (SwordWorld2.5 for Sword World 2.5, whose power-table lines need it; Cthulhu for Call of Cthulhu 6th edition, whose CCB lines need it; Cthulhu7th for the 7th edition, whose CC lines need it); a ccfolia sheet names none. imageFile dresses every piece in a picture from the image folder instead of its own, such as an NPC portrait made for the scene (novel mode shows the speaking piece's picture). Nothing is built if any sheet cannot be read or the row will not fit. Requires the create_piece browser grant.`,
