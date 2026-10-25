@@ -412,7 +412,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'terrain_list',
       read: true,
       description:
-        'List the doors (with whether they are open), props and lights on the table in view, inside a rectangle (x, y, w, h in cells) or everywhere, with each one out of sight marked concealed. Doors, walls and props give the ground they cover as x, y (top-left) and w, h in cells, so a cell beside a building can be picked; lights give where they stand. walls: true includes walls too, which a dungeon has many of. A hidden door the map generator made is a door named as such that looks like wall. Game master only.',
+        'List the doors (with whether they are open), props and lights on the table in view, inside a rectangle (x, y, w, h in cells) or everywhere, with each one out of sight marked concealed. A door, wall or prop is listed when any of the ground it covers lies in the rectangle, even when it starts outside it, so a wall running in from beyond is not missed. Doors, walls and props give the ground they cover as x, y (top-left) and w, h in cells, so a cell beside a building can be picked; lights give where they stand. walls: true includes walls too, which a dungeon has many of. A hidden door the map generator made is a door named as such that looks like wall. Game master only.',
       shape: {
         x: z.number().finite().min(0).optional(),
         y: z.number().finite().min(0).optional(),
