@@ -1052,6 +1052,52 @@ describe('AutomationFacadeService', () => {
       );
     });
 
+    it('updates a piece where it stands after it grows, keeping its identifier', async () => {
+      grant();
+      const [made] = created(
+        await call('character_create', { pieces: [goblin('ノア')], x: 1, y: 1, imageHeight: 150 })
+      );
+      const piece = store.get<GameCharacter>(made.identifier)!;
+      expect([piece.specifyKomaImageFlag, piece.komaImageHeight]).toEqual([true, 150]);
+
+      const updated = await call('character_update', {
+        identifier: made.identifier,
+        status: [
+          { label: 'HP', max: 22 },
+          { label: 'MP', value: 9, max: 12 },
+        ],
+        commands: ['2d+5【命中力／武器】', 'k20+6【ダメージ】'].join('\n'),
+        imageHeight: 0,
+      });
+
+      expect(updated).toMatchObject({
+        ok: true,
+        data: {
+          identifier: made.identifier,
+          status: [
+            { label: 'HP', value: 16, max: 22 },
+            { label: 'MP', value: 9, max: 12 },
+          ],
+          paletteLines: 2,
+          imageHeight: 0,
+        },
+      });
+      expect(piece.chatPalette?.getPalette()).toEqual(['2d+5【命中力／武器】', 'k20+6【ダメージ】']);
+      expect(piece.specifyKomaImageFlag).toBe(false);
+      error(
+        await call('character_update', { identifier: made.identifier, status: [{ label: 'LV', max: 2 }] }),
+        'INVALID_ARGUMENT'
+      );
+      error(
+        await call('character_update', { identifier: made.identifier, status: [{ label: '運', value: 1 }] }),
+        'INVALID_ARGUMENT'
+      );
+      error(await call('character_update', { identifier: made.identifier }), 'INVALID_ARGUMENT');
+      expect(DataElement.findElementByReference(piece.rootDataElement!, 'HP')?.value).toBe(22);
+      policy.setScope('create_piece', false);
+      error(await call('character_update', { identifier: made.identifier, imageHeight: 100 }), 'FORBIDDEN');
+    });
+
     describe('from this tool’s own XML', () => {
       // happy-dom cannot read dotted attribute names such as location.name, which browsers read; the
       // end-to-end test reads a piece with them.

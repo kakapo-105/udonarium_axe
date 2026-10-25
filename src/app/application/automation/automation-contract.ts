@@ -47,6 +47,7 @@ export const AUTOMATION_COMMANDS = [
   'self_set',
   'turn_get',
   'turn_set',
+  'character_update',
 ] as const;
 export type AutomationCommand = (typeof AUTOMATION_COMMANDS)[number];
 export const AUTOMATION_SCOPES = [
@@ -93,6 +94,7 @@ export const AUTOMATION_WRITES: readonly AutomationCommand[] = [
   'table_set',
   'self_set',
   'turn_set',
+  'character_update',
 ];
 export type AutomationScope = (typeof AUTOMATION_SCOPES)[number];
 export type AutomationErrorCode =

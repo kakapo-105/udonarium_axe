@@ -89,6 +89,33 @@ export class ImportedCharacterFactory {
     }
   }
 
+  /**
+   * Adds a resource to a piece already built, where an imported sheet keeps its resources: the basic
+   * group of the resource section, made when the piece has none. `current` defaults to the maximum.
+   */
+  static appendResource(character: GameCharacter, label: string, max: number, current: number = max): DataElement {
+    const detail = character.detailDataElement!;
+    let section = detail.children.find(
+      (child): child is DataElement => child instanceof DataElement && child.name === SECTION_RESOURCE
+    );
+    if (!section) section = ImportedCharacterFactory.createSection(character, SECTION_RESOURCE);
+    let group = section.children.find(
+      (child): child is DataElement => child instanceof DataElement && child.name === GROUP_BASIC
+    );
+    if (!group) {
+      group = ImportedCharacterFactory.createGroup(character, GROUP_BASIC, SECTION_RESOURCE);
+      section.appendChild(group);
+    }
+    const resource = DataElement.create(label, max, {
+      [DataElementAttribute.ROLE]: DataElementRole.FIELD,
+      [DataElementAttribute.FIELD_TYPE]: DataElementFieldType.RESOURCE,
+      type: DataElementType.NUMBER_RESOURCE,
+      currentValue: String(current),
+    });
+    group.appendChild(resource);
+    return resource;
+  }
+
   private static appendParams(character: GameCharacter, imported: ImportedCharacter, usedNames: Set<string>): void {
     const fields: ImportedParam[] = [...imported.params];
     if (imported.initiative != null) {

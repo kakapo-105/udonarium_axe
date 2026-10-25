@@ -27,7 +27,12 @@ import {
   LightKind,
 } from '@axe/application/automation/exploration-command.service';
 import { MapRequest } from '@axe/application/automation/map-generator';
-import { MAX_CREATED_PIECES, PieceCommandService } from '@axe/application/automation/piece-command.service';
+import {
+  MAX_CREATED_PIECES,
+  PieceCommandService,
+  PieceUpdate,
+  ResourceChange,
+} from '@axe/application/automation/piece-command.service';
 import { RangeCommandService, RangePlace } from '@axe/application/automation/range-command.service';
 import { RoomPrepCommandService } from '@axe/application/automation/room-prep-command.service';
 import { RoomTemplateCommandService } from '@axe/application/automation/room-template-command.service';
@@ -132,6 +137,41 @@ function buffChangesOf(a: Record<string, unknown>): BuffChanges {
   }
   if (a['remove'] === true) changes.remove = true;
   return changes;
+}
+
+const MAX_STATUS_CHANGES = 30;
+const MAX_PALETTE_TEXT = 100_000;
+
+/** The resources a character_update sets, each a label with a maximum, what is left, or both. */
+function resourceChangesOf(value: unknown): ResourceChange[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_STATUS_CHANGES)
+    fail('INVALID_ARGUMENT', `status must list 1 to ${MAX_STATUS_CHANGES} resources.`);
+  const labels = new Set<string>();
+  return value.map((entry) => {
+    const one = record(entry);
+    onlyKeys(one, ['label', 'value', 'max']);
+    const label = textArgument(one['label'], 64).trim();
+    if (label.length < 1 || labels.has(label)) fail('INVALID_ARGUMENT', 'Each resource needs a label of its own.');
+    labels.add(label);
+    const amount = (key: string) => {
+      if (one[key] === undefined) return undefined;
+      const number = numberArgument(one[key]);
+      if (!Number.isFinite(number) || Math.abs(number) > 1_000_000) fail('INVALID_ARGUMENT', `${key} is out of range.`);
+      return number;
+    };
+    const change = { label, value: amount('value'), max: amount('max') };
+    if (change.value === undefined && change.max === undefined)
+      fail('INVALID_ARGUMENT', `Give ${label} a value, a max or both.`);
+    return change;
+  });
+}
+
+/** How tall a piece's picture stands, in pixels: 0 for as wide as its base, else up to 2000. */
+function imageHeightOf(value: unknown): number {
+  const height = numberArgument(value);
+  if (!Number.isInteger(height) || height < 0 || height > 2000)
+    fail('INVALID_ARGUMENT', 'imageHeight must be a whole number of pixels from 0 to 2000.');
+  return height;
 }
 
 /** Which buffs a sweep takes: those held until cleared, those with so many rounds left, or one name. */
@@ -471,6 +511,15 @@ export class AutomationFacadeService {
       for (const identifier of textsOf(args['identifiers'], 'identifiers', MAX_CREATED_PIECES))
         this.pieceCommands.own(identifier, [from]);
     }
+    if (request.command === 'character_update') {
+      // A piece's sheet is rewritten, as making it again would: whoever may make pieces and control this one.
+      this.policy.require('create_piece');
+      this.policy.canCreatePieces();
+      const piece = this.readable(textArgument(args['identifier']));
+      // One out of sight is no player's to see, so only your own is reached there.
+      if (piece.location.name === CONCEALED_LOCATION) this.pieceCommands.own(piece.identifier);
+      else this.policy.canControl(piece);
+    }
     if (request.command === 'piece_disclose') {
       this.policy.require('create_piece');
       this.policy.canCreatePieces();
@@ -770,7 +819,19 @@ export class AutomationFacadeService {
         return this.buffCommands.sweep(sweepRuleOf(a), a['dryRun'] === true);
       }
       case 'character_create': {
-        onlyKeys(a, ['pieces', 'x', 'y', 'unit', 'disclosure', 'concealed', 'dicebot', 'images', 'image', 'dryRun']);
+        onlyKeys(a, [
+          'pieces',
+          'x',
+          'y',
+          'unit',
+          'disclosure',
+          'concealed',
+          'dicebot',
+          'images',
+          'image',
+          'imageHeight',
+          'dryRun',
+        ]);
         const image = a['image'] === undefined ? undefined : textArgument(a['image'], 64);
         if (image !== undefined && !/^[0-9a-f]{64}$/.test(image))
           fail('INVALID_ARGUMENT', 'image must be a picture’s SHA-256.');
@@ -794,10 +855,27 @@ export class AutomationFacadeService {
             dicebot: a['dicebot'] === undefined ? undefined : textArgument(a['dicebot'], 64).trim(),
             images: a['images'] === undefined ? undefined : automationImagesOf(a['images']),
             image,
+            imageHeight: a['imageHeight'] === undefined ? undefined : imageHeightOf(a['imageHeight']),
           },
           booleanOf(a['dryRun'], 'dryRun'),
           guard
         );
+      }
+      case 'character_update': {
+        onlyKeys(a, ['identifier', 'status', 'commands', 'imageHeight', 'dryRun']);
+        const piece = this.readable(textArgument(a['identifier']));
+        const commands = a['commands'];
+        if (commands !== undefined && (typeof commands !== 'string' || commands.length > MAX_PALETTE_TEXT))
+          fail('INVALID_ARGUMENT', `commands must be the palette text, at most ${MAX_PALETTE_TEXT} characters.`);
+        const change: PieceUpdate = {
+          status: a['status'] === undefined ? undefined : resourceChangesOf(a['status']),
+          commands: commands as string | undefined,
+          imageHeight: a['imageHeight'] === undefined ? undefined : imageHeightOf(a['imageHeight']),
+        };
+        if (change.status === undefined && change.commands === undefined && change.imageHeight === undefined)
+          fail('INVALID_ARGUMENT', 'Give status, commands or imageHeight.');
+        if (booleanOf(a['dryRun'], 'dryRun')) return { identifier: piece.identifier, dryRun: true };
+        return this.pieceCommands.update(piece, change);
       }
       case 'piece_disclose': {
         onlyKeys(a, ['identifier', 'disclosure', 'dryRun']);

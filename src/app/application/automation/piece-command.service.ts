@@ -10,6 +10,9 @@ import { ObjectStore } from '@axe/core/sync/object-store';
 import { xml2element } from '@axe/core/util/xml-util';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { ImportedCharacter } from '@axe/domain/character/import/imported-character';
+import { ImportedCharacterFactory } from '@axe/domain/character/import/imported-character-factory';
+import { ChatPalette } from '@axe/domain/chat/chat-palette';
+import { DataElement } from '@axe/domain/data/data-element';
 import { DisclosureMode } from '@axe/domain/disclosure/disclosure';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
@@ -25,6 +28,21 @@ type Sheet =
 
 /** What automation puts out and clears away: pieces, and the shared notes handed to the players. */
 export type OwnedThing = GameCharacter | TextNote;
+
+/** One resource as character_update sets it: its maximum, what is left, or both. */
+export interface ResourceChange {
+  label: string;
+  value?: number;
+  max?: number;
+}
+
+/** What character_update changes on a piece; whatever is left out stays as it is. */
+export interface PieceUpdate {
+  status?: readonly ResourceChange[];
+  commands?: string;
+  /** The height its picture stands, in pixels; 0 lets it stand as wide as its base again. */
+  imageHeight?: number;
+}
 
 export interface PieceAnchor {
   x: number;
@@ -89,6 +107,8 @@ export class PieceCommandService {
       images?: readonly AutomationImage[];
       /** A picture every piece wears instead of its sheet's own, by its SHA-256, as an NPC drawn for the scene. */
       image?: string;
+      /** The height every piece's picture stands, in pixels, as a portrait taller than it is wide wants. */
+      imageHeight?: number;
     },
     dryRun: boolean,
     guard: () => void
@@ -122,6 +142,7 @@ export class PieceCommandService {
           const picture = character.imageDataElement?.getFirstElementByName('imageIdentifier');
           if (picture) picture.value = options.image;
         }
+        if (options.imageHeight !== undefined) this.standPicture(character, options.imageHeight);
         character.disclosureMode = options.disclosure;
         character.location = { ...character.location, name: place, ...places[index], surface: 'floor' };
         character.update();
@@ -139,6 +160,65 @@ export class PieceCommandService {
       unit: 'px',
       concealed: options.concealed,
     };
+  }
+
+  /**
+   * Changes a piece where it stands, keeping its identifier, as after the character grows: each resource's
+   * maximum and what is left of it (one it does not have is added where an imported sheet keeps its
+   * resources, full unless told otherwise), the whole palette, and how tall its picture stands. Everything is
+   * checked before anything is changed.
+   */
+  update(piece: GameCharacter, change: PieceUpdate) {
+    const root = piece.rootDataElement;
+    if (!root) return fail('INVALID_ARGUMENT', 'The piece has no sheet.');
+    const found = (change.status ?? []).map((status) => {
+      const element = DataElement.findElementByReference(root, status.label);
+      if (element && !element.isNumberResource)
+        fail('INVALID_ARGUMENT', `${status.label} is on the sheet but is not a resource.`);
+      if (!element && status.max === undefined)
+        fail('INVALID_ARGUMENT', `${status.label} is not on the sheet; give its max to add it.`);
+      return { status, element };
+    });
+    GameObject.batch(() => {
+      for (const { status, element } of found) {
+        if (!element) {
+          const max = status.max ?? 0;
+          ImportedCharacterFactory.appendResource(piece, status.label, max, status.value ?? max);
+          continue;
+        }
+        if (status.max !== undefined) element.value = status.max;
+        if (status.value !== undefined) element.currentValue = status.value;
+      }
+      if (change.commands !== undefined) {
+        if (piece.chatPalette) piece.chatPalette.setPalette(change.commands);
+        else {
+          const palette = new ChatPalette(`ChatPalette_${piece.identifier}`);
+          palette.setPalette(change.commands);
+          palette.initialize();
+          piece.appendChild(palette);
+        }
+      }
+      if (change.imageHeight !== undefined) this.standPicture(piece, change.imageHeight);
+      piece.update();
+    });
+    return {
+      identifier: piece.identifier,
+      name: piece.name,
+      status: found.map(({ status }) => {
+        const element = DataElement.findElementByReference(root, status.label);
+        return { label: status.label, value: Number(element?.currentValue), max: Number(element?.value) };
+      }),
+      ...(change.commands !== undefined ? { paletteLines: piece.chatPalette?.getPalette().length ?? 0 } : {}),
+      ...(change.imageHeight !== undefined
+        ? { imageHeight: piece.specifyKomaImageFlag ? piece.komaImageHeight : 0 }
+        : {}),
+    };
+  }
+
+  /** Gives the piece's picture a height of its own, or none (0) so it stands as wide as its base. */
+  private standPicture(piece: GameCharacter, height: number): void {
+    piece.specifyKomaImageFlag = height > 0;
+    if (height > 0) piece.komaImageHeight = height;
   }
 
   /** Reads one sheet without building anything: this tool's own XML, or JSON from another tool. */
