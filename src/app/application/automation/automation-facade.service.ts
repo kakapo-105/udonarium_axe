@@ -98,6 +98,8 @@ const REPLAY_WINDOW_MS = 5 * 60 * 1000;
  */
 const RESOURCE_COMMAND =
   /^:[^\s:：&＆+=-]+[+-](?:\d+(?:\.\d+)?|[dD]|\[[^[\]\s{}｛｝]+\]|\$\d+|if\(|[-+*/()<>=!,])+[LZlz]{0,2}$/u;
+/** At most this many resource commands go in one line, each on the speaking piece. */
+const MAX_RESOURCE_COMMANDS = 10;
 const MAX_PALETTE_LINES = 500;
 const MAX_TARGETS = 50;
 const MAX_BUFF_PIECES = 100;
@@ -489,10 +491,12 @@ export class AutomationFacadeService {
     }
     if (/(?:^|\s)[sSｓＳ]?[:：&＆]/u.test(text)) {
       this.policy.require('edit_resource');
-      if (!asCharacter || !RESOURCE_COMMAND.test(text)) {
+      // A line of resource commands only, such as `:HP+6 :MP+3` after a rest; never mixed with talk.
+      const commands = text.trim().split(/\s+/u);
+      if (!asCharacter || commands.length > MAX_RESOURCE_COMMANDS || !commands.every((c) => RESOURCE_COMMAND.test(c))) {
         fail(
           'FORBIDDEN',
-          'Resource chat supports only a single :name+amount or :name-amount command; the amount may use numbers, dice, [rolls], if() and $n.'
+          `Resource chat supports only :name+amount or :name-amount commands (up to ${MAX_RESOURCE_COMMANDS}, separated by spaces, nothing else on the line); the amount may use numbers, dice, [rolls], if() and $n.`
         );
       }
     }

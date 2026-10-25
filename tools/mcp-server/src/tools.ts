@@ -55,12 +55,18 @@ const BGM_PLAY_TIMEOUT_MS = 70000;
 /** At most this many lines go in one chat_send. */
 const MAX_CHAT_LINES = 20;
 
+/** A line that only changes resources of the speaking piece, as chat_send takes them. */
+const RESOURCE_LINE = /^:\S+(?:\s+:\S+)*$/u;
+const RESOURCE_GAP_MS = 300;
+
 /**
  * How long a line is given before the next follows: novel mode shows only the newest line, so one
  * that arrives while the last is still being typed out hides it. The wait covers typing at the slow
  * speed (60 ms a character) and a moment to read, within bounds.
  */
 export function lineGapMs(text: string): number {
+  // A line of resource commands (:HP+6 :MP+3) is not there to be read; the next follows soon after.
+  if (RESOURCE_LINE.test(text.trim())) return RESOURCE_GAP_MS;
   return Math.min(15000, Math.max(1500, [...text].length * 60 + 1200));
 }
 /** The tools answered here from this machine's folders, without the browser. */
@@ -160,7 +166,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'chat_send',
       read: false,
       description:
-        'Send public chat in an allowed tab as yourself or a controllable character. BCDice expressions are supported, and the answers of the dice bot to a line with dice come back in `rolls` (text, and `outcome` critical / fumble / success / failure when the bot told), so no chat_read_recent is needed to read the result. A line with no piece speaking is rolled under the default dice bot of the room. The answer to a secret roll (an S in front, such as S2d6 or SCCB<=50) comes back too, marked secret: true; only the roller sees it, so do not repeat it in public. A single resource command on the speaking character (:HP-5, :HP-2d6, :HP-if([2d6]>=10,5,0), $1 reads the first bracketed roll again) also needs edit_resource; write it without spaces. References, targets and effect macros are excluded. style stages the line as the kinds in the chat input do, standing out in the log and in novel mode: narration (description by the narrator), location (a place heading, when the party arrives somewhere) or scene (a scene heading, when the scene changes). Give text for one line, or lines for several said in order in one call (a heading, the narration, then each NPC line as that NPC piece): each waits for the one before to be typed out and read in novel mode, so none is hidden, and the call returns once all are said (sent lists each identifier; on a failure the rest are not said and failed says which and why). Prefer lines to several calls. Requires a browser grant.',
+        'Send public chat in an allowed tab as yourself or a controllable character. BCDice expressions are supported, and the answers of the dice bot to a line with dice come back in `rolls` (text, and `outcome` critical / fumble / success / failure when the bot told), so no chat_read_recent is needed to read the result. A line with no piece speaking is rolled under the default dice bot of the room. The answer to a secret roll (an S in front, such as S2d6 or SCCB<=50) comes back too, marked secret: true; only the roller sees it, so do not repeat it in public. A line of resource commands on the speaking character (:HP-5, :HP-2d6, :HP-if([2d6]>=10,5,0), $1 reads the first bracketed roll again; up to 10 on one line separated by spaces, such as :HP+6 :MP+3, and nothing else on that line) also needs edit_resource; write each without spaces. In lines, such a line with its characterId changes that piece, so a rest that restores several pieces is one call: the narration, then one resource line per piece. References, targets and effect macros are excluded. style stages the line as the kinds in the chat input do, standing out in the log and in novel mode: narration (description by the narrator), location (a place heading, when the party arrives somewhere) or scene (a scene heading, when the scene changes). Give text for one line, or lines for several said in order in one call (a heading, the narration, then each NPC line as that NPC piece): each waits for the one before to be typed out and read in novel mode, so none is hidden, and the call returns once all are said (sent lists each identifier; on a failure the rest are not said and failed says which and why). Prefer lines to several calls. Requires a browser grant.',
       shape: {
         ...retry,
         tabId: id,

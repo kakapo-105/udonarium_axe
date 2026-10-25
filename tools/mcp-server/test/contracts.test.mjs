@@ -681,6 +681,9 @@ test('says several lines in one call, each after the one before has had time to 
       assert.deepEqual(waits, [lineGapMs('村の広場'), lineGapMs('夕暮れの広場に人影はまばらだ。')]);
       assert.equal(lineGapMs('あ'), 1500);
       assert.equal(lineGapMs('あ'.repeat(1000)), 15000);
+      // A line of resource commands is not there to be read, so the next follows soon after.
+      assert.equal(lineGapMs(':HP+6 :MP+3'), 300);
+      assert.equal(lineGapMs(':HP+6 休息した'), lineGapMs(':HP+6 休息した'.replace(/./gu, 'あ')));
 
       calls.length = 0;
       const stopped = await client.callTool({

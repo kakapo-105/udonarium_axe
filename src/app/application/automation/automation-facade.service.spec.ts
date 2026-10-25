@@ -278,6 +278,26 @@ describe('AutomationFacadeService', () => {
       true
     );
   });
+  it('changes several resources of the speaking piece in one line, but never with talk mixed in', async () => {
+    policy.setScope('edit_resource', true);
+    // The amounts are worked out by the dice bot, so the real one is loaded here.
+    vi.mocked(DiceBot.loadGameSystemAsync).mockRestore();
+    const hp = DataElement.findElementByReference(piece.rootDataElement!, 'HP')!;
+    const mp = DataElement.findElementByReference(piece.rootDataElement!, 'MP')!;
+    hp.value = 30;
+    hp.currentValue = 10;
+    mp.value = 30;
+    mp.currentValue = 10;
+    const send = (text: string, characterId: string | null = piece.identifier) =>
+      call('chat_send', { tabId: tab.identifier, text, ...(characterId ? { characterId } : {}) });
+
+    expect((await send(':HP+6 :MP+3')).ok).toBe(true);
+
+    await vi.waitFor(() => expect([hp.currentValue, mp.currentValue]).toEqual([16, 13]));
+    for (const text of [':HP+6 休息した', '休息した :HP+6', ':HP+6 t:MP+3']) error(await send(text), 'FORBIDDEN');
+    error(await send(':HP+6 :MP+3', null), 'FORBIDDEN');
+    error(await send(Array.from({ length: 11 }, () => ':HP+1').join(' ')), 'FORBIDDEN');
+  });
   it('stages a line as narration, a place heading or a scene heading when asked', async () => {
     const sent = await call('chat_send', { tabId: tab.identifier, text: '古い遺跡の入口', style: 'location' });
 
@@ -313,7 +333,7 @@ describe('AutomationFacadeService', () => {
     for (const text of [':HP-2d6', ':HP-[k10]+3', ':HP-if([2d6]>=10,5,0)', ':MP-if([2d6]>=12,10,if($1>=7,5,0))L']) {
       expect((await send(text)).ok, text).toBe(true);
     }
-    for (const text of [':HP-if({HP}<=5,3,0)', ':HP-[{秘密}]', ':HP-5 :MP-1', ':HP-if(1, 2, 3)', ':HP=5']) {
+    for (const text of [':HP-if({HP}<=5,3,0)', ':HP-[{秘密}]', ':HP-if(1, 2, 3)', ':HP=5']) {
       error(await send(text), 'FORBIDDEN');
     }
   });
