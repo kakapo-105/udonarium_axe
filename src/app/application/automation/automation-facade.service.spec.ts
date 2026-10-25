@@ -1343,6 +1343,27 @@ describe('AutomationFacadeService', () => {
         building.destroy();
       });
 
+      it('lists a wall that starts outside the rectangle and runs into it, but not one beside it', async () => {
+        beGameMaster();
+        // A wall from x 0 to 6 along row 3, and another wholly west of the rectangle.
+        const long = Terrain.create('壁', 6, 1, 3, '', '');
+        long.location = { name: 'table', x: 0, y: 150 };
+        const beside = Terrain.create('壁', 2, 1, 3, '', '');
+        beside.location = { name: 'table', x: 0, y: 250 };
+        table.appendChild(long);
+        table.appendChild(beside);
+
+        const listed = (await call('terrain_list', { x: 4, y: 2, w: 4, h: 4, walls: true })) as {
+          data: { items: Record<string, unknown>[] };
+        };
+
+        const ids = listed.data.items.map((item) => item['identifier']);
+        expect(ids).toContain(long.identifier);
+        expect(ids).not.toContain(beside.identifier);
+        long.destroy();
+        beside.destroy();
+      });
+
       it('lists the notes on the table and those put out of sight, with the cells they cover', async () => {
         beGameMaster();
         const out = TextNote.create('パン屋', '', 14, 3, 1);

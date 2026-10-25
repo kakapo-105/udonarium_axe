@@ -88,7 +88,8 @@ export class ExplorationCommandService {
 
   /**
    * The doors, walls, props and lights inside a rectangle of the table in view, or all of them, with
-   * whether each is out of sight. Walls are left out unless asked for, since a dungeon stands thousands.
+   * whether each is out of sight. A door, wall or prop counts when any of the ground it covers lies in the
+   * rectangle, wherever it starts. Walls are left out unless asked for, since a dungeon stands thousands.
    */
   listTerrain(rect: CellRect | null, walls: boolean) {
     const table = this.table();
@@ -96,6 +97,14 @@ export class ExplorationCommandService {
     const grid = table.gridSize;
     const inside = (x: number, y: number) =>
       !area || (x >= area.x && x < area.x + area.w && y >= area.y && y < area.y + area.h);
+    // A wall that starts outside and runs into the rectangle stands in it too, so what it covers is
+    // what counts, not where it starts.
+    const overlaps = (box: { x: number; y: number; w: number; h: number }) =>
+      !area ||
+      (box.x < area.x + area.w &&
+        area.x < box.x + Math.max(box.w, 1e-9) &&
+        box.y < area.y + area.h &&
+        area.y < box.y + Math.max(box.h, 1e-9));
     const stashed = this.concealment.concealed();
     const terrains = [...table.terrains, ...stashed.filter((object): object is Terrain => object instanceof Terrain)]
       .filter((terrain) => walls || terrain.isDoor || !terrain.blocksSight)
@@ -114,7 +123,7 @@ export class ExplorationCommandService {
           concealed: this.concealment.isConcealed(terrain),
         };
       })
-      .filter((terrain) => inside(terrain.x, terrain.y));
+      .filter((terrain) => overlaps(terrain));
     const lights = table.children
       .filter((child): child is LightSource => child instanceof LightSource)
       .map((light) => ({
