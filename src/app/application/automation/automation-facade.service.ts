@@ -1111,10 +1111,13 @@ export class AutomationFacadeService {
         return this.roomPrep.view(table, a['flat']);
       }
       case 'table_select': {
-        onlyKeys(a, ['identifier', 'dryRun']);
+        onlyKeys(a, ['identifier', 'flat', 'dryRun']);
         const table = this.roomPrep.table(textArgument(a['identifier']));
+        const flat = a['flat'] === undefined ? undefined : booleanOf(a['flat'], 'flat');
         if (booleanOf(a['dryRun'], 'dryRun')) return { identifier: table.identifier, dryRun: true };
-        return this.roomPrep.select(table);
+        // The view it recommends is set first, so the table comes into view already laid flat or stood up.
+        if (flat !== undefined) this.roomPrep.view(table, flat);
+        return { ...this.roomPrep.select(table), flat: table.mode2d };
       }
       case 'chat_tab_create': {
         onlyKeys(a, ['name', 'playersRead', 'playersSpeak', 'guestsRead', 'guestsSpeak', 'dryRun']);

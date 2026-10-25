@@ -1713,6 +1713,24 @@ describe('AutomationFacadeService', () => {
       error(await call('table_select', { identifier: piece.identifier }), 'NOT_FOUND');
     });
 
+    it('sets the view a table recommends as it puts the table in view, when asked', async () => {
+      beGameMaster();
+      const town = new GameTable();
+      town.name = 'Town';
+      town.initialize();
+      town.mode2d = false;
+
+      expect(await call('table_select', { identifier: town.identifier, flat: true })).toMatchObject({
+        ok: true,
+        data: { identifier: town.identifier, flat: true },
+      });
+      expect(town.mode2d).toBe(true);
+      expect(await call('table_select', { identifier: table.identifier })).toMatchObject({
+        data: { flat: table.mode2d },
+      });
+      error(await call('table_select', { identifier: town.identifier, flat: 'yes' }), 'INVALID_ARGUMENT');
+    });
+
     it('opens a chat tab the players cannot read, for the master’s own notes', async () => {
       beGameMaster();
 

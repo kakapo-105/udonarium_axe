@@ -638,8 +638,8 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'table_select',
       read: false,
       description:
-        "Put a table in view for the whole room, playing its music and cut-ins as choosing it in the table settings does. Players' pieces stay at the same coordinates, so move them to where the scene starts. Notes and pieces are shared by every table, so standing lists the notes and pieces out on the table now (kind note or piece): put out of sight with piece_conceal whatever belongs to the scene left behind, such as place-name notes on a town map or NPCs, before playing on. Game master only; requires the prepare_room browser grant.",
-      shape: { ...retry, identifier: id, dryRun: z.boolean().optional() },
+        "Put a table in view for the whole room, playing its music and cut-ins as choosing it in the table settings does. flat sets the view the table recommends first, as table_view does (true: laid flat, 2D; false: perspective, 3D), so no separate table_view is needed; the result's flat says what it recommends now. Players' pieces stay at the same coordinates, so move them to where the scene starts. Notes and pieces are shared by every table, so standing lists the notes and pieces out on the table now (kind note or piece): put out of sight with piece_conceal whatever belongs to the scene left behind, such as place-name notes on a town map or NPCs, before playing on. Game master only; requires the prepare_room browser grant.",
+      shape: { ...retry, identifier: id, flat: z.boolean().optional(), dryRun: z.boolean().optional() },
     },
     {
       name: 'chat_tab_create',
