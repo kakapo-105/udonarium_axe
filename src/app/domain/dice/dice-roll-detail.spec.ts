@@ -5,6 +5,7 @@ import {
   encodeDiceRollDetail,
   parseDiceRollDetail,
 } from '@axe/domain/dice/dice-roll-detail';
+import { DynamicLoader } from 'bcdice';
 
 describe('diceRollDetailOf()', () => {
   it('copies a named roll as it is', () => {
@@ -41,6 +42,20 @@ describe('diceRollDetailOf()', () => {
     expect(diceRollDetailOf('X', { rands: [[1, 100]], success: true })?.outcome).toBe('success');
     expect(diceRollDetailOf('X', { rands: [[1, 100]], failure: true })?.outcome).toBe('failure');
     expect(diceRollDetailOf('X', { rands: [[1, 100]] })?.outcome).toBe('');
+  });
+
+  it('marks a double one on a Sword World 2.5 power table as a fumble, as on any other roll', async () => {
+    // A double one on the power table is an outright failure and earns 50 experience points (DX p.78).
+    const SwordWorld = await new DynamicLoader().dynamicLoad('SwordWorld2.5');
+    for (const command of ['k23[10]+5', 'K10', 'k20+3 ダメージ']) {
+      const roll = new SwordWorld(command);
+      // Every die comes up 1.
+      Object.assign(roll.randomizer, { $random: () => 1 });
+      const result = roll.eval();
+
+      expect(result?.text, command).toContain('[1,1]');
+      expect(diceRollDetailOf('SwordWorld2.5', result as never)?.outcome, command).toBe('fumble');
+    }
   });
 
   it('carries nothing that holds nothing', () => {
