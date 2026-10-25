@@ -1,4 +1,6 @@
-import { isRollLine } from '@axe/application/automation/chat-wait.service';
+import { chatMessageView, isRollLine } from '@axe/application/automation/chat-wait.service';
+import { encodeI18nMessage } from '@axe/application/i18n/i18n-message';
+import { ChatMessage } from '@axe/domain/chat/chat-message';
 import { DynamicLoader } from 'bcdice';
 import { describe, expect, it } from 'vitest';
 
@@ -22,5 +24,31 @@ describe('isRollLine', () => {
     }
     expect(isRollLine('目星をどうぞ', sixth)).toBe(false);
     expect(isRollLine('KP：正気度ロールをお願いします', seventh)).toBe(false);
+  });
+});
+
+describe('chatMessageView', () => {
+  const translate = (key: string) => (key === 'common.chat.systemName' ? 'システムメッセージ' : key);
+  function message(context: Record<string, unknown>): ChatMessage {
+    const line = new ChatMessage();
+    for (const [key, value] of Object.entries(context)) line.setAttribute(key, String(value));
+    return line;
+  }
+
+  it("reads a notice from the room in the reader's language, as the chat shows it", () => {
+    const notice = message({ name: encodeI18nMessage('common.chat.systemName'), tag: 'system-message' });
+    notice.value = '衣服の棚を開けた。';
+
+    expect(chatMessageView(notice, translate)).toMatchObject({
+      name: 'システムメッセージ',
+      text: '衣服の棚を開けた。',
+    });
+  });
+
+  it('leaves what a person wrote as it is, even when it looks like a packed key', () => {
+    const said = message({ name: '@i18n:common.chat.systemName:{}', from: 'player' });
+    said.value = 'hello';
+
+    expect(chatMessageView(said, translate)).toMatchObject({ name: '@i18n:common.chat.systemName:{}' });
   });
 });

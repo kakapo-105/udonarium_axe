@@ -592,12 +592,10 @@ export class AutomationFacadeService {
           messages: tab.chatMessages
             .filter(isPublicMessage)
             .slice(-limit)
-            .map((m) => ({
-              identifier: m.identifier,
-              name: m.name.slice(0, 256),
-              text: m.text.slice(0, 2000),
-              timestamp: m.timestamp,
-            })),
+            .map((m) => {
+              const { identifier, name, text, timestamp } = this.chatWait.view(m);
+              return { identifier, name, text, timestamp };
+            }),
           untrustedContent: true,
         };
       }

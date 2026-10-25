@@ -1,4 +1,6 @@
 import { inject, Injectable } from '@angular/core';
+import { decodeI18nMessage } from '@axe/application/i18n/i18n-message';
+import { TRANSLATE_FN, TranslateFn } from '@axe/application/i18n/translate.token';
 import { getPeerContext } from '@axe/core/network/peer-context-source';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { toHalfWidth } from '@axe/core/util/string-util';
@@ -24,14 +26,16 @@ export interface PieceMove {
 /**
  * A public message as automation reads it. A dice bot's answer also says how the roll came out
  * (`critical`, `fumble`, `success` or `failure`) when the bot told, so a double one needs no reading of the text.
+ * A notice from the room is read in the reader's language, as the chat shows it, not as the packed key it is kept as.
  */
-export function chatMessageView(message: ChatMessage) {
+export function chatMessageView(message: ChatMessage, translate: TranslateFn) {
   const outcome = message.isDicebot ? (message.rollDetail?.outcome ?? '') : '';
+  const read = (text: string) => (message.isSystemMessage ? decodeI18nMessage(text, translate) : text);
   return {
     identifier: message.identifier,
     tabId: message.tabIdentifier,
-    name: message.name.slice(0, 256),
-    text: message.text.slice(0, 2000),
+    name: read(message.name ?? '').slice(0, 256),
+    text: read(message.text ?? '').slice(0, 2000),
     timestamp: message.timestamp,
     ...(outcome ? { outcome } : {}),
   };
@@ -72,6 +76,7 @@ export function isPublicMessage(message: ChatMessage): boolean {
 @Injectable({ providedIn: 'root' })
 export class ChatWaitService {
   private readonly store = inject(ObjectStore);
+  private readonly translate = inject(TRANSLATE_FN);
   private handed = new Set<string>();
   private primed = false;
   /** Where each watched piece was last said to stand. */
@@ -147,7 +152,15 @@ export class ChatWaitService {
     }
     const found = answers();
     for (const message of found) this.handed.add(message.identifier);
-    return found.map((message) => ({ ...chatMessageView(message), ...(message.isSecret ? { secret: true } : {}) }));
+    return found.map((message) => ({
+      ...chatMessageView(message, this.translate),
+      ...(message.isSecret ? { secret: true } : {}),
+    }));
+  }
+
+  /** A public message as automation reads it, in this reader's language; see {@link chatMessageView}. */
+  view(message: ChatMessage) {
+    return chatMessageView(message, this.translate);
   }
 
   said<T>(say: () => T): T {
@@ -206,7 +219,7 @@ export class ChatWaitService {
         const messages = fresh.slice(0, options.limit);
         this.remember(messages);
         return {
-          messages: messages.map(chatMessageView),
+          messages: messages.map((message) => chatMessageView(message, this.translate)),
           moves,
           more: fresh.length > messages.length,
           timedOut: false,
