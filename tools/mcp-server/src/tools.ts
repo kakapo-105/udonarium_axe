@@ -249,7 +249,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'buff_send',
       read: false,
       description:
-        'Run buff commands as a controllable character in an allowed tab, exactly as typing them into chat would, e.g. &Haste/ATK+2/3, &!Haste/ATK/+/2/3, &Haste- (remove), &R- / &R+ (rounds), &D (drop expired). t& aims one at targetIds (or the marked pieces); && sweeps the whole table and only works for the game master. Each command is one item with no spaces. Requires the edit_buff browser grant.',
+        'Run buff commands as a controllable character in an allowed tab, exactly as typing them into chat would, e.g. &Haste/ATK+2/3, &!Haste/ATK/+/2/3, &Haste- (remove), &R- / &R+ (rounds), &D (drop expired). t& aims one at targetIds (or the marked pieces); && sweeps the whole table and only works for the game master. A buff counts down at the end of the round unless a timing is written (&Name/note/3/手番開始 or 手番終了), and @name pins it to whose turn counts it (&Name/note/3/@caster; with no timing written, at the start of that turn; in the &! form the 7th field, as &!Name/status/+/2/3/手番開始/caster). Turn-timed buffs count down only as turns pass on the turn order, so run the round with turn_set. Each command is one item with no spaces. Requires the edit_buff browser grant.',
       shape: {
         ...retry,
         characterId: id,
