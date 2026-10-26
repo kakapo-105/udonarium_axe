@@ -1094,6 +1094,12 @@ describe('AutomationFacadeService', () => {
       );
       error(await call('character_update', { identifier: made.identifier }), 'INVALID_ARGUMENT');
       expect(DataElement.findElementByReference(piece.rootDataElement!, 'HP')?.value).toBe(22);
+      // A maximum lowered below what is left takes what is left down with it.
+      expect(
+        await call('character_update', { identifier: made.identifier, status: [{ label: 'HP', max: 10 }] })
+      ).toMatchObject({
+        data: { status: [{ label: 'HP', value: 10, max: 10 }] },
+      });
       policy.setScope('create_piece', false);
       error(await call('character_update', { identifier: made.identifier, imageHeight: 100 }), 'FORBIDDEN');
     });

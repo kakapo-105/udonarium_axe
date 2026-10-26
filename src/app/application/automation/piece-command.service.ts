@@ -188,6 +188,9 @@ export class PieceCommandService {
         }
         if (status.max !== undefined) element.value = status.max;
         if (status.value !== undefined) element.currentValue = status.value;
+        // A maximum lowered below what is left (a sickness eating into HP) takes what is left down with it.
+        else if (status.max !== undefined && Number(element.currentValue) > status.max)
+          element.currentValue = status.max;
       }
       if (change.commands !== undefined) {
         if (piece.chatPalette) piece.chatPalette.setPalette(change.commands);
