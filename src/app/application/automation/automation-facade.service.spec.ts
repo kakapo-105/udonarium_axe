@@ -1470,6 +1470,24 @@ describe('AutomationFacadeService', () => {
         error(await call('door_set', { identifier: piece.identifier, open: true }), 'NOT_FOUND');
       });
 
+      it('locks a door so it stays shut, and says so in the listing', async () => {
+        beGameMaster();
+        const sealed = door('結晶の扉');
+
+        expect(await call('door_set', { identifier: sealed.identifier, open: false, locked: true })).toMatchObject({
+          ok: true,
+          data: { open: false, locked: true },
+        });
+        expect(sealed.canSwingDoor).toBe(false);
+        expect(await call('terrain_list')).toMatchObject({
+          data: { items: [{ identifier: sealed.identifier, kind: 'door', locked: true }] },
+        });
+        expect(await call('door_set', { identifier: sealed.identifier, locked: false })).toMatchObject({
+          data: { locked: false },
+        });
+        error(await call('door_set', { identifier: sealed.identifier, locked: 'yes' }), 'INVALID_ARGUMENT');
+      });
+
       it('gives the ground a building covers, so a cell beside it can be picked', async () => {
         beGameMaster();
         const building = Terrain.create('建物', 2, 3, 2, '', '');

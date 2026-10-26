@@ -2376,6 +2376,8 @@
         "tiledTextureOff": "Stretch the texture again",
         "doorOpen": "Open the door",
         "doorClose": "Close the door",
+        "doorLock": "Lock the door",
+        "doorUnlock": "Unlock the door",
         "doorStyle": "How the door opens",
         "doorStyleNone": "Not a door",
         "doorStyleSwing": "Swings on a hinge",

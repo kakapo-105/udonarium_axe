@@ -31,6 +31,7 @@ interface MutableTerrain {
   isTiledTexture: boolean;
   doorStyle: string;
   isDoorOpen: boolean;
+  isDoorLocked: boolean;
   isDoor: boolean;
   mode: TerrainViewState;
   parent: null;
@@ -57,6 +58,7 @@ function makeTerrain(overrides: Partial<MutableTerrain> = {}): MutableTerrain {
     isTiledTexture: false,
     doorStyle: 'none',
     isDoorOpen: false,
+    isDoorLocked: false,
     isDoor: false,
     mode: TerrainViewState.ALL,
     parent: null,
@@ -201,6 +203,24 @@ describe('buildTerrainContextMenu()', () => {
     menu.find((item) => item.name === '扉を開く')?.action?.();
 
     expect(terrain.isDoorOpen).toBe(true);
+  });
+
+  it('offers a locked door only to be unlocked, and locks an unlocked one', () => {
+    const build = (overrides: Partial<MutableTerrain>) =>
+      buildTerrainContextMenu(
+        makeTerrain(overrides) as unknown as Terrain,
+        50,
+        { x: 0, y: 0, z: 0 },
+        makeService(),
+        makeActionService(),
+        vi.fn(),
+        t
+      );
+
+    const locked = names(build({ isDoor: true, doorStyle: 'swing', isDoorLocked: true }));
+    expect(locked).toContain('扉の鍵を外す');
+    expect(locked).not.toContain('扉を開く');
+    expect(names(build({ isDoor: true, doorStyle: 'swing' }))).toContain('扉に鍵をかける');
   });
 
   it('offers every way for a door to open, and none at all', () => {

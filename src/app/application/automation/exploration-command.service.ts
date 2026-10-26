@@ -120,6 +120,7 @@ export class ExplorationCommandService {
           w: (box.maxX - box.minX) / grid,
           h: (box.maxY - box.minY) / grid,
           open: terrain.isDoor ? terrain.isDoorOpen : undefined,
+          locked: terrain.isDoor ? terrain.isDoorLocked : undefined,
           concealed: this.concealment.isConcealed(terrain),
         };
       })
@@ -153,11 +154,13 @@ export class ExplorationCommandService {
   /**
    * Opens or shuts a door, and brings one that was put out of sight back first, as when a hidden
    * door is found. A hidden door the generator made looks like the wall it stands in until opened.
+   * Locking it keeps the players from opening or shutting it on the board; the master still can, here.
    */
-  setDoor(terrain: Terrain, open: boolean | undefined) {
+  setDoor(terrain: Terrain, open: boolean | undefined, locked?: boolean) {
     const found = this.concealment.isConcealed(terrain) ? this.concealment.reveal(terrain) : false;
     if (open !== undefined) terrain.isDoorOpen = open;
-    return { identifier: terrain.identifier, open: terrain.isDoorOpen, found };
+    if (locked !== undefined) terrain.isDoorLocked = locked;
+    return { identifier: terrain.identifier, open: terrain.isDoorOpen, locked: terrain.isDoorLocked, found };
   }
 
   /** Stands a light on the table in view, centred on a cell, shown to everyone whether or not a piece sees it. */

@@ -433,6 +433,11 @@ export class FirstPersonService {
         if (!terrain.isDoor || surfaceOf(terrain) !== 'floor') continue;
         const box = terrainBoxOf(terrain, table.gridSize);
         if (probe.x < box.minX || probe.x > box.maxX || probe.y < box.minY || probe.y > box.maxY) continue;
+        // A locked door ahead is reached but rattles and stays as it is.
+        if (!terrain.canSwingDoor) {
+          SoundEffect.play(PresetSound.lock);
+          return true;
+        }
         terrain.isDoorOpen = !terrain.isDoorOpen;
         SoundEffect.play(terrain.isDoorOpen ? PresetSound.unlock : PresetSound.lock);
         return true;

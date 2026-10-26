@@ -466,6 +466,18 @@ describe('FirstPersonService', () => {
       expect(door.isDoorOpen).toBe(true);
       expect(await service().walk('forward')).toBe(true);
     });
+
+    it('leaves a locked door ahead shut', async () => {
+      const door = block(6 * GRID + 0.375 * GRID, 5 * GRID, 0.25, 1);
+      door.doorStyle = DoorStyle.SWING;
+      door.isDoorLocked = true;
+      const piece = pieceAt(5, 5, 90);
+      service().enterSeat(piece.identifier);
+
+      expect(service().toggleDoorAhead()).toBe(true);
+      expect(door.isDoorOpen).toBe(false);
+      expect(await service().walk('forward')).toBe(false);
+    });
   });
 
   describe('walking a hex board', () => {

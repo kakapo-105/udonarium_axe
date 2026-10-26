@@ -536,6 +536,11 @@ export class TerrainComponent {
   protected onDoorClick(): void {
     if (!this.isDoor() || this.pointerDeviceService.isDragging) return;
     const terrain = this.terrain();
+    // A locked door rattles and stays as it is.
+    if (!terrain.canSwingDoor) {
+      SoundEffect.play(PresetSound.lock);
+      return;
+    }
     terrain.isDoorOpen = !terrain.isDoorOpen;
     SoundEffect.play(terrain.isDoorOpen ? PresetSound.unlock : PresetSound.lock);
   }

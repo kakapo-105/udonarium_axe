@@ -151,15 +151,29 @@ export function buildTerrainContextMenuModel(
       SoundEffect.play(PresetSound.sweep);
     },
   };
+  // A locked door offers only to be unlocked; any other door, to open or shut and to be locked.
   const doorToggleActions: ContextMenuAction[] = terrain.isDoor
     ? [
+        ...(terrain.isDoorLocked
+          ? []
+          : [
+              {
+                name: terrain.isDoorOpen
+                  ? t('feature.tabletop.contextMenu.doorClose')
+                  : t('feature.tabletop.contextMenu.doorOpen'),
+                action: () => {
+                  terrain.isDoorOpen = !terrain.isDoorOpen;
+                  SoundEffect.play(terrain.isDoorOpen ? PresetSound.unlock : PresetSound.lock);
+                },
+              },
+            ]),
         {
-          name: terrain.isDoorOpen
-            ? t('feature.tabletop.contextMenu.doorClose')
-            : t('feature.tabletop.contextMenu.doorOpen'),
+          name: terrain.isDoorLocked
+            ? t('feature.tabletop.contextMenu.doorUnlock')
+            : t('feature.tabletop.contextMenu.doorLock'),
           action: () => {
-            terrain.isDoorOpen = !terrain.isDoorOpen;
-            SoundEffect.play(terrain.isDoorOpen ? PresetSound.unlock : PresetSound.lock);
+            terrain.isDoorLocked = !terrain.isDoorLocked;
+            SoundEffect.play(PresetSound.lock);
           },
         },
       ]

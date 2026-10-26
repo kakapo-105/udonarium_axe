@@ -106,6 +106,11 @@ export class Terrain extends TabletopObject {
   @SyncVar() doorStyle: string = DoorStyle.NONE;
   @SyncVar() isDoorOpen: boolean = false;
   /**
+   * Whether the door is locked: it stays as it is, open or shut, whoever clicks it or walks up to it,
+   * until it is unlocked. A door sealed shut by the story is one the players cannot open on the board.
+   */
+  @SyncVar() isDoorLocked: boolean = false;
+  /**
    * Which way round it opens: the hinge at the other end, the slide the other way.
    *
    * Two doors filling one opening are a pair, and a pair opens outward from the middle. Both
@@ -116,6 +121,10 @@ export class Terrain extends TabletopObject {
   /** Whether this terrain is a door of any style. */
   get isDoor(): boolean {
     return this.doorStyle !== DoorStyle.NONE;
+  }
+  /** Whether a click or a step can open or shut it: a door that is not locked. */
+  get canSwingDoor(): boolean {
+    return this.isDoor && !this.isDoorLocked;
   }
 
   /** What pressing the block does, where the master has made it a switch. */

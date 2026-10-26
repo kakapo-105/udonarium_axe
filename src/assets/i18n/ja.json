@@ -2376,6 +2376,8 @@
         "tiledTextureOff": "テクスチャを引き伸ばしに戻す",
         "doorOpen": "扉を開く",
         "doorClose": "扉を閉じる",
+        "doorLock": "扉に鍵をかける",
+        "doorUnlock": "扉の鍵を外す",
         "doorStyle": "扉の開き方",
         "doorStyleNone": "扉ではない",
         "doorStyleSwing": "開き戸",

@@ -973,11 +973,12 @@ export class AutomationFacadeService {
           booleanOf(a['walls'], 'walls')
         );
       case 'door_set': {
-        onlyKeys(a, ['identifier', 'open', 'dryRun']);
+        onlyKeys(a, ['identifier', 'open', 'locked', 'dryRun']);
         const door = this.exploration.door(textArgument(a['identifier']));
         const open = a['open'] === undefined ? undefined : booleanOf(a['open'], 'open');
+        const locked = a['locked'] === undefined ? undefined : booleanOf(a['locked'], 'locked');
         if (booleanOf(a['dryRun'], 'dryRun')) return { identifier: door.identifier, dryRun: true };
-        return this.exploration.setDoor(door, open);
+        return this.exploration.setDoor(door, open, locked);
       }
       case 'light_place': {
         onlyKeys(a, ['x', 'y', 'kind', 'name']);

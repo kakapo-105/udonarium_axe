@@ -473,8 +473,14 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'door_set',
       read: false,
       description:
-        'Open (open: true) or shut a door on the table in view, by the identifier terrain_list gives. A door that was put out of sight is brought back first (found: true), as when the party finds a hidden door. An open door lets sight and light through, so the fog beyond lifts as the pieces look in. Game master only; requires the prepare_room browser grant.',
-      shape: { ...retry, identifier: id, open: z.boolean().optional(), dryRun: z.boolean().optional() },
+        'Open (open: true) or shut a door on the table in view, by the identifier terrain_list gives. locked: true locks it as it stands (open or shut), so the players cannot open or shut it on the board (a click or a step only rattles it) until locked: false; use it for a door the story keeps sealed. open still works on a locked door, for the master. terrain_list says locked for each door. A door that was put out of sight is brought back first (found: true), as when the party finds a hidden door. An open door lets sight and light through, so the fog beyond lifts as the pieces look in. Game master only; requires the prepare_room browser grant.',
+      shape: {
+        ...retry,
+        identifier: id,
+        open: z.boolean().optional(),
+        locked: z.boolean().optional(),
+        dryRun: z.boolean().optional(),
+      },
     },
     {
       name: 'light_place',
