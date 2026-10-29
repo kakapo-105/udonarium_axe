@@ -2,11 +2,14 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { AudioFile } from '@axe/core/storage/audio-file';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
+import { SoundEffects } from '@axe/core/storage/sound-effects';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { AudioTag } from '@axe/domain/media/audio-tag';
 import { CutIn } from '@axe/domain/media/cut-in';
 import { CutInLauncher } from '@axe/domain/media/cut-in-launcher';
 import { Jukebox } from '@axe/domain/media/jukebox';
+import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { PeerRole } from '@axe/domain/peer/peer-role';
 import {
   AttachedSound,
   VisualNovelSoundBoardComponent,
@@ -92,9 +95,33 @@ describe('VisualNovelSoundBoardComponent', () => {
     expect(stopBgmSpy).toHaveBeenCalled();
   });
 
-  it('reports what the jukebox is playing', () => {
+  it('plays nothing for a guest, who may not touch the jukebox or the cut-ins', () => {
     const jukebox = ensureJukebox();
-    vi.spyOn(jukebox, 'isSePlaying').mockReturnValue(true);
+    const play = vi.spyOn(jukebox, 'play').mockImplementation(() => undefined);
+    const stop = vi.spyOn(jukebox, 'stop').mockImplementation(() => undefined);
+    const launcher = ObjectStore.instance.get<CutInLauncher>('CutInLauncher') ?? new CutInLauncher('CutInLauncher');
+    launcher.initialize();
+    const start = vi.spyOn(launcher, 'startCutIn').mockImplementation(() => undefined);
+    const original = PeerCursor.myCursor;
+    PeerCursor.myCursor = { role: PeerRole.Guest } as PeerCursor;
+    try {
+      create();
+      board.playSoundEffect('se-1');
+      board.playBgm('bgm-1');
+      board.stopBgm();
+      board.playCutIn('any');
+
+      expect(play).not.toHaveBeenCalled();
+      expect(stop).not.toHaveBeenCalled();
+      expect(start).not.toHaveBeenCalled();
+    } finally {
+      PeerCursor.myCursor = original;
+    }
+  });
+
+  it('reports which sound effects are playing', () => {
+    ensureJukebox();
+    vi.spyOn(SoundEffects, 'isPlaying').mockReturnValue(true);
     create();
 
     expect(board.isSoundEffectPlaying('se-1')).toBe(true);

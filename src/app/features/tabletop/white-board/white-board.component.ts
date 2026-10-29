@@ -3,18 +3,18 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, signal } f
 import { SaveDataService } from '@axe/application/file/save-data.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
-import { AnimatedImageService } from '@axe/application/media/animated-image.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
 import { PieceContextMenuService } from '@axe/application/ui/piece-context-menu.service';
 import { ImageStorage } from '@axe/core/storage/image-storage';
-import { ObjectStore } from '@axe/core/sync/object-store';
+import { isInStore, ObjectStore } from '@axe/core/sync/object-store';
 import { PERF_DESERIALIZE_SCENE, perfCounters } from '@axe/core/util/perf-counters';
 import { Card } from '@axe/domain/card/card';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { DiceSymbol } from '@axe/domain/dice/dice-symbol';
+import { deserializeScene } from '@axe/domain/map-editor/serialize';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
 import { GameTableMask } from '@axe/domain/tabletop/game-table-mask';
 import { boardSurfaceOf, TabletopObject } from '@axe/domain/tabletop/tabletop-object';
@@ -24,10 +24,10 @@ import { WhiteBoard } from '@axe/domain/tabletop/white-board';
 import { CardComponent } from '@axe/features/card/card/card.component';
 import { GameCharacterComponent } from '@axe/features/character/game-character/game-character.component';
 import { DiceSymbolComponent } from '@axe/features/dice/dice-symbol/dice-symbol.component';
-import { deserializeScene } from '@axe/features/map-editor/model/serialize';
 import { GameTableMaskComponent } from '@axe/features/tabletop/game-table-mask/game-table-mask.component';
 import { TerrainComponent } from '@axe/features/tabletop/terrain/terrain.component';
 import { TextNoteComponent } from '@axe/features/tabletop/text-note/text-note.component';
+import { AnimatedImageService } from '@axe/features/tabletop/white-board/animated-image.service';
 import { detachAllFrom } from '@axe/features/tabletop/white-board/white-board-contents';
 import { buildWhiteBoardContextMenu } from '@axe/features/tabletop/white-board/white-board-context-menu';
 import { LivePicture, livePicturesOf } from '@axe/features/tabletop/white-board/white-board-live-pictures';
@@ -291,6 +291,7 @@ export class WhiteBoardComponent {
       width: 960,
       height: 640,
       single: `white-board-${board.identifier}`,
+      stillWanted: () => isInStore(board),
     };
     this.panelService.openLazy(
       () =>

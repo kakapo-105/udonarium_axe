@@ -12,7 +12,9 @@ import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { BUFF_COLORS } from '@axe/domain/character/buff-appearance';
 import { GameCharacter } from '@axe/domain/character/game-character';
+import { selectControllableCharacters } from '@axe/domain/character/owned-characters';
 import { PaletteCommandGroup, paletteCommandGroups } from '@axe/domain/chat/palette-rows';
+import { EffectPreset } from '@axe/domain/effect/effect-preset';
 import { kindGlyphSvg } from '@axe/domain/effect/effect-shapes';
 import { Hotbar } from '@axe/domain/hotbar/hotbar';
 import { hotbarSlotLabel } from '@axe/domain/hotbar/hotbar-appearance';
@@ -41,10 +43,12 @@ import { CutIn } from '@axe/domain/media/cut-in';
 import { presetSoundLabelKey, soundFileName } from '@axe/domain/media/preset-sound-labels';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { RANGE_DEFAULT_BORDER_COLOR, RANGE_DEFAULT_FILL_COLOR } from '@axe/domain/tabletop/range';
+import { isMenuCommandOffered, MENU_COMMANDS } from '@axe/domain/ui/menu-command';
 import { CHARACTER_PANELS, DEFAULT_CHARACTER_PANEL, panelLabelKey } from '@axe/domain/ui/room-panel';
+import { EffectPreviewComponent } from '@axe/features/effect/effect-preview/effect-preview.component';
 import { findSlotActor } from '@axe/features/hotbar/hotbar-actor';
 import { HotbarRunnerService } from '@axe/features/hotbar/hotbar-runner.service';
-import { selectControllableCharacters } from '@axe/features/pl-tools/owned-character-list/owned-characters';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
 
@@ -63,7 +67,7 @@ const DEFAULT_STEP_DELAY_MS = 300;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'hotbar-slot-editor',
   templateUrl: './hotbar-slot-editor.component.html',
-  imports: [FormsModule, SafePipe, TranslocoModule],
+  imports: [TextTooltipDirective, FormsModule, SafePipe, TranslocoModule, EffectPreviewComponent],
 })
 export class HotbarSlotEditorComponent {
   private readonly panelService = inject(PanelService);
@@ -150,6 +154,13 @@ export class HotbarSlotEditorComponent {
     }));
   });
 
+  /** The effect chosen in the list, played over and over under it so it can be seen before the slot is saved. */
+  protected readonly chosenEffect = computed<EffectPreset | null>(() => {
+    if (this.kind() !== 'effect') return null;
+    const name = this.draft().value;
+    return this.effectLibrary.presets().find((preset) => preset.name === name) ?? null;
+  });
+
   /** Who the slot speaks as while it is being written, so its palette is the one on offer. */
   private readonly actingCharacter = computed<GameCharacter | null>(() => {
     this.objectChange.collectionOf(GameCharacter.aliasName)();
@@ -188,6 +199,19 @@ export class HotbarSlotEditorComponent {
   protected readonly panelName = computed(() => {
     const options = this.options();
     return options.kind === 'panel' ? options.panel : DEFAULT_CHARACTER_PANEL;
+  });
+  /**
+   * The menu entries a menu slot may press: every one this seat's role is offered, from the
+   * floating menu and the toolbars alike, but not those that draw a menu of their own.
+   */
+  protected readonly menuChoices = computed(() => {
+    this.objectChange.trackMyCursor();
+    const role = PeerCursor.myRole;
+    return MENU_COMMANDS.filter((command) => command.action.kind !== 'custom' && isMenuCommandOffered(command, role));
+  });
+  protected readonly menuCommandKey = computed(() => {
+    const options = this.options();
+    return options.kind === 'menu' ? options.command : '';
   });
   protected readonly turnAction = computed(() => {
     const options = this.options();

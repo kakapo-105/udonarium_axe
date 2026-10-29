@@ -4,12 +4,16 @@ import { LanguageService } from '@axe/application/i18n/language.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
+import { SoundEffects } from '@axe/core/storage/sound-effects';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { AudioTag } from '@axe/domain/media/audio-tag';
 import { CutIn } from '@axe/domain/media/cut-in';
 import { CutInLauncher } from '@axe/domain/media/cut-in-launcher';
 import { Jukebox } from '@axe/domain/media/jukebox';
 import { presetSoundLabelKey } from '@axe/domain/media/preset-sound-labels';
+import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { canRoleEdit } from '@axe/domain/peer/peer-role';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { TranslocoModule } from '@jsverse/transloco';
 
 export interface AttachedSound {
@@ -21,7 +25,7 @@ export interface AttachedSound {
   selector: 'visual-novel-sound-board',
   templateUrl: './visual-novel-sound-board.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, TranslocoModule],
+  imports: [TextTooltipDirective, FormsModule, TranslocoModule],
   host: { class: 'contents' },
 })
 export class VisualNovelSoundBoardComponent {
@@ -95,6 +99,7 @@ export class VisualNovelSoundBoardComponent {
    * if it or the launcher is missing.
    */
   playCutIn(identifier: string): void {
+    if (!this.mayPlay) return;
     const cutIn = this.objectStore.get<CutIn>(identifier);
     const launcher = this.objectStore.get<CutInLauncher>('CutInLauncher');
     if (cutIn instanceof CutIn && launcher) launcher.startCutIn(cutIn);
@@ -117,12 +122,14 @@ export class VisualNovelSoundBoardComponent {
 
   /** Plays a track on the room's jukebox and refreshes which track shows as playing. */
   playBgm(identifier: string): void {
+    if (!this.mayPlay) return;
     this.jukebox?.play(identifier);
     this.seTick.update((tick) => tick + 1);
   }
 
   /** Stops the room's jukebox and refreshes which track shows as playing. */
   stopBgm(): void {
+    if (!this.mayPlay) return;
     this.jukebox?.stop();
     this.seTick.update((tick) => tick + 1);
   }
@@ -132,12 +139,20 @@ export class VisualNovelSoundBoardComponent {
    * music, and anything else replaces the track.
    */
   playSoundEffect(identifier: string): void {
-    this.jukebox?.play(identifier);
+    if (this.mayPlay) this.jukebox?.play(identifier);
   }
 
   /** Stops a sound effect playing through the room's jukebox. */
   stopSoundEffect(identifier: string): void {
-    this.jukebox?.stopSE(identifier);
+    if (this.mayPlay) this.jukebox?.stopSE(identifier);
+  }
+
+  /**
+   * Whether this reader may play anything for the room: a game master or a player, as on the
+   * jukebox; a guest's would be the room's for nobody but the guest, a room server taking it back.
+   */
+  private get mayPlay(): boolean {
+    return canRoleEdit(PeerCursor.myRole);
   }
 
   /**
@@ -146,7 +161,7 @@ export class VisualNovelSoundBoardComponent {
    */
   isSoundEffectPlaying(identifier: string): boolean {
     this.seTick();
-    return this.jukebox?.isSePlaying(identifier) ?? false;
+    return SoundEffects.isPlaying(identifier);
   }
 
   /** The board is asked again about what is playing whenever it is opened. */

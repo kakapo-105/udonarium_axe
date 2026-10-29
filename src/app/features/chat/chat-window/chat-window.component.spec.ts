@@ -3,10 +3,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { ChatPreferencesService } from '@axe/application/chat/chat-preferences.service';
 import { ChatSpeakerService } from '@axe/application/chat/chat-speaker.service';
-import { ChatTickerSelectionService } from '@axe/application/chat/chat-ticker-selection.service';
 import { ObjectChangeService, ObjectDeleteEvent } from '@axe/application/sync/object-change.service';
 import { PanelService } from '@axe/application/ui/panel.service';
 import { EventChannel } from '@axe/core/event/event-channel';
+import { Network } from '@axe/core/network/network';
 import { childrenChanged$, objectChanged$ } from '@axe/core/sync/object-event-extension';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
@@ -15,6 +15,7 @@ import { DataElement, DataElementFieldType } from '@axe/domain/data/data-element
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
 import { ChatTabComponent } from '@axe/features/chat/chat-tab/chat-tab.component';
+import { ChatTickerSelectionService } from '@axe/features/chat/chat-ticker-selection.service';
 import { ChatWindowComponent } from '@axe/features/chat/chat-window/chat-window.component';
 import { expectPanelDragRecovery, PanelDragTestHostComponent } from '@axe/testing/panel-drag-recovery';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
@@ -62,6 +63,25 @@ describe('ChatWindowComponent', () => {
 
     expect(speaker.identifier()).toBe(character.identifier);
     character.destroy();
+  });
+
+  it('offers a guest on a room server no vote or alarm, which the server would take back', () => {
+    const buttons = () =>
+      [...fixture.nativeElement.querySelectorAll('button[title]')].map((button) => button.getAttribute('title'));
+    fixture.detectChanges();
+    expect(buttons()).toEqual(expect.arrayContaining(['点呼・投票', 'アラーム']));
+
+    PeerCursor.myCursor.role = PeerRole.Guest;
+    vi.spyOn(Network.instance, 'authorityPeerId', 'get').mockReturnValue('@authority');
+    objectChange.notifyChanged(PeerCursor.myCursor.identifier);
+    fixture.detectChanges();
+    try {
+      expect(buttons()).not.toContain('点呼・投票');
+      expect(buttons()).not.toContain('アラーム');
+    } finally {
+      PeerCursor.myCursor.role = PeerRole.Player;
+      vi.restoreAllMocks();
+    }
   });
 
   it('injects a change detector', () => {
@@ -409,7 +429,7 @@ describe('ChatWindowComponent', () => {
       fixture.detectChanges();
       const objectChange = TestBed.inject(ObjectChangeService);
       const tabs = component.chatTabsVersion();
-      if (tabs.length === 0) return; // タブなしは検証スキップ
+      if (tabs.length === 0) return; // nothing to check without a tab
 
       const tabId = tabs[0].identifier;
       const before = objectChange.versionOf(tabId)();
@@ -493,7 +513,7 @@ describe('ChatWindowComponent', () => {
           isAutoScroll: boolean;
         };
         priv.panelService.scrollablePanel = panelEl;
-        priv.isAutoScroll = true; // 「ボトム付近」状態を強制
+        priv.isAutoScroll = true; // forces the "near the bottom" state
         const emitSpy = vi.spyOn(priv.panelService.scrollToBottom$, 'emit');
 
         component.scrollToBottom(false);
@@ -539,7 +559,7 @@ describe('ChatWindowComponent', () => {
         priv.panelService.scrollablePanel = panelEl;
         const emitSpy = vi.spyOn(priv.panelService.scrollToBottom$, 'emit');
 
-        component.scrollToBottom(true); // 「ボトムに戻る」ボタン相当
+        component.scrollToBottom(true); // as the "back to the bottom" button does
 
         expect(emitSpy).toHaveBeenCalled();
       } finally {

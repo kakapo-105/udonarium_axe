@@ -12,8 +12,7 @@ export const AUTOMATION_PROVIDERS: Provider[] = [
     useFactory: (): MapGenerator => {
       const injector = inject(Injector);
       return async (request) => {
-        const { MapGenerationService } =
-          await import('@axe/features/tabletop/dungeon-generator/map-generation.service');
+        const { MapGenerationService } = await import('@axe/features/dungeon-generator/map-generation.service');
         return injector.get(MapGenerationService).generate(request);
       };
     },

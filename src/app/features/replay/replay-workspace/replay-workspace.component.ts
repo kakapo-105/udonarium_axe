@@ -5,24 +5,27 @@ import {
   DestroyRef,
   effect,
   inject,
+  linkedSignal,
   signal,
   untracked,
 } from '@angular/core';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
-import { ReplayEditorService } from '@axe/application/replay/replay-editor.service';
 import { ReplayLibraryService } from '@axe/application/replay/replay-library.service';
 import { ReplayPlaybackService } from '@axe/application/replay/replay-playback.service';
 import { ReplayRecorderService } from '@axe/application/replay/replay-recorder.service';
+import { ReplayStagingService } from '@axe/application/replay/replay-staging.service';
+import { formatSnapshotSavedAt } from '@axe/core/util/snapshot-format';
 import { earliestReplaySeq } from '@axe/domain/replay/replay-edit';
 import { ReplayDigestPanelComponent } from '@axe/features/replay/replay-digest-panel/replay-digest-panel.component';
+import { ReplayEditorService } from '@axe/features/replay/replay-editor.service';
 import { ReplayScriptPanelComponent } from '@axe/features/replay/replay-script-panel/replay-script-panel.component';
 import { ReplayVideoPanelComponent } from '@axe/features/replay/replay-video-panel/replay-video-panel.component';
 import { ReplayVideoPreviewComponent } from '@axe/features/replay/replay-video-preview/replay-video-preview.component';
 import { ReplayEntryListComponent } from '@axe/features/replay/replay-workspace/replay-entry-list.component';
 import { ReplayRecordingListComponent } from '@axe/features/replay/replay-workspace/replay-recording-list.component';
 import { ReplayStageComponent } from '@axe/features/replay/replay-workspace/replay-stage.component';
-import { formatSnapshotSavedAt } from '@axe/features/room-archive/snapshot-format';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { TranslocoModule } from '@jsverse/transloco';
 
 @Component({
@@ -31,6 +34,7 @@ import { TranslocoModule } from '@jsverse/transloco';
   host: { '(keydown)': 'onKeydown($event)', tabindex: '0' },
   templateUrl: './replay-workspace.component.html',
   imports: [
+    TextTooltipDirective,
     TranslocoModule,
     ReplayRecordingListComponent,
     ReplayStageComponent,
@@ -45,6 +49,7 @@ export class ReplayWorkspaceComponent {
   private readonly playback = inject(ReplayPlaybackService);
   private readonly editor = inject(ReplayEditorService);
   private readonly recorder = inject(ReplayRecorderService);
+  private readonly staging = inject(ReplayStagingService);
   private readonly library = inject(ReplayLibraryService);
   private readonly rolePermission = inject(RolePermissionService);
   private readonly destroyRef = inject(DestroyRef);
@@ -56,9 +61,14 @@ export class ReplayWorkspaceComponent {
   protected readonly isDirty = this.editor.isDirty;
   protected readonly isSaving = this.editor.isSaving;
   protected readonly canUndo = this.editor.canUndo;
-  protected readonly isDigestOpen = signal(false);
+  protected readonly isStaging = this.staging.isStaging;
+  /**
+   * Whether the left column shows the summary of the recording. Closing a recording goes back to
+   * the playback view, the preview with it, so the next one does not open on the summary.
+   */
+  protected readonly isDigestOpen = linkedSignal({ source: this.isOpen, computation: () => false });
   /** Whether the left column shows the video as it will be written, rather than the playback controls. */
-  protected readonly isPreviewOpen = signal(false);
+  protected readonly isPreviewOpen = linkedSignal({ source: this.isOpen, computation: () => false });
   /** Whether the list of recordings is open over the workspace, for choosing another. */
   protected readonly isChooserOpen = signal(false);
 
@@ -75,12 +85,6 @@ export class ReplayWorkspaceComponent {
     this.destroyRef.onDestroy(() => {
       this.editor.cancel();
       void this.playback.close();
-    });
-    // Closing a recording returns to the playback view, so the next one does not open on the summary.
-    effect(() => {
-      if (this.isOpen()) return;
-      this.isDigestOpen.set(false);
-      this.isPreviewOpen.set(false);
     });
     // Choosing a recording from the list is what closes it.
     effect(() => {
@@ -108,7 +112,7 @@ export class ReplayWorkspaceComponent {
   }
 
   protected get canEdit(): boolean {
-    return this.rolePermission.canEditTabletop;
+    return this.rolePermission.canEditTabletop();
   }
 
   protected beginEditing(): void {
@@ -116,7 +120,16 @@ export class ReplayWorkspaceComponent {
     this.editor.begin(this.playback.events());
   }
 
+  /**
+   * Throws every edit away and stops editing, and with it a scene being acted out to go in, which
+   * would have no edit left to go into. Nothing is thrown away while the edits are being saved.
+   */
   protected cancelEditing(): void {
+    if (this.isSaving()) return;
+    if (this.staging.isStaging()) {
+      this.staging.discard();
+      void this.playback.showBoardAfresh();
+    }
     this.editor.cancel();
   }
 
@@ -135,16 +148,25 @@ export class ReplayWorkspaceComponent {
     this.undo();
   }
 
+  /**
+   * Saves the edits as a recording of their own and opens it, unless another recording was opened
+   * meanwhile. Nothing is saved while a scene is being acted out, which would be left out and thrown
+   * away as the saved one opens.
+   */
   protected async saveEdits(): Promise<void> {
+    if (this.isStaging()) return;
     const id = this.playback.recordingId();
     const manifest = this.playback.manifest();
     const edited = this.editor.edited();
     if (id == null || !manifest || edited.length < 1) return;
 
-    const base = await this.library.boardBefore(id, earliestReplaySeq(edited), this.playback.events());
-    const derived = await this.editor.saveAsDerived(manifest, base);
+    const events = this.playback.events();
+    const derived = await this.editor.saveAsDerived(manifest, () =>
+      this.library.boardBefore(id, earliestReplaySeq(this.editor.edited()), events)
+    );
     if (derived == null) return;
     await this.recorder.refresh();
+    if (this.playback.recordingId() !== id) return;
     await this.playback.open(derived);
   }
 }

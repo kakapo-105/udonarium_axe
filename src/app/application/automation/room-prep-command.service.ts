@@ -16,7 +16,7 @@ import { DisclosureMode } from '@axe/domain/disclosure/disclosure';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 import { FilterType, GameTable } from '@axe/domain/tabletop/game-table';
-import { TABLE_BGM_STOP } from '@axe/domain/tabletop/table-bgm';
+import { setTableBgmSetting, tableBgmSettingOf } from '@axe/domain/tabletop/table-bgm';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { TextNote } from '@axe/domain/tabletop/text-note';
 
@@ -195,8 +195,8 @@ export class RoomPrepCommandService {
     if (look.background !== undefined) table.backgroundImageIdentifier = look.background || ImageFile.Empty.identifier;
     if (look.filter !== undefined) table.backgroundFilterType = look.filter;
     if (look.bgm !== undefined) {
-      table.bgm = look.bgm === 'stop' ? TABLE_BGM_STOP : look.bgm;
-      if (this.tables.viewTableIdentifier === table.identifier) this.tableBgm.applyFor(table);
+      setTableBgmSetting(table, look.bgm);
+      if (this.tables.viewTableIdentifier === table.identifier) this.tableBgm.playFor(table);
     }
     return {
       identifier: table.identifier,
@@ -204,7 +204,7 @@ export class RoomPrepCommandService {
       surface: table.imageIdentifier,
       background: table.backgroundImageIdentifier,
       filter: table.backgroundFilterType || 'none',
-      bgm: table.bgm === TABLE_BGM_STOP ? 'stop' : table.bgm || null,
+      bgm: tableBgmSettingOf(table) || null,
     };
   }
 
@@ -213,7 +213,7 @@ export class RoomPrepCommandService {
     const was = this.tables.viewTableIdentifier;
     emitSelectGameTable({ identifier: table.identifier });
     if (was !== table.identifier) {
-      this.tableBgm.applyFor(table);
+      this.tableBgm.playFor(table);
       this.cutIns.launchForTable(table);
     }
     return { identifier: table.identifier, name: table.name.slice(0, 256), standing: this.standing() };

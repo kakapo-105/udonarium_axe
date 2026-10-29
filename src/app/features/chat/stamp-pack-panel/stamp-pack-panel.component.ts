@@ -9,6 +9,7 @@ import { ImageStorage } from '@axe/core/storage/image-storage';
 import { StampPack } from '@axe/domain/chat/stamp-pack';
 import { FileSelecterComponent } from '@axe/ui/components/file-selecter/file-selecter.component';
 import { StampComponent } from '@axe/ui/components/stamp/stamp.component';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { TranslocoModule } from '@jsverse/transloco';
 
 /**
@@ -22,7 +23,7 @@ import { TranslocoModule } from '@jsverse/transloco';
   selector: 'stamp-pack-panel',
   templateUrl: './stamp-pack-panel.component.html',
   host: { class: 'text-ui-text flex h-full flex-col gap-2 p-3 text-[13px]' },
-  imports: [StampComponent, TranslocoModule],
+  imports: [TextTooltipDirective, StampComponent, TranslocoModule],
 })
 export class StampPackPanelComponent {
   private readonly packService = inject(StampPackService);
@@ -31,6 +32,7 @@ export class StampPackPanelComponent {
   private readonly fileArchiver = inject(FileArchiver);
   private readonly confirm = inject(ConfirmService);
   private readonly t = inject(TRANSLATE_FN);
+  private readonly imageStorage = inject(ImageStorage);
 
   protected readonly packs = this.packService.packs;
   protected readonly canManage = computed(() => this.packService.canManage);
@@ -79,7 +81,7 @@ export class StampPackPanelComponent {
     if (!pack) return;
     const identifier = await this.modalService.open<string>(FileSelecterComponent);
     if (!identifier) return;
-    const image = ImageStorage.instance.get(identifier);
+    const image = this.imageStorage.get(identifier);
     if (!image) return;
     this.report(this.packService.addImages(pack, [{ identifier: image.identifier, name: image.name }]), []);
   }

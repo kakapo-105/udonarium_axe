@@ -12,23 +12,17 @@ import {
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
-import { AnimatedImageService } from '@axe/application/media/animated-image.service';
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
+import { closeWhenOffTheTable } from '@axe/application/ui/close-when-off-the-table';
 import { ModalService } from '@axe/application/ui/modal.service';
 import { PanelService } from '@axe/application/ui/panel.service';
+import { ShortcutScopeService } from '@axe/application/ui/shortcut-scope.service';
 import { ViewportService } from '@axe/application/ui/viewport.service';
+import { capturePointer } from '@axe/core/input/pointer-capture';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import { downloadBlob } from '@axe/core/util/download-blob';
-import { boardSurfaceOf, TabletopObject } from '@axe/domain/tabletop/tabletop-object';
-import {
-  clampBoardPitch,
-  MAX_BOARD_PITCH,
-  MIN_BOARD_PITCH,
-  setBoardHeightKeepingFoot,
-  WhiteBoard,
-} from '@axe/domain/tabletop/white-board';
-import { ShapeGeneratorKind } from '@axe/features/map-editor/model/editor-tool';
-import { SceneHistory } from '@axe/features/map-editor/model/history';
+import { ShapeGeneratorKind } from '@axe/domain/map-editor/editor-tool';
+import { SceneHistory } from '@axe/domain/map-editor/history';
 import {
   createLayer,
   ImageLayer,
@@ -40,7 +34,7 @@ import {
   StrokeDash,
   TextAlign,
   TextItem,
-} from '@axe/features/map-editor/model/scene';
+} from '@axe/domain/map-editor/scene';
 import {
   addImage,
   addLayer,
@@ -49,10 +43,17 @@ import {
   moveLayer,
   removeLayer,
   updateText,
-} from '@axe/features/map-editor/model/scene-ops';
-import { deserializeScene } from '@axe/features/map-editor/model/serialize';
-import { getRasterImage, warmRasterImages } from '@axe/features/map-editor/render/raster-image';
-import { renderScene } from '@axe/features/map-editor/render/render-scene';
+} from '@axe/domain/map-editor/scene-ops';
+import { deserializeScene } from '@axe/domain/map-editor/serialize';
+import { boardSurfaceOf, TabletopObject } from '@axe/domain/tabletop/tabletop-object';
+import {
+  clampBoardPitch,
+  MAX_BOARD_PITCH,
+  MIN_BOARD_PITCH,
+  setBoardHeightKeepingFoot,
+  WhiteBoard,
+} from '@axe/domain/tabletop/white-board';
+import { AnimatedImageService } from '@axe/features/tabletop/white-board/animated-image.service';
 import { detachFromBoard, standingOn } from '@axe/features/tabletop/white-board/white-board-contents';
 import { BoardGesture } from '@axe/features/tabletop/white-board/white-board-gesture';
 import { BoardKeeper } from '@axe/features/tabletop/white-board/white-board-keeper';
@@ -145,6 +146,8 @@ import {
   wordsOf,
 } from '@axe/features/tabletop/white-board/white-board-scene';
 import { BoardKeyAction, boardKeyDown } from '@axe/features/tabletop/white-board/white-board-shortcuts';
+import { getRasterImage, warmRasterImages } from '@axe/infrastructure/map-editor/raster-image';
+import { renderScene } from '@axe/infrastructure/map-editor/render-scene';
 import { FileSelecterComponent } from '@axe/ui/components/file-selecter/file-selecter.component';
 import { TranslocoModule } from '@jsverse/transloco';
 
@@ -763,6 +766,9 @@ export class WhiteBoardEditorComponent {
   }
 
   constructor() {
+    // Made a guest meanwhile, the seat may no longer write what this panel writes.
+    closeWhenOffTheTable();
+    inject(ShortcutScopeService).hold('whiteBoard', this.destroyRef);
     effect(() => {
       const box = this.wordBoxRef()?.nativeElement;
       if (!this.wantsCaret || !box) return;
@@ -961,7 +967,7 @@ export class WhiteBoardEditorComponent {
       this.commitText();
       return;
     }
-    (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+    capturePointer(event.target, event.pointerId);
     const at = this.pointOf(event);
 
     this.gesture.begin(at, event.shiftKey);
@@ -1332,7 +1338,8 @@ export class WhiteBoardEditorComponent {
     event.preventDefault();
     const stuck: MarkRef[] = [];
     for (const file of files) {
-      const image = await this.imageStorage.addAsync(file);
+      const image = await this.imageStorage.addAsync(file, { putBack: true });
+      if (!image) continue;
       const made = stickerAt(
         { x: this.sceneWidth / 2, y: this.sceneHeight / 2 },
         image.identifier,
@@ -1402,7 +1409,7 @@ export class WhiteBoardEditorComponent {
     const guide = newGuide(axis, axis === 'x' ? at.x : at.y);
     this.scene.guides = [...this.guides, guide];
     this.gesture.dragGuide(guide);
-    (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+    capturePointer(event.target, event.pointerId);
     void this.redraw();
   }
 

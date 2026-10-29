@@ -6,6 +6,7 @@ import { WidgetLayoutService } from '@axe/application/ui/widget-layout.service';
 import { Network } from '@axe/core/network/network';
 import { IPeerContext } from '@axe/core/network/peer-context';
 import { RoomSnapshotMeta } from '@axe/core/storage/room-snapshot-store';
+import { STORAGE_KEYS } from '@axe/core/storage/storage-keys';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
 import { RoomRestoreBannerComponent } from '@axe/features/room-archive/room-restore-banner/room-restore-banner.component';
@@ -72,6 +73,22 @@ describe('RoomRestoreBannerComponent', () => {
     await setup();
     expect(banner()).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('2026/07/03 09:05');
+  });
+
+  it('shows none while an invitation takes the page into a room, but does offline, where none can', async () => {
+    history.replaceState(null, '', '/#join?r=a1b&n=room');
+    try {
+      await setup();
+      expect(banner()).toBeNull();
+      TestBed.resetTestingModule();
+
+      localStorage.setItem(STORAGE_KEYS.localMode, '1');
+      await setup();
+      expect(banner()).not.toBeNull();
+    } finally {
+      localStorage.removeItem(STORAGE_KEYS.localMode);
+      history.replaceState(null, '', '/');
+    }
   });
 
   it('shows none when there is nothing', async () => {

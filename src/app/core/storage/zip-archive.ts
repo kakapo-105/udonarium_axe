@@ -2,11 +2,39 @@ import { Logger } from '@axe/core/logging/logger';
 import * as MimeType from '@axe/core/storage/mime-type';
 import type { ZipEntry, ZipWorkerRequest, ZipWorkerResponse } from '@axe/core/storage/zip-archive-message';
 import { zipCompressionLevel } from '@axe/core/storage/zip-compression';
-import { type AsyncZippable, unzip, type Unzipped, zip } from 'fflate';
+import { debounce } from '@axe/core/util/debounce';
+import type { AsyncZippable, Unzipped } from 'fflate';
 
 const ZIP_MIME_TYPE = 'application/zip';
 
 let isWorkerBroken = false;
+
+/**
+ * The code that packs and unpacks zips on the main thread could not be fetched, as when a tab
+ * left open across a release asks for files the new release no longer has.
+ */
+export class ZipCodeUnavailableError extends Error {
+  constructor(cause: unknown) {
+    super('the code for zips could not be fetched', { cause });
+    this.name = 'ZipCodeUnavailableError';
+  }
+}
+
+let fetchFflate: () => Promise<typeof import('fflate')> = () => import('fflate');
+
+/** Replaces how the main thread's zip code is fetched, for a test; null puts the real one back. */
+export function useFflateLoader(loader: (() => Promise<typeof import('fflate')>) | null): void {
+  fetchFflate = loader ?? (() => import('fflate'));
+}
+
+/** Fetched only when needed, as the worker usually does the work and nothing needs it at start. */
+async function loadFflate(): Promise<typeof import('fflate')> {
+  try {
+    return await fetchFflate();
+  } catch (reason) {
+    throw new ZipCodeUnavailableError(reason);
+  }
+}
 
 /**
  * Packs files into a zip in a worker, or on the main thread when no worker can be used.
@@ -32,6 +60,7 @@ export async function readZipEntries(blob: Blob): Promise<ZipEntry[]> {
  * `createZipBlob` falls back to this.
  */
 export async function createZipBlobOnMainThread(files: readonly File[]): Promise<Blob> {
+  const { zip } = await loadFflate();
   const zipData: AsyncZippable = {};
   for (const file of files) {
     const level = zipCompressionLevel(file.name, file.type);
@@ -50,6 +79,7 @@ export async function createZipBlobOnMainThread(files: readonly File[]): Promise
  * untyped; `readZipEntries` falls back to this.
  */
 export async function readZipEntriesOnMainThread(blob: Blob): Promise<ZipEntry[]> {
+  const { unzip } = await loadFflate();
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const unzipped = await new Promise<Unzipped>((resolve, reject) => {
     unzip(bytes, (err, data) => {
@@ -66,23 +96,18 @@ export async function readZipEntriesOnMainThread(blob: Blob): Promise<ZipEntry[]
 const IDLE_TERMINATE_MS = 30_000;
 
 let worker: Worker | null = null;
-let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let nextRequestId = 1;
 const pending = new Map<number, (response: ZipWorkerResponse | null) => void>();
 
 function disposeWorker(): void {
-  if (idleTimer !== null) clearTimeout(idleTimer);
-  idleTimer = null;
+  idleTerminate.cancel();
   worker?.terminate();
   worker = null;
 }
 
-function scheduleIdleTerminate(): void {
-  if (idleTimer !== null) clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => {
-    if (pending.size < 1) disposeWorker();
-  }, IDLE_TERMINATE_MS);
-}
+const idleTerminate = debounce(() => {
+  if (pending.size < 1) disposeWorker();
+}, IDLE_TERMINATE_MS);
 
 function settleAll(response: ZipWorkerResponse | null): void {
   const waiting = [...pending.values()];
@@ -139,7 +164,7 @@ function ensureWorker(): Worker | null {
       Logger.warn('[ZipArchive] ワーカーでの処理に失敗しました', event.data.message);
       resolve(null);
     }
-    scheduleIdleTerminate();
+    idleTerminate();
   });
   worker.addEventListener('error', (event) => {
     isWorkerBroken = true;

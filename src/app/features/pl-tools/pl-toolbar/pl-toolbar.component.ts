@@ -8,9 +8,11 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { ActiveCharacterService } from '@axe/application/character/active-character.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { FirstPersonService } from '@axe/application/tabletop/first-person.service';
+import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { TabletopActionService } from '@axe/application/tabletop/tabletop-action.service';
 import { getRangeMenuItems } from '@axe/application/tabletop/tabletop-action-helpers';
 import { TurnOrderService } from '@axe/application/turn/turn-order.service';
@@ -23,14 +25,13 @@ import { ViewportService } from '@axe/application/ui/viewport.service';
 import { WidgetVisibilityService } from '@axe/application/ui/widget-visibility.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { GameCharacter } from '@axe/domain/character/game-character';
+import { isOwnedByUser } from '@axe/domain/character/owned-characters';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
 import { MenuCommandService, MenuEntryView } from '@axe/features/menu/menu-command.service';
 import { ObjectPanelService } from '@axe/features/panels/object-panel.service';
 import { RoomPanelService } from '@axe/features/panels/room-panel.service';
-import { ActiveCharacterService } from '@axe/features/pl-tools/active-character.service';
-import { isOwnedByUser } from '@axe/features/pl-tools/owned-character-list/owned-characters';
 import { UiButtonGuideComponent } from '@axe/ui/components/button-guide/button-guide.component';
 import { UiIconButtonComponent } from '@axe/ui/components/icon-button/icon-button.component';
 import { DraggableDirective } from '@axe/ui/directives/draggable.directive';
@@ -53,6 +54,7 @@ export class PlToolbarComponent {
   private readonly objectPanels = inject(ObjectPanelService);
   private readonly turnOrder = inject(TurnOrderService);
   private readonly tabletopAction = inject(TabletopActionService);
+  private readonly tabletop = inject(TabletopService);
   protected readonly active = inject(ActiveCharacterService);
   private readonly firstPerson = inject(FirstPersonService);
   private readonly t = inject(TRANSLATE_FN);
@@ -193,7 +195,7 @@ export class PlToolbarComponent {
       typeName
     );
     range.followingCharacterIdentifier = character.identifier;
-    range.following();
+    range.following(this.tabletop.gridSize());
     SoundEffect.play(PresetSound.dicePut);
   }
 

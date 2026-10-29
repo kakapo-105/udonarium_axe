@@ -1,11 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
-import { ChatLogStylePreferenceService } from '@axe/application/chat/chat-log-style-preference.service';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { SaveDataService } from '@axe/application/file/save-data.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { ModalService } from '@axe/application/ui/modal.service';
 import { PanelService } from '@axe/application/ui/panel.service';
-import { ChatLogImages } from '@axe/domain/chat/chat-log-export';
+import { ChatLogImages, exportChatLog } from '@axe/domain/chat/chat-log-export';
 import { ChatLogExporter, ChatLogTab } from '@axe/domain/chat/chat-log-exporter';
 import { ChatLogScope } from '@axe/domain/chat/chat-log-rich';
 import {
@@ -16,6 +15,7 @@ import {
 } from '@axe/domain/chat/chat-log-style';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { buildChatLogPreviewSample } from '@axe/features/chat/chat-log-preview/chat-log-preview-sample';
+import { ChatLogStylePreferenceService } from '@axe/features/chat/chat-log-style-preference.service';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
 
@@ -66,6 +66,7 @@ export class ChatLogPreviewComponent {
     const prepared = this.prepared();
     if (!prepared) return '';
     return this.saveDataService.renderChatLog(
+      exportChatLog,
       this.effectiveStyle(),
       this.effectiveScope(),
       prepared.tabs,

@@ -1,36 +1,78 @@
-import { TABLE_BGM_STOP, tableBgmAction } from '@axe/domain/tabletop/table-bgm';
+import { GameTable } from '@axe/domain/tabletop/game-table';
+import { adoptLegacyTableBgm, setTableBgmSetting, tableBgmSettingOf } from '@axe/domain/tabletop/table-bgm';
 
-describe('what choosing a table does to the music', () => {
-  const silent = { audioIdentifier: '', isPlaying: false };
-  const playing = (identifier: string) => ({ audioIdentifier: identifier, isPlaying: true });
-  const held = (identifier: string) => identifier === 'battle' || identifier === 'explore';
+describe('a table’s music as one setting', () => {
+  function table(): GameTable {
+    const made = new GameTable();
+    made.initialize();
+    return made;
+  }
 
-  it('leaves the music alone for a table with no setting', () => {
-    expect(tableBgmAction('', playing('explore'), held)).toEqual({ kind: 'keep' });
+  it('reads empty for a table that leaves the music alone', () => {
+    expect(tableBgmSettingOf(table())).toBe('');
   });
 
-  it('plays the track the table names', () => {
-    expect(tableBgmAction('battle', playing('explore'), held)).toEqual({ kind: 'play', identifier: 'battle' });
-    expect(tableBgmAction('battle', silent, held)).toEqual({ kind: 'play', identifier: 'battle' });
+  it('writes a track as one to put on, and reads it back', () => {
+    const made = table();
+    setTableBgmSetting(made, 'battle');
+
+    expect([made.tableBgm, made.tableBgmIdentifier]).toEqual(['play', 'battle']);
+    expect(tableBgmSettingOf(made)).toBe('battle');
   });
 
-  it('leaves the same track playing rather than starting it over', () => {
-    expect(tableBgmAction('battle', playing('battle'), held)).toEqual({ kind: 'keep' });
+  it('writes stop as silence, forgetting the track it named', () => {
+    const made = table();
+    setTableBgmSetting(made, 'battle');
+    setTableBgmSetting(made, 'stop');
+
+    expect([made.tableBgm, made.tableBgmIdentifier]).toEqual(['stop', '']);
+    expect(tableBgmSettingOf(made)).toBe('stop');
   });
 
-  it('starts the named track again when it is set but stopped', () => {
-    expect(tableBgmAction('battle', { audioIdentifier: 'battle', isPlaying: false }, held)).toEqual({
-      kind: 'play',
-      identifier: 'battle',
+  it('writes empty as leaving the music alone', () => {
+    const made = table();
+    setTableBgmSetting(made, 'battle');
+    setTableBgmSetting(made, '');
+
+    expect([made.tableBgm, made.tableBgmIdentifier]).toEqual(['', '']);
+  });
+
+  describe('a table saved by an older version of the fork', () => {
+    it('takes the track named in its bgm attribute, and forgets the attribute', () => {
+      const made = table();
+      made.setAttribute('bgm', 'battle');
+
+      adoptLegacyTableBgm(made);
+
+      expect(tableBgmSettingOf(made)).toBe('battle');
+      expect(made.getAttribute('bgm')).toBe('');
     });
-  });
 
-  it('stops the music for a table that asks for silence, and does nothing when it is already silent', () => {
-    expect(tableBgmAction(TABLE_BGM_STOP, playing('explore'), held)).toEqual({ kind: 'stop' });
-    expect(tableBgmAction(TABLE_BGM_STOP, silent, held)).toEqual({ kind: 'keep' });
-  });
+    it('takes the old mark for silence as stop', () => {
+      const made = table();
+      made.setAttribute('bgm', '__stop__');
 
-  it('leaves the music alone when the room no longer holds the track', () => {
-    expect(tableBgmAction('deleted', playing('explore'), held)).toEqual({ kind: 'keep' });
+      adoptLegacyTableBgm(made);
+
+      expect(tableBgmSettingOf(made)).toBe('stop');
+    });
+
+    it('keeps music already named the newer way', () => {
+      const made = table();
+      setTableBgmSetting(made, 'explore');
+      made.setAttribute('bgm', 'battle');
+
+      adoptLegacyTableBgm(made);
+
+      expect(tableBgmSettingOf(made)).toBe('explore');
+    });
+
+    it('does nothing to a table with no bgm attribute', () => {
+      const made = table();
+
+      adoptLegacyTableBgm(made);
+
+      expect(tableBgmSettingOf(made)).toBe('');
+    });
   });
 });

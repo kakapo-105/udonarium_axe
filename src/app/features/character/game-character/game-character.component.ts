@@ -14,58 +14,45 @@ import {
   viewChild,
 } from '@angular/core';
 import { SpeechBubbleService } from '@axe/application/chat/speech-bubble.service';
-import { CharacterDiceService } from '@axe/application/dice/character-dice.service';
 import { EffectAutoPlayService } from '@axe/application/effect/effect-auto-play.service';
-import { EffectCastService } from '@axe/application/effect/effect-cast.service';
-import { EffectLibraryService } from '@axe/application/effect/effect-library.service';
 import { EffectPlaybackService } from '@axe/application/effect/effect-playback.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
-import { PointerCoordinate, PointerDeviceService } from '@axe/application/input/pointer-device.service';
-import { GameObjectInventoryService } from '@axe/application/inventory/game-object-inventory.service';
+import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { DisclosureService } from '@axe/application/permission/disclosure.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
-import { BoardSwitchService } from '@axe/application/tabletop/board-switch.service';
-import { ConcealmentService } from '@axe/application/tabletop/concealment.service';
-import { EngagementZoneService, ZoneMenuModel } from '@axe/application/tabletop/engagement-zone.service';
+import { EngagementZoneService } from '@axe/application/tabletop/engagement-zone.service';
 import { FirstPersonService } from '@axe/application/tabletop/first-person.service';
 import { MovePlannerService } from '@axe/application/tabletop/move-planner.service';
 import { MoveRangeService } from '@axe/application/tabletop/move-range.service';
+import { PieceLinksService } from '@axe/application/tabletop/piece-links.service';
 import { PieceTargetService } from '@axe/application/tabletop/piece-target.service';
-import { RangeShapeInvokeService } from '@axe/application/tabletop/range-shape-invoke.service';
-import { RideMenuModel, RideService } from '@axe/application/tabletop/ride.service';
-import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
+import { RideService } from '@axe/application/tabletop/ride.service';
+import { RoomRulesService } from '@axe/application/tabletop/room-rules.service';
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { TriggerFireService } from '@axe/application/tabletop/trigger-fire.service';
 import { VisionService } from '@axe/application/tabletop/vision.service';
 import { WaterService } from '@axe/application/tabletop/water.service';
 import { BillboardFacing, facesAlways, NOT_TURNED } from '@axe/application/ui/billboard-frame.service';
 import { BuffViewPreferenceService } from '@axe/application/ui/buff-view-preference.service';
-import { ContextMenuAction } from '@axe/application/ui/context-menu.service';
 import { ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { MobileLayoutService } from '@axe/application/ui/mobile-layout.service';
-import { buildOverlapContextMenu } from '@axe/application/ui/overlap-context-menu';
-import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
-import { PieceContextMenuService } from '@axe/application/ui/piece-context-menu.service';
 import { PieceOverlayPreferenceService } from '@axe/application/ui/piece-overlay-preference.service';
 import { RenderLiteService } from '@axe/application/ui/render-lite.service';
 import { SelectionSignalService } from '@axe/application/ui/selection-signal.service';
-import { sheetPanelBox } from '@axe/application/ui/sheet-panel';
-import { sheetPanelTitle } from '@axe/application/ui/sheet-panel';
 import { SnackbarService } from '@axe/application/ui/snackbar.service';
-import { buildSurfaceSwitchContextMenu } from '@axe/application/ui/surface-switch-context-menu';
-import { TabletopOverlapService } from '@axe/application/ui/tabletop-overlap.service';
 import { transientSignal } from '@axe/application/ui/transient-signal';
 import { UiSignalService } from '@axe/application/ui/ui-signal.service';
 import { callResourceChange, resourceChange$ } from '@axe/core/event/domain-events';
 import { getPeerContext } from '@axe/core/network/peer-context-source';
-import { VolumeType } from '@axe/core/storage/audio-player';
+import { VolumeType } from '@axe/core/storage/audio-output';
 import { imageFileEqual } from '@axe/core/storage/image-file';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { BUFF_BADGES_PER_ROW, BuffBadge, toBuffBadges } from '@axe/domain/character/buff-badge';
 import { BUFF_VIEW_LABEL_KEYS, type BuffViewMode, nextBuffViewMode } from '@axe/domain/character/buff-view-mode';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { gaugeNumbersOf, isGaugeInverted, PieceGauge, selectPieceGauges } from '@axe/domain/character/piece-gauge';
+import { pieceImageWidthApart } from '@axe/domain/character/piece-image-size';
 import { isResourceElement } from '@axe/domain/character/resource-catalog';
 import {
   diffResourceSnapshots,
@@ -88,14 +75,10 @@ import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
 import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { GridSnapStyle } from '@axe/domain/tabletop/game-table';
-import {
-  buildHexHoleInCircleClipPath,
-  buildHexRingClipPath,
-  calcHexFlowerParams,
-  HexFlowerParams,
-} from '@axe/domain/tabletop/hex-flower-geometry';
+import { calcHexFlowerParams, HexFlowerParams } from '@axe/domain/tabletop/hex-flower-geometry';
 import { isFlatTopGrid, isHexGrid } from '@axe/domain/tabletop/hex-geometry';
 import { landingLeanAt } from '@axe/domain/tabletop/move/landing-height';
+import { pieceCentreOffsetPx, pieceCornerOnSquare } from '@axe/domain/tabletop/move/piece-on-grid';
 import {
   DEFAULT_MULTI_ANGLE_PIECE_REVOLUTION_SECONDS,
   multiAngleNameMotionMode,
@@ -103,38 +86,20 @@ import {
   multiAnglePieceMotionMode,
   multiAngleRotationPhase,
 } from '@axe/domain/tabletop/multi-angle';
-import { multiAngleFontScaleFactor } from '@axe/domain/tabletop/multi-angle-font-scale';
 import { RideSeat, seatOf } from '@axe/domain/tabletop/ride/ride-rules';
-import { resolveRoomRules } from '@axe/domain/tabletop/room-rules';
 import { asTableFacingMark, TableFacingMark } from '@axe/domain/tabletop/table-facing-mark';
 import { isOffTheFloor } from '@axe/domain/tabletop/tabletop-object';
 import { Terrain } from '@axe/domain/tabletop/terrain';
 import { terrainBoxOf } from '@axe/domain/tabletop/terrain-box';
+import { PieceWaterLook, pieceWaterLook } from '@axe/domain/tabletop/water/submersion';
 import {
-  feetShowingOf,
-  submergedClip,
-  submergedFade,
-  submergedTintOpacity,
-  submersionOf,
-  waterlineMask,
-  waterTintFilter,
-} from '@axe/domain/tabletop/water/submersion';
-import { buildConditionContextMenu } from '@axe/features/character/game-character/condition-context-menu';
-import {
-  buildGameCharacterContextMenuModel,
-  FightMenuEntries,
-} from '@axe/features/character/game-character/game-character-context-menu';
+  GameCharacterMenuHost,
+  GameCharacterMenuService,
+  screenCentreOf,
+} from '@axe/features/character/game-character/game-character-menu.service';
 import { PieceFigureHeightsService } from '@axe/features/character/game-character/piece-figure-heights.service';
-import { buildRideContextMenu, RideMenuEntries } from '@axe/features/character/game-character/ride-context-menu';
-import {
-  buildZoneContextMenu,
-  buildZoneManageContextMenu,
-} from '@axe/features/character/game-character/zone-context-menu';
-import { GameCharacterBuffViewComponent } from '@axe/features/character/game-character-buff-view/game-character-buff-view.component';
+import { PieceRightDrag } from '@axe/features/character/game-character/piece-right-drag';
 import { GameDataElementBuffComponent } from '@axe/features/character/game-data-element-buff/game-data-element-buff.component';
-import { ObjectPanelService } from '@axe/features/panels/object-panel.service';
-import { buildConcealMenu } from '@axe/features/tabletop/board-switch/concealment-context-menu';
-import { LightSettingsComponent } from '@axe/features/tabletop/light-settings/light-settings.component';
 import { StampComponent } from '@axe/ui/components/stamp/stamp.component';
 import { BillboardDirective } from '@axe/ui/directives/billboard.directive';
 import { MovableOption } from '@axe/ui/directives/movable.directive';
@@ -144,11 +109,8 @@ import { RotableDirective } from '@axe/ui/directives/rotable.directive';
 import { SeeThroughDirective } from '@axe/ui/directives/see-through.directive';
 import { SelectableDirective } from '@axe/ui/directives/selectable.directive';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
-import {
-  makeBillboardTransform,
-  makeLabelOrbitTransform,
-  makeScreenLiftTransform,
-} from '@axe/ui/tabletop/billboard-transform';
+import { makeBillboardTransform, makeScreenLiftTransform } from '@axe/ui/tabletop/billboard-transform';
+import { hexPedestalGrabStyle, hexPedestalRingStyle } from '@axe/ui/tabletop/hex-pedestal-style';
 import { makeMultiAngleCurvedName } from '@axe/ui/tabletop/multi-angle-curved-name';
 import {
   makeMultiAngleBuffOrbit,
@@ -156,6 +118,7 @@ import {
   MAX_MULTI_ANGLE_RESOURCE_GAUGES,
 } from '@axe/ui/tabletop/multi-angle-orbit-decoration';
 import { pieceImageView } from '@axe/ui/tabletop/piece-image-view';
+import { pieceLabelFacings } from '@axe/ui/tabletop/piece-label-facings';
 import { setupInputHandler, setupMovableRotableForPiece } from '@axe/ui/tabletop/setup-tabletop-piece';
 import { translateZCss, Z_OFFSET_TALL_OBJECT_PX } from '@axe/ui/tabletop/z-offset';
 import { TranslocoModule } from '@jsverse/transloco';
@@ -235,25 +198,8 @@ const ROLL_HANDLE_MAX_PX = 56;
 const ROLL_HANDLE_SIZE_RATIO = 0.56;
 const ROLL_HANDLE_GAP_RATIO = 0.25;
 const ROLL_HANDLE_ICON_RATIO = 24 / 28;
-const RIGHT_DRAG_THRESHOLD_PX = 3;
-
-interface PieceRightDrag {
-  pointerId: number;
-  startX: number;
-  startY: number;
-  dragged: boolean;
-}
-
-/** How a piece standing in water is drawn. */
-interface PieceInWater {
-  /** The mask that lets the part of the picture under the surface show through. */
-  readonly mask: string;
-  /** The cut that keeps only that part, for the copy of the picture tinted by the water. */
-  readonly clip: string;
-  /** The mask that fades the copy towards the feet in murky water, or null where nothing fades. */
-  readonly fade: string | null;
-  readonly tint: string;
-  readonly tintOpacity: number;
+/** How a piece standing in water is drawn on the table. */
+interface PieceInWater extends PieceWaterLook {
   /** Where the ring on the surface stands over the piece's own ground, or null for a piece sunk over its head. */
   readonly ripple: string | null;
 }
@@ -289,17 +235,12 @@ const WATER_RIPPLE_LIFT_PX = 0.5;
 })
 export class GameCharacterComponent {
   private readonly contextMenuService = inject(ContextMenuService);
-  private readonly boardSwitches = inject(BoardSwitchService);
-  private readonly concealment = inject(ConcealmentService);
-  private readonly pieceContextMenu = inject(PieceContextMenuService);
-  private readonly characterDice = inject(CharacterDiceService);
+  private readonly menu = inject(GameCharacterMenuService);
+  private readonly roomRules = inject(RoomRulesService);
   private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly panelService = inject(PanelService);
-  private readonly objectPanels = inject(ObjectPanelService);
   private readonly pointerDeviceService = inject(PointerDeviceService);
   private readonly objectStore = inject(ObjectStore);
   private readonly selectionSignalService = inject(SelectionSignalService);
-  private readonly inventoryService = inject(GameObjectInventoryService);
   private readonly uiSignalService = inject(UiSignalService);
   private readonly pieceTarget = inject(PieceTargetService);
   private readonly mobileLayout = inject(MobileLayoutService);
@@ -307,22 +248,18 @@ export class GameCharacterComponent {
   private readonly overlay = inject(PieceOverlayPreferenceService);
   private readonly objectChange = inject(ObjectChangeService);
   private readonly tabletopService = inject(TabletopService);
-  private readonly tabletopOverlap = inject(TabletopOverlapService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly figureHeights = inject(PieceFigureHeightsService);
   private readonly translateFn = inject(TRANSLATE_FN);
-  private readonly rangeShapeInvoke = inject(RangeShapeInvokeService);
   private readonly moveRangeService = inject(MoveRangeService);
   private readonly triggerFire = inject(TriggerFireService);
-  private readonly sharedFocus = inject(SharedFocusService);
   private readonly movePlan = inject(MovePlannerService);
   private readonly firstPerson = inject(FirstPersonService);
-  private readonly effectLibrary = inject(EffectLibraryService);
-  private readonly effectCast = inject(EffectCastService);
   private readonly effectAutoPlay = inject(EffectAutoPlayService);
   private readonly effectPlayback = inject(EffectPlaybackService);
   private readonly rolePermission = inject(RolePermissionService);
   private readonly engagementZones = inject(EngagementZoneService);
+  private readonly links = inject(PieceLinksService);
   private readonly ride = inject(RideService);
   private readonly snackbar = inject(SnackbarService);
   private readonly disclosureService = inject(DisclosureService);
@@ -414,13 +351,13 @@ export class GameCharacterComponent {
       collideLayers: ['terrain'],
       transformCssOffset: translateZCss(Z_OFFSET_TALL_OBJECT_PX),
       snapStyle: (char) => (char.size % 1 !== 0 ? GridSnapStyle.VERTEX : undefined),
+      snapToSquare: (char, at) => pieceCornerOnSquare(this.tabletopService.currentTable, char, at),
     });
 
     this.destroyRef.onDestroy(() => {
       clearTimeout(this.highlightTimer);
       clearTimeout(this.unhighlightTimer);
-      this.clearNativeContextMenuSuppression();
-      this.removeRightDragCenterMarker();
+      this.rightDrag.dispose();
       for (const timer of this.floatingTimers) clearTimeout(timer);
       this.floatingTimers.clear();
     });
@@ -439,6 +376,17 @@ export class GameCharacterComponent {
   readonly gameCharacter = input<GameCharacter | null>(null);
   readonly rootElementRef = viewChild<ElementRef<HTMLElement>>('root');
   private readonly movableRef = viewChild(MovableDirective);
+
+  /**
+   * Whether the piece is in stealth. Only the game master, its owner and its party are drawn it at
+   * all, and they are shown it faded with a mark, so they know the rest of the table is not.
+   */
+  readonly inStealth = computed(() => {
+    const char = this.gameCharacter();
+    if (!char) return false;
+    this.objectChange.versionOf(char.identifier)();
+    return char.stealth === '1';
+  });
 
   readonly isHiddenByVision = computed(() => {
     const char = this.gameCharacter();
@@ -509,7 +457,7 @@ export class GameCharacterComponent {
   );
 
   private ridingLabelOf(piece: GameCharacter): RidingLabel {
-    const showsName = this.overlay.names() && (!piece.hideName || this.rolePermission.canSeeHidden);
+    const showsName = this.overlay.names() && (!piece.hideName || this.rolePermission.canSeeHidden());
     const detail = this.overlay.resourceBars() ? (piece.detailDataElement ?? null) : null;
     const readable = this.disclosureService.canView(piece);
     const gauges =
@@ -560,7 +508,7 @@ export class GameCharacterComponent {
         RIDING_CARD_ENTRY_PX +
         (label.name ? RIDING_NAME_HEIGHT_PX : 0) +
         label.gauges.length * GAUGE_ROW_HEIGHT_PX +
-        Math.ceil(label.badges.length / BUFF_BADGES_PER_ROW) * BUFF_BADGE_ROW_HEIGHT_PX,
+        Math.ceil(label.badges.length / BUFF_BADGES_PER_ROW) * BUFF_BADGE_ROW_HEIGHT_PX * this.buffIconScale(),
       0
     )
   );
@@ -594,11 +542,11 @@ export class GameCharacterComponent {
     () => this.ridingCard().length > 0 && !this.multiAngleNameOrbitEnabled()
   );
 
-  readonly ridingOrbitFacing = computed<BillboardFacing>(() => this.labelStandFacing(this.ridingOrbit()));
+  readonly ridingOrbitFacing = computed<BillboardFacing>(() => this.labels.stand(this.ridingOrbit()));
 
   private ridingOrbit(): BillboardFacing {
     if (this.isPoster()) return facesAlways(`translateY(${-(this.size() * this.gridSize - 17)}px)`);
-    return this.labelOrbitFacing(RIDING_CARD_LIFT_PX + this.ridingCardRise(), RIDING_CARD_LIFT_2D_PX);
+    return this.labels.orbit(RIDING_CARD_LIFT_PX + this.ridingCardRise(), RIDING_CARD_LIFT_2D_PX);
   }
 
   readonly ridingStackFacing = computed<BillboardFacing>(() =>
@@ -617,7 +565,7 @@ export class GameCharacterComponent {
     if (!this.overlay.names()) return true;
     this.objectChange.versionOf(char.identifier)();
     this.objectChange.trackMyCursor();
-    return char.hideName && !this.rolePermission.canSeeHidden;
+    return char.hideName && !this.rolePermission.canSeeHidden();
   });
   /** Buffs go unshown for a piece set to hide them, and for every piece while this seat has them switched off. */
   readonly hideBuff = computed(() => {
@@ -653,7 +601,7 @@ export class GameCharacterComponent {
     this.objectChange.collectionOf(Terrain.aliasName)();
     const table = this.tabletopService.currentTable;
     const grid = table.gridSize;
-    const middle = (char.size * grid) / 2;
+    const middle = pieceCentreOffsetPx(char, grid);
     const x = char.location.x + middle;
     const y = char.location.y + middle;
     const standingOn = table.terrains.filter((terrain) => {
@@ -677,22 +625,14 @@ export class GameCharacterComponent {
     if (!char || this.isPoster()) return null;
     this.objectChange.versionOf(char.identifier)();
     const grid = this.gridSize;
-    const middle = (char.size * grid) / 2;
+    const middle = pieceCentreOffsetPx(char, grid);
     const water = this.water.waterAt(char.location.x + middle, char.location.y + middle);
     if (!water) return null;
     const pictureHeight = this.imageView.fitsInCell() ? this.size() * grid : this.pieceImageHeightEstimate();
-    const submersion = submersionOf(char.posZ + this.altitude() * grid, pictureHeight, water.surfacePx);
-    if (!submersion) return null;
+    const look = pieceWaterLook(water, char.posZ + this.altitude() * grid, pictureHeight, grid);
+    if (!look) return null;
     const rise = water.surfacePx - char.posZ - Z_OFFSET_TALL_OBJECT_PX + WATER_RIPPLE_LIFT_PX;
-    const feet = feetShowingOf(submersion.depthPx, grid, water.turbidity);
-    return {
-      mask: waterlineMask(submersion.share, feet, water.turbidity),
-      clip: submergedClip(submersion.share),
-      fade: submergedFade(submersion.share, feet, water.turbidity),
-      tint: waterTintFilter(water.color),
-      tintOpacity: submergedTintOpacity(water.turbidity),
-      ripple: submersion.share < 1 ? `translateZ(${Math.round(rise * 100) / 100}px)` : null,
-    };
+    return { ...look, ripple: look.share < 1 ? `translateZ(${Math.round(rise * 100) / 100}px)` : null };
   });
 
   /** Sets the piece's height above the table in grid cells; does nothing while no character is bound. */
@@ -752,6 +692,13 @@ export class GameCharacterComponent {
     this.objectChange.versionOf(char.identifier)();
     return char.specifyKomaImageFlag;
   });
+  /** The width the picture was given apart from its height, or null where it keeps its own proportions. */
+  readonly komaImageWidthApart = computed(() => {
+    const char = this.gameCharacter();
+    if (!char) return null;
+    this.objectChange.versionOf(char.identifier)();
+    return char.specifyKomaImageFlag ? pieceImageWidthApart(char.komaImageWidth) : null;
+  });
   /** Whether the piece casts a drop shadow under its picture. */
   get isDropShadow(): boolean {
     const char = this.gameCharacter();
@@ -779,6 +726,8 @@ export class GameCharacterComponent {
   }
 
   protected readonly buffViewMode = linkedSignal<BuffViewMode>(() => this.buffViewPreference.mode());
+  /** How large this reader has the buff icons drawn, as a share of their usual size. */
+  protected readonly buffIconScale = computed(() => this.buffViewPreference.iconScale() / 100);
   protected readonly foldingBuff = computed(() => this.buffViewMode() !== 'detail');
   protected readonly buffViewLabelKey = computed(() => BUFF_VIEW_LABEL_KEYS[this.buffViewMode()]);
 
@@ -853,8 +802,7 @@ export class GameCharacterComponent {
     const table = this.tabletopService.currentTable;
     this.objectChange.versionOf(table.identifier)();
     this.objectChange.versionOf('Config')();
-    const config = this.objectStore.get<Config>('Config') ?? null;
-    return resolveRoomRules(config?.roomRuleAnswers ?? null, table).pieceImageInCell;
+    return this.roomRules.rulesFor(table).pieceImageInCell;
   });
 
   readonly imageView = pieceImageView({
@@ -864,6 +812,7 @@ export class GameCharacterComponent {
     specifiedHeightPx: computed(() =>
       this.specifyKomaImageFlag() && !this.fitsImageInCell() ? this.komaImageHeightSignal() : null
     ),
+    specifiedWidthPx: computed(() => (this.fitsImageInCell() ? null : this.komaImageWidthApart())),
     billboardEnabled: this.imageBillboardEnabled,
     billboardFacing: this.pieceImageFacing,
     squarePoster: true,
@@ -883,10 +832,15 @@ export class GameCharacterComponent {
 
   private readonly rollHandleGapPx = computed(() => Math.round(this.rollHandleSizePx() * ROLL_HANDLE_GAP_RATIO));
 
-  /** How wide the picture stands: as wide as the ground, unless its height was set apart from it. */
+  /**
+   * How wide the picture stands: as wide as the ground, unless its height was set apart from it, when
+   * it is as wide as that height makes it or as the width given with it.
+   */
   private readonly pictureWidthPx = computed(() => {
     const ground = this.size() * this.gridSize;
     if (!this.specifyKomaImageFlag() || this.imageView.fitsInCell()) return ground;
+    const apart = this.komaImageWidthApart();
+    if (apart !== null) return apart;
     const natural = this.imageView.naturalSize();
     return natural ? (this.komaImageHeightSignal() * natural.width) / natural.height : ground;
   });
@@ -923,14 +877,18 @@ export class GameCharacterComponent {
     return this.tabletopService.mode2d();
   });
 
+  private readonly labels = pieceLabelFacings({
+    mode2d: () => this.mode2dEnabled(),
+    widthPx: () => this.size() * this.gridSize,
+  });
+
   /** What the room asks of a piece that has to show which way it faces. */
   readonly facingMark = computed<TableFacingMark>(() => {
     const table = this.tabletopService.currentTable;
     this.objectChange.versionOf(table.identifier)();
     this.objectChange.versionOf(this.tabletopService.tableSelecter.identifier)();
     this.objectChange.versionOf('Config')();
-    const config = this.objectStore.get<Config>('Config') ?? null;
-    const mark = asTableFacingMark(resolveRoomRules(config?.roomRuleAnswers ?? null, table).facingMark);
+    const mark = asTableFacingMark(this.roomRules.rulesFor(table).facingMark);
     // A piece that turns to face every side of a flat screen has no one facing to mark.
     const multiAngle = this.tabletopService.mode2d() && this.tabletopService.display().multiAngleEnabled;
     return mark === 'turn' && multiAngle ? 'none' : mark;
@@ -966,22 +924,6 @@ export class GameCharacterComponent {
     const gauge = this.multiAngleResourceGaugeLayout();
     return gauge.segments.length > 0 ? baseOffset + gauge.strokeWidth : baseOffset;
   });
-
-  private labelOrbitFacing(distance3d: number, distance2d: number): BillboardFacing {
-    const mode2d = this.mode2dEnabled();
-    return (rotation) => makeLabelOrbitTransform({ rotation, distance3d, distance2d, mode2d });
-  }
-
-  /**
-   * Where a label hangs from, counted from the middle of the piece's ground.
-   *
-   * The part that moves the label out from the piece is bound to the element itself rather than
-   * added in the template, so the whole of its transform is written by the frame.
-   */
-  private labelStandFacing(orbit: BillboardFacing): BillboardFacing {
-    const stand = `translateX(-50%) translateX(${(this.size() * this.gridSize) / 2}px) `;
-    return (rotation) => stand + orbit(rotation);
-  }
 
   /** What a stack of labels above a piece is turned by, the billboard and the scale it is drawn at. */
   private labelStackFacing(billboard: BillboardFacing): BillboardFacing {
@@ -1048,6 +990,7 @@ export class GameCharacterComponent {
     () => {
       const buffEl = this.gameCharacter()?.buffDataElement ?? null;
       if (this.followedTree(buffEl) === null || !buffEl) return [];
+      this.objectChange.fileVersion();
       return toBuffBadges(buffEl);
     },
     { equal: sameEntries }
@@ -1104,11 +1047,11 @@ export class GameCharacterComponent {
     this.labelStackFacing(this.isPoster() ? NOT_TURNED : this.billboardFacing(56))
   );
 
-  readonly floatOrbitFacing = computed<BillboardFacing>(() => this.labelStandFacing(this.floatOrbit()));
+  readonly floatOrbitFacing = computed<BillboardFacing>(() => this.labels.stand(this.floatOrbit()));
 
   private floatOrbit(): BillboardFacing {
     if (this.isPoster()) return facesAlways(`translateY(${-(this.size() * this.gridSize + 20)}px)`);
-    return this.labelOrbitFacing(56, 96);
+    return this.labels.orbit(56, 96);
   }
 
   private readonly gaugePanelHeightEstimate = computed(() =>
@@ -1119,22 +1062,22 @@ export class GameCharacterComponent {
     this.isPoster() ? NOT_TURNED : this.billboardFacing(GAUGE_STACK_GAP_PX + this.gaugePanelHeightEstimate() / 2)
   );
 
-  readonly gaugeOrbitFacing = computed<BillboardFacing>(() => this.labelStandFacing(this.gaugeOrbit()));
+  readonly gaugeOrbitFacing = computed<BillboardFacing>(() => this.labels.stand(this.gaugeOrbit()));
 
   private gaugeOrbit(): BillboardFacing {
     if (this.isPoster())
       return facesAlways(`translateY(${-(this.size() * this.gridSize + 8 + this.gaugePanelHeightEstimate())}px)`);
-    return this.labelOrbitFacing(
+    return this.labels.orbit(
       GAUGE_STACK_GAP_PX + this.gaugePanelHeightEstimate(),
       64 + this.gaugePanelHeightEstimate()
     );
   }
 
-  readonly nameOrbitFacing = computed<BillboardFacing>(() => this.labelStandFacing(this.nameOrbit()));
+  readonly nameOrbitFacing = computed<BillboardFacing>(() => this.labels.stand(this.nameOrbit()));
 
   private nameOrbit(): BillboardFacing {
     if (this.isPoster()) return facesAlways(`translateY(${-(this.size() * this.gridSize + 5)}px)`);
-    return this.labelOrbitFacing(30, 60);
+    return this.labels.orbit(30, 60);
   }
 
   readonly multiAngleNameOrbitEnabled = computed(() => {
@@ -1172,7 +1115,12 @@ export class GameCharacterComponent {
     const name = this.multiAngleCurvedNameLayout();
     const gauge = this.multiAngleResourceGaugeLayout();
     const innerExtent = Math.max(name.radius + name.fontSize / 2 + name.strokeWidth / 2, gauge.outerExtent);
-    return makeMultiAngleBuffOrbit(this.buffBadges().length, this.size() * this.gridSize, innerExtent);
+    return makeMultiAngleBuffOrbit(
+      this.buffBadges().length,
+      this.size() * this.gridSize,
+      innerExtent,
+      this.buffIconScale()
+    );
   });
 
   readonly multiAngleOrbitVisible = computed(
@@ -1245,15 +1193,12 @@ export class GameCharacterComponent {
     () => -this.multiAnglePiecePhase() * this.multiAnglePieceRotationAnimation().durationSeconds
   );
 
-  readonly buffOrbitFacing = computed<BillboardFacing>(() => this.labelStandFacing(this.buffOrbit()));
+  readonly buffOrbitFacing = computed<BillboardFacing>(() => this.labels.stand(this.buffOrbit()));
 
   private buffOrbit(): BillboardFacing {
     if (this.isPoster())
       return facesAlways(`translateY(${-(this.size() * this.gridSize + 12 + this.gaugePanelHeightEstimate())}px)`);
-    return this.labelOrbitFacing(
-      BUFF_STACK_GAP_PX + this.gaugePanelHeightEstimate(),
-      68 + this.gaugePanelHeightEstimate()
-    );
+    return this.labels.orbit(BUFF_STACK_GAP_PX + this.gaugePanelHeightEstimate(), 68 + this.gaugePanelHeightEstimate());
   }
 
   /** The columns the buff icons are laid out in, the same count the panel's height is reckoned by. */
@@ -1263,7 +1208,7 @@ export class GameCharacterComponent {
     if (this.multiAngleResourceBuffOrbitEnabled() || this.hideBuff() || this.buffNum() < 1) return 0;
     if (this.buffViewMode() === 'detail') return this.buffChildren().length * BUFF_DETAIL_ROW_HEIGHT_PX;
     if (this.buffViewMode() === 'count') return BUFF_BADGE_ROW_HEIGHT_PX;
-    return Math.ceil(this.buffBadges().length / BUFF_BADGES_PER_ROW) * BUFF_BADGE_ROW_HEIGHT_PX;
+    return Math.ceil(this.buffBadges().length / BUFF_BADGES_PER_ROW) * BUFF_BADGE_ROW_HEIGHT_PX * this.buffIconScale();
   });
 
   protected multiAngleBuffOrbitTransform(angle: number, radius: number): string {
@@ -1324,13 +1269,13 @@ export class GameCharacterComponent {
       (this.isTargeted() ? TARGET_MARK_HEIGHT_PX : 0)
   );
 
-  readonly speechOrbitFacing = computed<BillboardFacing>(() => this.labelStandFacing(this.speechOrbit()));
+  readonly speechOrbitFacing = computed<BillboardFacing>(() => this.labels.stand(this.speechOrbit()));
 
   private speechOrbit(): BillboardFacing {
     const lift = this.speechLift();
     if (this.isPoster())
       return facesAlways(`translateY(${-(this.size() * this.gridSize + 12 + lift - BUFF_STACK_GAP_PX)}px)`);
-    return this.labelOrbitFacing(lift, 28 + lift);
+    return this.labels.orbit(lift, 28 + lift);
   }
 
   readonly speechStackFacing = computed<BillboardFacing>(() =>
@@ -1398,26 +1343,9 @@ export class GameCharacterComponent {
     return calcHexFlowerParams(size, this.gridSize, isFlatTopGrid(gridType));
   });
 
-  private readonly pedestalRing = computed<Record<string, string> | null>(() => {
-    const params = this.pedestalHexParams();
-    if (!params) return null;
-    const { outline, bbox, L } = params;
-    const W = bbox.maxX - bbox.minX;
-    const H = bbox.maxY - bbox.minY;
-    return {
-      clipPath: buildHexRingClipPath(outline, bbox, 6),
-      border: 'none',
-      borderRadius: '0',
-      width: `${W}px`,
-      height: `${H}px`,
-      left: `${bbox.minX + L / 2}px`,
-      top: `${bbox.minY + L / 2}px`,
-    };
-  });
-
   private pedestalStyleOf(borderColor: string): Record<string, string> {
-    const ring = this.pedestalRing();
-    return ring ? { background: borderColor, ...ring } : { border: `solid 6px ${borderColor}` };
+    const params = this.pedestalHexParams();
+    return params ? hexPedestalRingStyle(params, 6, borderColor) : { border: `solid 6px ${borderColor}` };
   }
 
   protected readonly pedestalStyleShown = computed(() => this.pedestalStyleOf('#FFCC80'));
@@ -1430,20 +1358,7 @@ export class GameCharacterComponent {
   // allocations and as many clip paths a pass with three hundred characters on the table.
   protected readonly pedestalOuterStyle = computed<Record<string, string>>(() => {
     const params = this.pedestalHexParams();
-    if (!params) return {} as Record<string, string>;
-    const { outline, bbox, L } = params;
-    const W = bbox.maxX - bbox.minX;
-    const H = bbox.maxY - bbox.minY;
-    return {
-      background: '#212121',
-      clipPath: buildHexRingClipPath(outline, bbox, 2),
-      border: 'none',
-      borderRadius: '0',
-      width: `${W}px`,
-      height: `${H}px`,
-      left: `${bbox.minX + L / 2}px`,
-      top: `${bbox.minY + L / 2}px`,
-    };
+    return params ? hexPedestalRingStyle(params, 2, '#212121') : {};
   });
 
   /**
@@ -1453,20 +1368,7 @@ export class GameCharacterComponent {
    */
   protected readonly pedestalGrabStyle = computed<Record<string, string>>(() => {
     const params = this.pedestalHexParams();
-    if (!params) return {} as Record<string, string>;
-    const { bbox, L } = params;
-    const halfW = (bbox.maxX - bbox.minX) / 2;
-    const halfH = (bbox.maxY - bbox.minY) / 2;
-    const radius = Math.sqrt(halfW * halfW + halfH * halfH) + 12;
-    const diameter = radius * 2;
-    return {
-      width: `${diameter}px`,
-      height: `${diameter}px`,
-      left: `${L / 2 - radius}px`,
-      top: `${L / 2 - radius}px`,
-      borderRadius: '50%',
-      clipPath: buildHexHoleInCircleClipPath(params.outline, radius),
-    };
+    return params ? hexPedestalGrabStyle(params, { reachPx: 12, pedestalCutOut: true }) : {};
   });
 
   protected readonly pedestalGrabBorderStyle = computed<Record<string, string>>(() => {
@@ -1516,227 +1418,40 @@ export class GameCharacterComponent {
     if (this.input) this.input.cancel();
   }
 
-  /**
-   * The entries of a piece's menu that fights and mounts bring: getting on or off, its fight, its
-   * state and its being a mount, and managing the zones.
-   */
-  private fightMenuOf(char: GameCharacter): FightMenuEntries {
-    const zoneModel = this.engagementZones.menuOf(char);
-    const rideModel = this.ride.menuOf(char);
-    const ride = this.rideMenuOf(char, rideModel);
-    return {
-      onAndOff: ride.onAndOff,
-      fight: this.zoneMenuOf(char, zoneModel),
-      handling: [...this.conditionMenuOf(char, zoneModel, rideModel), ...ride.group],
-      manage: this.zoneManageMenuOf(char, zoneModel),
-    };
-  }
+  /** The piece's menu, which a right-click or a right-drag on it opens. */
+  private readonly menuHost: GameCharacterMenuHost = {
+    name: () => this.name(),
+    buffViewMode: () => this.buffViewMode(),
+    setBuffViewMode: (mode) => this.buffViewMode.set(mode),
+    bounds: () => this.rootElementRef()?.nativeElement.getBoundingClientRect(),
+    clearanceRadius: (bounds) => this.contextMenuClearanceRadius(bounds),
+  };
 
-  private zoneMenuOf(char: GameCharacter, model: ZoneMenuModel): ContextMenuAction[] {
-    const zones = this.engagementZones;
-    return buildZoneContextMenu(
-      model,
-      this.rolePermission.canEditTabletop,
-      {
-        declare: (foeId) => {
-          const foe = this.objectStore.get<GameCharacter>(foeId);
-          if (foe instanceof GameCharacter) zones.declare(char, foe);
-        },
-        join: (zoneId) => zones.join(char, zoneId),
-        leave: () => zones.leave(char),
-        prepareLeave: () => zones.prepareLeave(char),
-        cancelLeave: () => zones.cancelLeave(char),
-        toggleOffField: () => zones.toggleOffField(char),
-        grab: (captiveId) => {
-          const captive = this.objectStore.get<GameCharacter>(captiveId);
-          if (captive instanceof GameCharacter) zones.grab(char, captive);
-        },
-        release: (captiveId) => {
-          const captive = this.objectStore.get<GameCharacter>(captiveId);
-          if (captive instanceof GameCharacter) zones.release(captive);
-        },
-        breakFree: () => zones.release(char),
-        checkFire: () => this.showLineOfFire(char),
-      },
-      this.translateFn
-    );
-  }
-
-  private zoneManageMenuOf(char: GameCharacter, model: ZoneMenuModel): ContextMenuAction[] {
-    const zones = this.engagementZones;
-    return buildZoneManageContextMenu(
-      model,
-      this.rolePermission.canEditTabletop,
-      this.rolePermission.isGameMaster,
-      {
-        placeSides: () => this.showBattlePlacement(char),
-        setSquare: (zoneId, square) => zones.setSquare(zoneId, square),
-        setLimit: (zoneId, limit) => zones.setLimit(zoneId, limit),
-        remove: (zoneId) => zones.remove(zoneId),
-      },
-      this.translateFn
-    );
-  }
-
-  private conditionMenuOf(
-    char: GameCharacter,
-    zoneModel: ZoneMenuModel,
-    rideModel: RideMenuModel
-  ): ContextMenuAction[] {
-    const zones = this.engagementZones;
-    return buildConditionContextMenu(
-      zoneModel,
-      rideModel,
-      this.rolePermission.canEditTabletop,
-      {
-        setUnseen: (unseen) => zones.setUnseen(char, unseen),
-        setDown: (down) => this.ride.setDown(char, down),
-        setProne: (prone) => this.ride.setProne(char, prone),
-        setHeld: (held) => zones.setHeld(char, held),
-      },
-      this.translateFn
-    );
-  }
-
-  /**
-   * Whether a move can be worked out for a piece: by its mount where it rides in front, by none where
-   * it rides otherwise, and none the rules on riding stop while turns are taken.
-   */
-  private mayPlanMove(char: GameCharacter): boolean {
-    const mover = this.ride.moverFor(char);
-    return mover !== null && this.ride.moveRefusal(char) === null && this.moveRangeService.canPlan(mover);
-  }
-
-  private rideMenuOf(char: GameCharacter, model: RideMenuModel): RideMenuEntries {
-    const ride = this.ride;
-    return buildRideContextMenu(
-      model,
-      this.rolePermission.canEditTabletop,
-      {
-        getOn: (mountId, seat) => {
-          const mount = this.objectStore.get<GameCharacter>(mountId);
-          if (mount instanceof GameCharacter) ride.mount(char, mount, seat);
-        },
-        getOff: () => ride.dismount(char),
-        setMountable: (mountable) => ride.setMountable(char, mountable),
-        setPassenger: (passenger) => ride.setPassenger(char, passenger),
-        setCargo: (cargo) => ride.setCargo(char, cargo),
-        setAnyone: (anyone) => ride.setAnyone(char, anyone),
-        setSeatHeight: (written) => ride.setSeatHeight(char, written),
-        editSeatHeight: () => this.showSettings(char),
-      },
-      this.translateFn
-    );
-  }
-
-  private rightDrag: PieceRightDrag | null = null;
-  private rightDragCenterMarker: HTMLElement | null = null;
-  private nativeContextMenuSuppressionTimer: ReturnType<typeof setTimeout> | null = null;
-  private nativeContextMenuSuppressor: ((event: MouseEvent) => void) | null = null;
+  private readonly rightDrag = new PieceRightDrag({
+    flat: () => this.mode2dEnabled(),
+    cancelTableGesture: () => this.selectionSignalService.cancelTableGesture(),
+    closeMenu: () => this.contextMenuService.close(),
+    openMenu: (at) => {
+      const char = this.gameCharacter();
+      if (char) this.menu.open(char, this.menuHost, at, at, screenCentreOf(this.menuHost.bounds(), at));
+    },
+  });
 
   protected onPiecePointerDown(event: PointerEvent): void {
     this.checkKey(event);
-    if (event.button !== 2 || !this.mode2dEnabled()) return;
-
-    this.selectionSignalService.cancelTableGesture();
-    this.rightDrag = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      dragged: false,
-    };
-    (event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId);
+    this.rightDrag.down(event);
   }
 
   protected onPiecePointerMove(event: PointerEvent): void {
-    const drag = this.rightDrag;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-
-    if (!drag.dragged) {
-      const dx = event.clientX - drag.startX;
-      const dy = event.clientY - drag.startY;
-      drag.dragged = dx * dx + dy * dy > RIGHT_DRAG_THRESHOLD_PX * RIGHT_DRAG_THRESHOLD_PX;
-      if (!drag.dragged) return;
-      // Some platforms raise contextmenu on the press rather than the release. Once this is
-      // known to be a drag, remove that early menu and replace it at the release point.
-      this.contextMenuService.close();
-    }
-
-    this.showRightDragCenterMarker(event.clientX, event.clientY);
-    if (event.cancelable) event.preventDefault();
+    this.rightDrag.move(event);
   }
 
   protected onPiecePointerUp(event: PointerEvent): void {
-    const drag = this.rightDrag;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    this.releasePiecePointer(event);
-    this.removeRightDragCenterMarker();
-    this.rightDrag = null;
-    if (!drag.dragged) return;
-
-    if (event.cancelable) event.preventDefault();
-    event.stopPropagation();
-    this.suppressNextNativeContextMenu();
-
-    const menuPosition: PointerCoordinate = { x: event.clientX, y: event.clientY, z: 0 };
-    const anchor = this.pieceScreenCenter(menuPosition);
-    this.openCharacterContextMenu(menuPosition, menuPosition, anchor);
+    this.rightDrag.up(event);
   }
 
   protected onPiecePointerCancel(event: PointerEvent): void {
-    if (!this.rightDrag || this.rightDrag.pointerId !== event.pointerId) return;
-    this.releasePiecePointer(event);
-    this.removeRightDragCenterMarker();
-    this.rightDrag = null;
-  }
-
-  private showRightDragCenterMarker(x: number, y: number): void {
-    let marker = this.rightDragCenterMarker;
-    if (!marker) {
-      marker = document.createElement('div');
-      marker.dataset['pieceRightDragCenter'] = '';
-      marker.className = 'piece-right-drag-center';
-      marker.setAttribute('aria-hidden', 'true');
-      document.body.appendChild(marker);
-      this.rightDragCenterMarker = marker;
-    }
-    marker.style.left = `${x}px`;
-    marker.style.top = `${y}px`;
-  }
-
-  private removeRightDragCenterMarker(): void {
-    this.rightDragCenterMarker?.remove();
-    this.rightDragCenterMarker = null;
-  }
-
-  private releasePiecePointer(event: PointerEvent): void {
-    const element = event.currentTarget as HTMLElement | null;
-    if (element?.hasPointerCapture?.(event.pointerId)) element.releasePointerCapture(event.pointerId);
-  }
-
-  private suppressNextNativeContextMenu(): void {
-    this.clearNativeContextMenuSuppression();
-    const suppressor = (event: MouseEvent) => {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      this.clearNativeContextMenuSuppression();
-    };
-    this.nativeContextMenuSuppressor = suppressor;
-    document.addEventListener('contextmenu', suppressor, true);
-    // A contextmenu generated by this release is dispatched in the same task. Do not let this
-    // guard consume a separate right click made later.
-    this.nativeContextMenuSuppressionTimer = setTimeout(() => this.clearNativeContextMenuSuppression(), 0);
-  }
-
-  private clearNativeContextMenuSuppression(): void {
-    if (this.nativeContextMenuSuppressor) {
-      document.removeEventListener('contextmenu', this.nativeContextMenuSuppressor, true);
-      this.nativeContextMenuSuppressor = null;
-    }
-    if (this.nativeContextMenuSuppressionTimer !== null) {
-      clearTimeout(this.nativeContextMenuSuppressionTimer);
-      this.nativeContextMenuSuppressionTimer = null;
-    }
+    this.rightDrag.cancel(event);
   }
 
   /**
@@ -1755,102 +1470,7 @@ export class GameCharacterComponent {
     if (!this.disclosureService.canView(char)) return;
     if (!this.pointerDeviceService.isAllowedToOpenContextMenu) return;
 
-    const position = this.pointerDeviceService.pointers[0];
-    this.openCharacterContextMenu(position);
-  }
-
-  private openCharacterContextMenu(
-    position: PointerCoordinate,
-    radialCenter?: { x: number; y: number },
-    radialAnchor?: { x: number; y: number }
-  ): void {
-    const char = this.gameCharacter();
-    if (!char || !this.disclosureService.canView(char)) return;
-
-    if (this.pieceContextMenu.openForSelection(char, this.gridSize, position)) return;
-    const overlapEntries = buildOverlapContextMenu(
-      this.tabletopOverlap,
-      char,
-      position.x,
-      position.y,
-      this.translateFn
-    );
-    const table = this.tabletopService.currentTable;
-    const display = this.tabletopService.display();
-    const surfaceEntries = [
-      ...buildSurfaceSwitchContextMenu(char, table, this.translateFn),
-      ...buildConcealMenu(this.boardSwitches.canEdit(), () => this.concealment.conceal(char), this.translateFn),
-    ];
-    const menu = buildGameCharacterContextMenuModel(
-      char,
-      this.gridSize,
-      this.inventoryService,
-      {
-        onShowDetail: () => this.showDetail(char),
-        onShowChatPalette: () => this.showChatPalette(char),
-        onShowRemoteController: () => this.showRemoteController(char),
-        onShowBuffEdit: () => this.showBuffEdit(char),
-        onSelectBuffView: (mode: string) => this.buffViewMode.set(mode as BuffViewMode),
-        onShowLightSettings: () => this.showLightSettings(char),
-        onInvokeRangeShape: (value) => this.rangeShapeInvoke.spawnForCharacter(char, value),
-        onInvokeEffect: (name) => this.invokeEffect(char, name),
-        onDeployDice: () => this.characterDice.deploy(char),
-        onPlanMove: this.mayPlanMove(char) ? () => void this.movePlan.begin(char) : undefined,
-        onToggleTarget: () => this.toggleTarget(),
-        onClearTargets: this.anythingTargeted() ? () => this.clearEveryTarget() : undefined,
-        onShowEveryone: PeerCursor.isMyselfGameMaster ? () => void this.sharedFocus.showPiece(char) : undefined,
-        onViewFirstPerson: this.firstPerson.canLookOutOf(char)
-          ? () => this.firstPerson.enterSeat(char.identifier)
-          : undefined,
-        onShareFirstPerson:
-          this.firstPerson.isGameMaster() &&
-          this.firstPerson.canLookOutOf(char) &&
-          this.firstPerson.sharedPiece() !== char.identifier
-            ? () => this.firstPerson.share(char.identifier)
-            : undefined,
-        onStopSharingFirstPerson:
-          this.firstPerson.isGameMaster() && this.firstPerson.sharedPiece() === char.identifier
-            ? () => this.firstPerson.share(null)
-            : undefined,
-      },
-      this.translateFn,
-      overlapEntries,
-      this.buffViewMode(),
-      surfaceEntries,
-      this.fightMenuOf(char)
-    );
-    if (!this.tabletopService.mode2d() || display.tabletopMenuStyle === 'standard') {
-      this.contextMenuService.open(position, menu.actions, this.name());
-      return;
-    }
-
-    const rootBounds = this.rootElementRef()?.nativeElement.getBoundingClientRect();
-    const menuCenter = radialCenter ?? this.pieceScreenCenter(position, rootBounds);
-    const menuClearanceRadius = rootBounds ? this.contextMenuClearanceRadius(rootBounds) : 0;
-    const menuOcclusionHalfExtent = rootBounds ? Math.max(rootBounds.width, rootBounds.height) / 2 : 0;
-    const args = [
-      menuCenter,
-      menu.actions,
-      menu.radialGroups,
-      this.name(),
-      display.tabletopMenuStyle === 'radial',
-      display.radialMenuRotationSpeed,
-      multiAngleFontScaleFactor(display.multiAngleFontScale),
-      menuClearanceRadius,
-      menuOcclusionHalfExtent,
-    ] as const;
-    if (radialAnchor) {
-      this.contextMenuService.openRadial(...args, radialAnchor);
-    } else {
-      this.contextMenuService.openRadial(...args);
-    }
-  }
-
-  private pieceScreenCenter(fallback: { x: number; y: number }, rootBounds?: DOMRect): { x: number; y: number } {
-    const bounds = rootBounds ?? this.rootElementRef()?.nativeElement.getBoundingClientRect();
-    return bounds
-      ? { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
-      : { x: fallback.x, y: fallback.y };
+    this.menu.open(char, this.menuHost, this.pointerDeviceService.pointers[0]);
   }
 
   private contextMenuClearanceRadius(rootBounds: DOMRect): number {
@@ -2054,7 +1674,7 @@ export class GameCharacterComponent {
   private settlePutDown() {
     const character = this.gameCharacter();
     if (!character) return;
-    this.engagementZones.carryBound(character);
+    this.links.carryBound(character);
     this.ride.afterPutDown(character);
     this.triggerFire.putDown(character);
     this.engagementZones.offerFight(character);
@@ -2096,105 +1716,6 @@ export class GameCharacterComponent {
   /** Takes the aim mark off every character in the room, signalling each change so its marker redraws. */
   clearEveryTarget(): void {
     this.pieceTarget.clear();
-  }
-
-  /** Whether anything on the table is aimed at, which is what makes clearing worth offering. */
-  private anythingTargeted(): boolean {
-    return this.pieceTarget.anything();
-  }
-
-  /** Fires an effect from a character sheet. It is looked up by name, so the same row works in any room. */
-  private invokeEffect(char: GameCharacter, name: string): void {
-    const preset = this.effectLibrary.findByName(name);
-    if (preset) this.effectCast.fireFromCharacter(preset, char);
-  }
-
-  private showDetail(gameObject: GameCharacter) {
-    if (!this.disclosureService.canView(gameObject)) return;
-    const title = sheetPanelTitle(this.translateFn('feature.character.panel.sheet'), gameObject.name);
-    this.objectPanels.openSheet(gameObject, title, { width: 800, height: 600 });
-  }
-
-  /** Opens a piece's sheet on its settings, where how high a mount's riders stand is typed in. */
-  private showSettings(gameObject: GameCharacter) {
-    if (!this.disclosureService.canView(gameObject)) return;
-    const title = sheetPanelTitle(this.translateFn('feature.character.panel.sheet'), gameObject.name);
-    this.objectPanels.openSheetSettings(gameObject, title, { width: 800, height: 600 });
-  }
-
-  private showChatPalette(gameObject: GameCharacter) {
-    if (!this.disclosureService.canView(gameObject)) return;
-    this.objectPanels.openChatPalette(gameObject);
-  }
-
-  private showRemoteController(gameObject: GameCharacter) {
-    if (!this.disclosureService.canView(gameObject)) return;
-    this.objectPanels.openRemoteController(gameObject);
-  }
-
-  private showBuffEdit(gameObject: GameCharacter) {
-    if (!this.disclosureService.canView(gameObject)) return;
-    const coordinate = this.pointerDeviceService.pointers[0];
-    const option: PanelOption = {
-      left: coordinate.x,
-      top: coordinate.y,
-      width: 420,
-      height: 300,
-    };
-    option.title = this.translateFn('feature.character.panel.buffEditWithName', { name: gameObject.name });
-    const component = this.panelService.open<GameCharacterBuffViewComponent>(GameCharacterBuffViewComponent, option);
-    component.character.set(gameObject);
-  }
-
-  /** Opens the panel that sets the sides out at the start of a fight, with this piece leading its side. */
-  private showBattlePlacement(gameObject: GameCharacter) {
-    const coordinate = this.pointerDeviceService.pointers[0];
-    const option: PanelOption = {
-      left: coordinate.x,
-      top: coordinate.y,
-      width: 380,
-      height: 420,
-    };
-    option.title = this.translateFn('feature.zone.placement.title');
-    this.panelService.openLazy(
-      () =>
-        import('@axe/features/character/battle-placement-panel/battle-placement-panel.component').then(
-          (m) => m.BattlePlacementPanelComponent
-        ),
-      option,
-      (component) => component.leaderIdentifier.set(gameObject.identifier)
-    );
-  }
-
-  /** Opens the line of fire from this piece to every piece it aims at. */
-  private showLineOfFire(gameObject: GameCharacter) {
-    const coordinate = this.pointerDeviceService.pointers[0];
-    const option: PanelOption = {
-      left: coordinate.x,
-      top: coordinate.y,
-      width: 360,
-      height: 280,
-    };
-    option.title = this.translateFn('feature.zone.fire.title', { name: gameObject.name });
-    this.panelService.openLazy(
-      () =>
-        import('@axe/features/character/line-of-fire-panel/line-of-fire-panel.component').then(
-          (m) => m.LineOfFirePanelComponent
-        ),
-      option,
-      (component) => component.shooterIdentifier.set(gameObject.identifier)
-    );
-  }
-
-  private showLightSettings(gameObject: GameCharacter) {
-    const coordinate = this.pointerDeviceService.pointers[0];
-    const option: PanelOption = {
-      title: this.translateFn('feature.character.contextMenu.lightSettings'),
-      ...sheetPanelBox(coordinate, 360, 460),
-    };
-    const component = this.panelService.open<LightSettingsComponent>(LightSettingsComponent, option);
-    component.target = gameObject;
-    component.showVision = true;
   }
 
   protected readonly buffChildren = computed<DataElement[]>(() => {

@@ -10,16 +10,15 @@ import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
 import { PieceContextMenuService } from '@axe/application/ui/piece-context-menu.service';
 import { UiSignalService } from '@axe/application/ui/ui-signal.service';
 import { ImageStorage } from '@axe/core/storage/image-storage';
-import { ObjectStore } from '@axe/core/sync/object-store';
+import { isInStore, ObjectStore } from '@axe/core/sync/object-store';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { ImageTag } from '@axe/domain/media/image-tag';
 import { LIGHT_IMAGE_TAG, LIGHT_SKIN_ASSET_URLS, LightSkinId } from '@axe/domain/media/light-skins';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
 import { LightSource } from '@axe/domain/tabletop/light-source';
 import { multiAngleFontScaleFactor } from '@axe/domain/tabletop/multi-angle-font-scale';
-import { LightSettingsComponent } from '@axe/features/tabletop/light-settings/light-settings.component';
 import { buildLightSourceContextMenuModel } from '@axe/features/tabletop/light-source/light-source-context-menu';
-import { FileSelecterComponent } from '@axe/ui/components/file-selecter/file-selecter.component';
+import { loadFileSelecter } from '@axe/ui/components/file-selecter/file-selecter-loader';
 import { MovableDirective, MovableOption } from '@axe/ui/directives/movable.directive';
 import { RotableDirective, RotableOption } from '@axe/ui/directives/rotable.directive';
 import { SelectableDirective } from '@axe/ui/directives/selectable.directive';
@@ -77,7 +76,7 @@ export class LightSourceComponent {
         const id = this.lightSource().followingCharacterIdentifier;
         return id ? [id] : [];
       },
-      () => this.lightSource().following(),
+      () => this.lightSource().following(this.gridSize),
       this.destroyRef
     );
   }
@@ -112,11 +111,15 @@ export class LightSourceComponent {
     return light.imageFile.url;
   });
 
+  /** Lets the reader pick the light's picture from the room's. */
+  private async chooseSkinPicture(light: LightSource): Promise<void> {
+    const identifier = await this.modalService.openLazy<string>(loadFileSelecter, { isAllowedEmpty: true });
+    if (identifier) this.setSkin(light, identifier);
+  }
+
   private applySkin(light: LightSource, skin: LightSkinId | 'library' | 'none'): void {
     if (skin === 'library') {
-      this.modalService.open<string>(FileSelecterComponent, { isAllowedEmpty: true }).then((identifier) => {
-        if (identifier) this.setSkin(light, identifier);
-      });
+      void this.chooseSkinPicture(light);
       return;
     }
     if (skin === 'none') {
@@ -231,8 +234,13 @@ export class LightSourceComponent {
       width: 360,
       height: 420,
     };
-    const component = this.panelService.open(LightSettingsComponent, option);
-    component.target = light;
-    component.advanced = true;
+    this.panelService.openLazy(
+      () => import('@axe/features/light-settings/light-settings.component').then((m) => m.LightSettingsComponent),
+      { ...option, stillWanted: () => isInStore(light) },
+      (component) => {
+        component.target = light;
+        component.advanced = true;
+      }
+    );
   }
 }

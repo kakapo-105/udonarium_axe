@@ -4,6 +4,7 @@ import {
   hexCircumradius,
   hexSpacing,
   hexStartAngle,
+  isFlatTopGrid,
   strokeHexPath,
 } from '@axe/domain/tabletop/hex-geometry';
 
@@ -44,7 +45,8 @@ export class GridLineRender {
    * Draws the grid over a whole table onto the canvas, its width and height counted in squares,
    * with each cell labelled column-row.
    *
-   * The canvas is sized even for a negative grid type, which draws no grid.
+   * The canvas is sized even for a negative grid type, which draws no grid. Where a square grid
+   * counts `squareSpan` cells across as one square, the edges of those squares are drawn heavier.
    */
   render(
     width: number,
@@ -55,7 +57,8 @@ export class GridLineRender {
     gridFontColor: string = gridColor,
     overTerrain = false,
     offsetTop: number = 0,
-    offsetLeft: number = 0
+    offsetLeft: number = 0,
+    squareSpan: number = 1
   ) {
     this.canvasElement.width = this.canvasPx(width * gridSize);
     this.canvasElement.height = this.canvasPx(height * gridSize);
@@ -71,6 +74,7 @@ export class GridLineRender {
     switch (gridType) {
       case GridType.SQUARE:
         this.renderSquareGrid(context, width, height, gridSize, overTerrain, offsetTop, offsetLeft);
+        if (squareSpan > 1) this.strokeSquares(context, width, height, gridSize, squareSpan);
         break;
       case GridType.HEX_VERTICAL:
       case GridType.HEX_HORIZONTAL:
@@ -184,6 +188,40 @@ export class GridLineRender {
     }
   }
 
+  /**
+   * Draws the edges of the squares `span` cells across, heavier than the cells, the squares the
+   * table's edge cuts off included.
+   */
+  private strokeSquares(
+    context: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    gridSize: number,
+    span: number
+  ): void {
+    if (width < 1 || height < 1) return;
+    const size = span * gridSize;
+    const right = Math.floor(width) * gridSize;
+    const bottom = Math.floor(height) * gridSize;
+    context.save();
+    context.lineWidth = Math.max(2, gridSize / 20);
+    context.beginPath();
+    for (let x = 0; x < right; x += size) {
+      context.moveTo(x, 0);
+      context.lineTo(x, bottom);
+    }
+    context.moveTo(right, 0);
+    context.lineTo(right, bottom);
+    for (let y = 0; y < bottom; y += size) {
+      context.moveTo(0, y);
+      context.lineTo(right, y);
+    }
+    context.moveTo(0, bottom);
+    context.lineTo(right, bottom);
+    context.stroke();
+    context.restore();
+  }
+
   private renderHexGrid(
     context: CanvasRenderingContext2D,
     width: number,
@@ -198,7 +236,7 @@ export class GridLineRender {
     const canvasW = width * gridSize;
     const canvasH = height * gridSize;
 
-    const isFlatTop = gridType === GridType.HEX_VERTICAL;
+    const isFlatTop = isFlatTopGrid(gridType);
     const { colSpacing, rowSpacing } = hexSpacing(gridSize, isFlatTop);
     const startAngle = hexStartAngle(isFlatTop);
 
@@ -271,7 +309,7 @@ export class GridLineRender {
     labelMatrix: readonly [number, number, number, number] | null = null
   ) {
     const s = hexCircumradius(gridSize);
-    const isFlatTop = gridType === GridType.HEX_VERTICAL;
+    const isFlatTop = isFlatTopGrid(gridType);
     const { colSpacing, rowSpacing } = hexSpacing(gridSize, isFlatTop);
     const startAngle = hexStartAngle(isFlatTop);
 

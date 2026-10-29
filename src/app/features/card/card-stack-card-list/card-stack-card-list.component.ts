@@ -10,14 +10,16 @@ import {
 } from '@angular/core';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
+import { closeWhenOffTheTable } from '@axe/application/ui/close-when-off-the-table';
 import { ModalService } from '@axe/application/ui/modal.service';
 import { PanelService } from '@axe/application/ui/panel.service';
 import { sheetPanelTitle } from '@axe/application/ui/sheet-panel';
 import { callShuffleCardStack } from '@axe/core/event/domain-events';
-import { Network } from '@axe/core/index';
+import { capturePointer, releasePointer } from '@axe/core/input/pointer-capture';
 import { Card } from '@axe/domain/card/card';
 import { CardStack } from '@axe/domain/card/card-stack';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
+import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import {
   formatTrumpCardCode,
   parseTrumpCardCode,
@@ -48,7 +50,7 @@ export class CardStackCardListComponent {
 
   readonly cardStack = input.required<CardStack>();
 
-  private readonly owner = Network.peerContext.userId;
+  private readonly owner = PeerCursor.myUserId;
   private currentlyOwned: CardStack | null = null;
 
   readonly cards = computed<readonly Card[]>(() => {
@@ -58,6 +60,8 @@ export class CardStackCardListComponent {
   });
 
   constructor() {
+    // Made a guest meanwhile, the seat may no longer write what this panel writes.
+    closeWhenOffTheTable();
     effect(() => {
       const stack = this.cardStack();
       untracked(() => this.claimOwnership(stack));
@@ -169,7 +173,7 @@ export class CardStackCardListComponent {
     event.preventDefault();
     this.activePointerId = event.pointerId;
     this.cardDrag.begin(card.identifier);
-    (event.currentTarget as Element).setPointerCapture(event.pointerId);
+    capturePointer(event.currentTarget, event.pointerId);
   }
 
   /** Follows the dragged row over the list, marking which half of which row it would drop on. */
@@ -196,7 +200,7 @@ export class CardStackCardListComponent {
     const drop = this.cardDrag.release();
     this.activePointerId = null;
     try {
-      (event.currentTarget as Element).releasePointerCapture(event.pointerId);
+      releasePointer(event.currentTarget, event.pointerId);
     } catch {
       // pointer capture may have been released already
     }
@@ -282,6 +286,15 @@ export class CardStackCardListComponent {
     const filename = slash >= 0 ? url.substring(slash + 1) : url;
     const dot = filename.lastIndexOf('.');
     return dot > 0 ? filename.substring(0, dot) : filename;
+  }
+
+  /**
+   * Whether the room server keeps this card's front from the reader. The row then shows its back,
+   * and leaves its front and name alone, which the server would put back anyway.
+   */
+  isFaceWithheld(card: Card): boolean {
+    this.objectChange.versionOf(card.identifier)();
+    return card.isFaceWithheld;
   }
 
   /**

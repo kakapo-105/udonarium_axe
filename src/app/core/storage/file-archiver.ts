@@ -8,14 +8,15 @@ import {
 } from '@axe/core/event/domain-events';
 import { Network } from '@axe/core/index';
 import { Logger } from '@axe/core/logging/logger';
+import { isNetworkIsolated } from '@axe/core/network/network-isolation';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
 import * as FileReaderUtil from '@axe/core/storage/file-reader-util';
 import type { ImageFile } from '@axe/core/storage/image-file';
 import { imageTypeOf } from '@axe/core/storage/image-sniff';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import * as MimeType from '@axe/core/storage/mime-type';
-import { isCcfoliaRoomArchive } from '@axe/core/storage/room-archive';
-import { createZipBlob, readZipEntries } from '@axe/core/storage/zip-archive';
+import { ccfoliaRoomFolderOf } from '@axe/core/storage/room-archive';
+import { createZipBlob, readZipEntries, ZipCodeUnavailableError } from '@axe/core/storage/zip-archive';
 import type { ZipEntry } from '@axe/core/storage/zip-archive-message';
 import { GameObject } from '@axe/core/sync/game-object';
 import { ObjectStore } from '@axe/core/sync/object-store';
@@ -31,6 +32,8 @@ type UpdateCallback = (metadata: MetaData) => void;
 interface LoadGuard extends GameObject {
   reloadCheckStart(isOnline: boolean): void;
   isLoadOk(): boolean;
+  answerWithheldCheck(): boolean;
+  answerCheck(): boolean;
 }
 
 const MEGA_BYTE = 1024 * 1024;
@@ -42,6 +45,29 @@ export const MAX_LOADED_AUDIO_BYTES = 10 * MEGA_BYTE;
 const DROP_STACK_OFFSET = 20;
 const XML_MIME_TYPE = 'text/xml';
 const INTERNAL_DRAG_TYPE = 'application/x-axe-internal-drag';
+
+/** What a load found out as it went. */
+export interface LoadResult {
+  /**
+   * Whether the `data.xml` of a save was read and handed on, which is the room or object it holds;
+   * true even where taking it in then failed partway, as the table is no longer as it was.
+   */
+  readonly dataRead: boolean;
+  /** The identifiers of the pictures the load took in. */
+  readonly images: readonly string[];
+  /** The identifiers of the sounds the load took in. */
+  readonly audios: readonly string[];
+}
+
+/** What one load carries along from file to file. */
+interface LoadRun {
+  readonly tooLarge: FileTooLarge[];
+  /** Asked before each file inside a zip; once it answers false, the rest of the load is left. */
+  readonly stillWanted: () => boolean;
+  dataRead: boolean;
+  readonly images: string[];
+  readonly audios: string[];
+}
 
 /** What {@link FileArchiver.loadImages} took in and what it had to leave out. */
 export interface ImageLoadResult {
@@ -81,6 +107,11 @@ export class FileArchiver {
    * app puts in its own answer, every drop is taken.
    */
   mayLoadDrops: () => boolean = () => true;
+  /**
+   * Told when a zip could not be packed or unpacked because the code for it could not be fetched,
+   * which a reload mends. The app puts in its notice; until then nothing is said.
+   */
+  onCodeUnavailable: () => void = () => {};
   /**
    * The guard that asks, during online play, before dropped data overwrites the room settings; null
    * until the domain has put one in the object store.
@@ -174,18 +205,33 @@ export class FileArchiver {
    * dropped, so it can be made smaller and added after all. Given a drop point, each image is
    * announced for placing on the table, the next one offset a little from the last. Images inside
    * a zip are not placed, and a zip exported as a CCFOLIA room is handed on whole instead.
+   *
+   * A zip that cannot be read is logged rather than thrown, so whether a save's data was read at all
+   * is answered in the result. Given `stillWanted`, it is asked before each file inside a zip, and the
+   * rest is left once it answers false.
    */
-  async load(files: File[] | FileList, dropPoint?: { x: number; y: number }): Promise<void> {
-    const tooLarge: FileTooLarge[] = [];
-    await this.loadFiles(files, dropPoint, true, tooLarge);
-    if (tooLarge.length > 0) emitFilesTooLarge({ files: tooLarge });
+  async load(
+    files: File[] | FileList,
+    dropPoint?: { x: number; y: number },
+    options: { stillWanted?: () => boolean } = {}
+  ): Promise<LoadResult> {
+    const run: LoadRun = {
+      tooLarge: [],
+      stillWanted: options.stillWanted ?? (() => true),
+      dataRead: false,
+      images: [],
+      audios: [],
+    };
+    await this.loadFiles(files, dropPoint, true, run);
+    if (run.tooLarge.length > 0) emitFilesTooLarge({ files: run.tooLarge });
+    return { dataRead: run.dataRead, images: run.images, audios: run.audios };
   }
 
   private async loadFiles(
     files: File[] | FileList,
     dropPoint: { x: number; y: number } | undefined,
     placesDroppedImages: boolean,
-    tooLarge: FileTooLarge[]
+    run: LoadRun
   ): Promise<void> {
     if (!files) return;
     const loadFiles: File[] = files instanceof FileList ? toArrayOfFileList(files) : files;
@@ -193,11 +239,11 @@ export class FileArchiver {
     let droppedImageCount = 0;
     for (const file of loadFiles) {
       const imageDropPoint = placesDroppedImages ? this.offsetDropPoint(dropPoint, droppedImageCount) : undefined;
-      const isImageDropped = await this.handleImage(file, imageDropPoint, tooLarge, placesDroppedImages);
+      const isImageDropped = await this.handleImage(file, imageDropPoint, run, placesDroppedImages);
       if (isImageDropped) droppedImageCount++;
-      await this.handleAudio(file, tooLarge);
-      await this.handleText(file, dropPoint);
-      await this.handleZip(file, dropPoint, tooLarge);
+      await this.handleAudio(file, run);
+      await this.handleText(file, dropPoint, run);
+      await this.handleZip(file, dropPoint, run);
       emitFileLoaded();
     }
   }
@@ -223,8 +269,8 @@ export class FileArchiver {
     for (const file of files instanceof FileList ? toArrayOfFileList(files) : files) {
       if (!file.type.startsWith('image/')) continue;
       const image = await this.storeImage(file);
-      if (image) images.push(image);
-      else oversized.push(file.name);
+      if (image === 'oversized') oversized.push(file.name);
+      else if (image) images.push(image);
     }
     if (images.length) emitFileLoaded();
     return { images, oversized };
@@ -233,15 +279,15 @@ export class FileArchiver {
   private async handleImage(
     file: File,
     dropPoint: { x: number; y: number } | undefined,
-    tooLarge: FileTooLarge[],
+    run: LoadRun,
     handsBackTooLarge: boolean
   ): Promise<boolean> {
     if (!file.type.startsWith('image/')) return false;
     // With no guard there is nothing to stop it.
     if (!(this.reloadCheck?.isLoadOk() ?? true)) return false;
     const image = await this.storeImage(file);
-    if (!image) {
-      tooLarge.push({
+    if (image === 'oversized') {
+      run.tooLarge.push({
         name: file.name,
         kind: 'image',
         limitBytes: MAX_LOADED_IMAGE_BYTES,
@@ -249,39 +295,47 @@ export class FileArchiver {
       });
       return false;
     }
+    if (!image) return false;
+    run.images.push(image.identifier);
     if (dropPoint) emitImageDropped({ identifier: image.identifier, fileName: file.name, dropPoint });
     return dropPoint != null;
   }
 
-  private async storeImage(file: File): Promise<ImageFile | null> {
+  /** The picture as stored, `oversized` for one too large to take in, or null for one the room removed and keeps out. */
+  private async storeImage(file: File): Promise<ImageFile | 'oversized' | null> {
     if (file.size > MAX_LOADED_IMAGE_BYTES) {
       Logger.warn(`[FileArchiver] ファイルサイズ制限超過: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
-      return null;
+      return 'oversized';
     }
-    return ImageStorage.instance.addAsync(file);
+    return ImageStorage.instance.addAsync(file, { putBack: true });
   }
 
-  private async handleAudio(file: File, tooLarge: FileTooLarge[]) {
+  private async handleAudio(file: File, run: LoadRun) {
     if (!file.type.startsWith('audio/')) return;
     if (file.size > MAX_LOADED_AUDIO_BYTES) {
       Logger.warn(`[FileArchiver] ファイルサイズ制限超過: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
-      tooLarge.push({ name: file.name, kind: 'audio', limitBytes: MAX_LOADED_AUDIO_BYTES });
+      run.tooLarge.push({ name: file.name, kind: 'audio', limitBytes: MAX_LOADED_AUDIO_BYTES });
       return;
     }
-    await AudioStorage.instance.addAsync(file);
+    const audio = await AudioStorage.instance.addAsync(file, { putBack: true });
+    if (audio) run.audios.push(audio.identifier);
   }
 
-  private async handleText(file: File, dropPoint?: { x: number; y: number }): Promise<void> {
+  private async handleText(file: File, dropPoint: { x: number; y: number } | undefined, run: LoadRun): Promise<void> {
     if (!isXmlCandidateFile(file)) return;
 
     let isLoadOk = true;
+    const name = baseNameOf(file.name);
     // room data passes here and is confirmed later, once its contents are known
     if (
-      file.name === 'config.xml' ||
-      file.name === 'imagetag.xml' ||
-      file.name === 'audiotag.xml' ||
-      file.name === 'summary.xml' ||
-      file.name === 'ailment.xml'
+      name === 'config.xml' ||
+      name === 'imagetag.xml' ||
+      name === 'imagelink.xml' ||
+      name === 'audiotag.xml' ||
+      name === 'assetowner.xml' ||
+      name === 'imagelock.xml' ||
+      name === 'summary.xml' ||
+      name === 'ailment.xml'
     ) {
       isLoadOk = this.reloadCheck?.isLoadOk() ?? true;
     }
@@ -289,36 +343,50 @@ export class FileArchiver {
     if (isLoadOk) {
       try {
         const xmlElement: Element | null = xml2element(await FileReaderUtil.readAsTextAsync(file));
-        if (xmlElement) emitXmlLoaded({ xmlElement, dropPoint });
+        if (xmlElement) {
+          if (name === 'data.xml') run.dataRead = true;
+          emitXmlLoaded({ xmlElement, dropPoint });
+        }
       } catch (reason) {
         Logger.warn('[FileArchiver] XML読み込みエラー', reason);
       }
     }
   }
 
-  private async handleZip(file: File, dropPoint: { x: number; y: number } | undefined, tooLarge: FileTooLarge[]) {
+  private async handleZip(file: File, dropPoint: { x: number; y: number } | undefined, run: LoadRun) {
     if (!file.type.includes('application/') && file.type.length > 0) return;
     let entries: ZipEntry[];
     try {
       entries = await readZipEntries(file);
     } catch (reason) {
       Logger.warn('[FileArchiver] ZIP読み込みエラー', reason);
+      this.noticeCodeUnavailable(reason);
       return;
     }
-    if (isCcfoliaRoomArchive(entries.map((entry) => entry.name))) {
-      emitCcfoliaRoomDropped({ entries: await toUnzipped(entries) });
+    const ccfoliaFolder = ccfoliaRoomFolderOf(entries.map((entry) => entry.name));
+    if (ccfoliaFolder !== null) {
+      const inFolder = entries
+        .filter((entry) => entry.name.startsWith(ccfoliaFolder))
+        .map((entry) => ({ ...entry, name: entry.name.slice(ccfoliaFolder.length) }));
+      emitCcfoliaRoomDropped({ entries: await toUnzipped(inFolder) });
       return;
     }
+
+    if (!(await this.roomLoadAgreed(entries))) return;
+    const isolated = isNetworkIsolated();
 
     // Pictures first, so the room data beside them can be read under the ids they were stored as.
     const renamed = new Map<string, string>();
     const rest: File[] = [];
     for (const entry of entries) {
+      if (!run.stillWanted()) return;
       try {
         const type = entry.type || (await imageTypeOf(entry.blob));
-        const file = new File([entry.blob], entry.name, { type });
-        if (type.startsWith('image/') && !SAVED_IMAGE_NAME.test(entry.name)) {
-          await this.loadArchivedImage(file, renamed, tooLarge);
+        const name = baseNameOf(entry.name);
+        const saved = type.startsWith('image/') && SAVED_IMAGE_NAME.test(name);
+        const file = new File([entry.blob], name, { type });
+        if (type.startsWith('image/') && !saved) {
+          await this.loadArchivedImage(file, renamed, run);
         } else {
           rest.push(file);
         }
@@ -327,13 +395,34 @@ export class FileArchiver {
       }
     }
     for (const entry of rest) {
+      if (isNetworkIsolated() !== isolated) {
+        Logger.warn('[FileArchiver] 読み込みの途中で盤面と卓が入れ替わったので、残りを読みません');
+        return;
+      }
+      if (!run.stillWanted()) return;
       try {
         const file = renamed.size > 0 && isXmlCandidateFile(entry) ? await withImagesRenamed(entry, renamed) : entry;
-        await this.loadFiles([file], dropPoint, false, tooLarge);
+        await this.loadFiles([file], dropPoint, false, run);
       } catch (reason) {
         Logger.warn('[FileArchiver] ZIP展開エラー', reason);
       }
     }
+  }
+
+  /**
+   * Whether the room data an archive carries may go in, asked before its pictures are taken in, which
+   * would otherwise go up to the room for a load then declined. Asked as reading the room data asks:
+   * first about a save withheld in part, then about overwriting the room in play; the answers hold
+   * for the rest of the load.
+   */
+  private async roomLoadAgreed(entries: ZipEntry[]): Promise<boolean> {
+    const guard = this.reloadCheck;
+    const data = entries.find((entry) => baseNameOf(entry.name) === 'data.xml');
+    if (!guard || !data) return true;
+    const root = /<room\b[^>]*>/.exec(await data.blob.slice(0, ROOM_HEAD_BYTES).text())?.[0];
+    if (!root) return true;
+    if (/\swithheld="true"/.test(root) && !guard.answerWithheldCheck()) return false;
+    return guard.answerCheck();
   }
 
   /**
@@ -343,21 +432,27 @@ export class FileArchiver {
    * differ, the one is noted against the other in `renamed`, for that data to be read under the id
    * the picture is kept under.
    */
-  private async loadArchivedImage(file: File, renamed: Map<string, string>, tooLarge: FileTooLarge[]): Promise<void> {
+  private async loadArchivedImage(file: File, renamed: Map<string, string>, run: LoadRun): Promise<void> {
     if (!(this.reloadCheck?.isLoadOk() ?? true)) return;
     const original = await FileReaderUtil.calcSHA256Async(file);
     const image = await this.storeImage(file);
-    if (!image) {
-      tooLarge.push({ name: file.name, kind: 'image', limitBytes: MAX_LOADED_IMAGE_BYTES });
-    } else if (image.identifier !== original) {
-      renamed.set(original, image.identifier);
+    if (image === 'oversized') {
+      run.tooLarge.push({ name: file.name, kind: 'image', limitBytes: MAX_LOADED_IMAGE_BYTES });
+    } else if (image) {
+      run.images.push(image.identifier);
+      if (image.identifier !== original) renamed.set(original, image.identifier);
     }
     emitFileLoaded();
   }
 
   /** Unpacks a zip into its entries, in a worker where one can be used. */
   async readZipEntriesAsync(file: File | Blob): Promise<ZipEntry[]> {
-    return readZipEntries(file);
+    try {
+      return await readZipEntries(file);
+    } catch (reason) {
+      this.noticeCodeUnavailable(reason);
+      throw reason;
+    }
   }
 
   /**
@@ -369,7 +464,13 @@ export class FileArchiver {
 
     updateCallback?.({ percent: 0, currentFile: '' });
 
-    const blob = await createZipBlob(saveFiles);
+    let blob: Blob;
+    try {
+      blob = await createZipBlob(saveFiles);
+    } catch (reason) {
+      this.noticeCodeUnavailable(reason);
+      throw reason;
+    }
 
     updateCallback?.({ percent: 100, currentFile: '' });
     return blob;
@@ -380,6 +481,10 @@ export class FileArchiver {
     if (!files) return;
     const blob = await this.createZipBlobAsync(files, updateCallback);
     downloadBlob(blob, `${zipName}.zip`);
+  }
+
+  private noticeCodeUnavailable(reason: unknown): void {
+    if (reason instanceof ZipCodeUnavailableError) this.onCodeUnavailable();
   }
 }
 
@@ -394,6 +499,17 @@ async function toUnzipped(entries: readonly ZipEntry[]): Promise<Unzipped> {
 function toArrayOfFileList(fileList: FileList): File[] {
   return Array.from(fileList);
 }
+
+/**
+ * The name of a file within an archive, without the folders it sits in: a save unpacked and packed
+ * again as a folder holds its files under that folder's name.
+ */
+function baseNameOf(name: string): string {
+  return name.slice(name.lastIndexOf('/') + 1);
+}
+
+/** How much of a room's data is read to find the room's own element, which opens it. */
+const ROOM_HEAD_BYTES = 4096;
 
 /** The name a picture is saved under in a room's archive: the hash it is known by, then its extension. */
 const SAVED_IMAGE_NAME = /^[0-9a-f]{64}\./;

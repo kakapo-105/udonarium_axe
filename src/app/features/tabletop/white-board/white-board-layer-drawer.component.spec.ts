@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { createLayer, MapLayer } from '@axe/features/map-editor/model/scene';
+import { createLayer, MapLayer } from '@axe/domain/map-editor/scene';
 import {
   LayerDrawerAction,
   WhiteBoardLayerDrawerComponent,
@@ -35,6 +35,24 @@ describe('WhiteBoardLayerDrawerComponent', () => {
     if (!found) throw new Error(`no button showing ${icon}`);
     return found;
   }
+
+  it('shows the sheet worked on in the group it is filed in, and in none where it is filed in none', async () => {
+    const shownGroup = async (activeLayerId: string) => {
+      fixture.componentRef.setInput('activeLayerId', activeLayerId);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const select = fixture.nativeElement.querySelector('select') as HTMLSelectElement;
+      return select.options[select.selectedIndex]?.value;
+    };
+    fixture.componentRef.setInput('groups', [
+      { name: '', layers: [sheet] },
+      { name: 'Maps', layers: [{ ...named, group: 'Maps' }] },
+    ]);
+    fixture.componentRef.setInput('groupNames', ['Battle', 'Maps']);
+
+    expect(await shownGroup(named.id)).toBe('Maps');
+    expect(await shownGroup(sheet.id)).toBe('');
+  });
 
   it('asks for a new sheet and a new group from the header', () => {
     buttonWithIcon('add').click();

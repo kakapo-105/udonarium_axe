@@ -1,4 +1,5 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -6,15 +7,18 @@ import {
   effect,
   ElementRef,
   inject,
+  Injector,
   linkedSignal,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CharacterMacroService } from '@axe/application/chat/character-macro.service';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
-import { ChatTickerSelectionService } from '@axe/application/chat/chat-ticker-selection.service';
+import { ChatPaletteRegistryService } from '@axe/application/chat/chat-palette-registry.service';
 import { DiceBotCatalogService } from '@axe/application/dice/dice-bot-catalog.service';
+import { HotbarFillService } from '@axe/application/hotbar/hotbar-fill.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
@@ -37,6 +41,7 @@ import {
   paletteLineAsChat,
   PaletteRow,
   paletteRowsOf,
+  paletteTabsOf,
 } from '@axe/domain/chat/palette-rows';
 import { DataElement } from '@axe/domain/data/data-element';
 import { emptyHotbarSlotDraft } from '@axe/domain/hotbar/hotbar-draft';
@@ -44,11 +49,12 @@ import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { ChatComposeService } from '@axe/features/chat/chat-compose.service';
 import { ChatInputComponent } from '@axe/features/chat/chat-input/chat-input.component';
 import { editsTextInPlace } from '@axe/features/chat/chat-input/chat-input-helpers';
-import { ChatPaletteRegistryService } from '@axe/features/chat/chat-palette/chat-palette-registry.service';
 import { PaletteSearchResult, searchPaletteRows } from '@axe/features/chat/chat-palette/chat-palette-search';
+import { ChatPaletteTabService } from '@axe/features/chat/chat-palette/chat-palette-tab.service';
 import { ChatTabStripComponent } from '@axe/features/chat/chat-tab-strip/chat-tab-strip.component';
+import { ChatTickerSelectionService } from '@axe/features/chat/chat-ticker-selection.service';
 import { GameDataElementComponent } from '@axe/features/data-element/game-data-element/game-data-element.component';
-import { HotbarFillService } from '@axe/features/hotbar/hotbar-fill.service';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { TranslocoModule } from '@jsverse/transloco';
 
 @Component({
@@ -61,7 +67,14 @@ import { TranslocoModule } from '@jsverse/transloco';
     '(keydown.control.arrowleft)': 'switchTabByKey($event, -1)',
     '(keydown.control.arrowright)': 'switchTabByKey($event, 1)',
   },
-  imports: [FormsModule, ChatInputComponent, ChatTabStripComponent, GameDataElementComponent, TranslocoModule],
+  imports: [
+    TextTooltipDirective,
+    FormsModule,
+    ChatInputComponent,
+    ChatTabStripComponent,
+    GameDataElementComponent,
+    TranslocoModule,
+  ],
   // One of these to a palette, so its input answers what was asked of it and nobody else's.
   providers: [ChatComposeService],
 })
@@ -79,8 +92,10 @@ export class ChatPaletteComponent {
   private readonly uiSignalService = inject(UiSignalService);
   private readonly objectChange = inject(ObjectChangeService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
   private readonly chatPaletteRegistry = inject(ChatPaletteRegistryService);
   private readonly t = inject(TRANSLATE_FN);
+  private readonly tabMemory = inject(ChatPaletteTabService);
 
   readonly rootElementRef = viewChild.required<ElementRef<HTMLElement>>('root');
   readonly chatInputComponent = viewChild.required<ChatInputComponent>('chatInput');
@@ -108,14 +123,35 @@ export class ChatPaletteComponent {
    * top-level one is indented instead.
    */
   readonly paletteHeadings = computed((): { lineIndex: number; label: string }[] =>
-    paletteHeadingTree(this.paletteRows()).flatMap((node) => [
+    paletteHeadingTree(this.shownRows()).flatMap((node) => [
       { lineIndex: node.lineIndex, label: node.name },
       ...node.children.map((child) => ({ lineIndex: child.lineIndex, label: `　${child.name}` })),
     ])
   );
 
   /** The headings as the headings menu nests them. */
-  readonly paletteHeadingTree = computed((): PaletteHeadingNode[] => paletteHeadingTree(this.paletteRows()));
+  readonly paletteHeadingTree = computed((): PaletteHeadingNode[] => paletteHeadingTree(this.shownRows()));
+
+  /** The tabs the palette is parted into by its `◆◆name` lines; none for a palette with no such line. */
+  readonly paletteTabs = computed(() => paletteTabsOf(this.paletteRows()));
+
+  /** The tab open, kept for each character while the page is; -1 for a palette with no tabs. */
+  readonly activeTab = computed(() => {
+    const tabs = this.paletteTabs();
+    if (tabs.length < 1) return -1;
+    return Math.min(this.tabMemory.tabOf(this.character()?.identifier ?? ''), tabs.length - 1);
+  });
+
+  /** The rows drawn: those of the tab open, or the whole palette where it has no tabs. */
+  readonly shownRows = computed((): PaletteRow[] => {
+    const at = this.activeTab();
+    return at < 0 ? this.paletteRows() : this.paletteTabs()[at].rows;
+  });
+
+  /** Opens a tab of the palette, and keeps it open for this character while the page is. */
+  chooseTab(index: number): void {
+    this.tabMemory.choose(this.character()?.identifier ?? '', index);
+  }
 
   readonly searchResultsRef = viewChild<ElementRef<HTMLElement>>('searchResultsList');
 
@@ -142,6 +178,9 @@ export class ChatPaletteComponent {
     return this.character()?.chatPalette ?? null;
   }
 
+  /** Whether this seat may rewrite the palette and its dice bot, which every role but a guest may. */
+  readonly mayEdit = computed(() => this.rolePermission.canEditTabletop());
+
   private readonly _gameType = linkedSignal(() => this.character()?.chatPalette?.dicebot ?? '');
   private _timeId: string = '';
   private _autoCompleteEnable = false;
@@ -150,7 +189,7 @@ export class ChatPaletteComponent {
    * The dice bot lines from this palette are rolled with.
    *
    * Setting it also writes the choice to the selected character's palette, so it stays with the
-   * character.
+   * character, unless this seat may not rewrite the palette.
    */
   get gameType(): string {
     return this._gameType();
@@ -158,7 +197,7 @@ export class ChatPaletteComponent {
   set gameType(gameType: string) {
     this._gameType.set(gameType);
     const char = this.character();
-    if (char?.chatPalette) char.chatPalette.dicebot = gameType;
+    if (char?.chatPalette && this.mayEdit()) char.chatPalette.dicebot = gameType;
   }
 
   /**
@@ -172,7 +211,14 @@ export class ChatPaletteComponent {
     this.onSelectedCharacter(sendFrom);
   }
 
-  readonly chatTabidentifier = signal('');
+  /** The tab the palette speaks into, moved to the first tab in view where the one chosen is no longer. */
+  readonly chatTabidentifier = linkedSignal<ChatTab[], string>({
+    source: () => this.visibleChatTabs(),
+    computation: (visible, previous) =>
+      previous && visible.some((tab) => tab.identifier === previous.value)
+        ? previous.value
+        : (visible[0]?.identifier ?? ''),
+  });
   readonly text = signal<string>('');
   sendTo: string = '';
 
@@ -251,10 +297,9 @@ export class ChatPaletteComponent {
         this.panelService.close();
       }
     }, this.destroyRef);
+    // A seat that may no longer rewrite the palette leaves an edit it had open, writing nothing.
     effect(() => {
-      const visible = this.visibleChatTabs();
-      const current = this.chatTabidentifier();
-      if (!visible.some((tab) => tab.identifier === current)) this.chatTabidentifier.set(visible[0]?.identifier ?? '');
+      if (!this.mayEdit() && untracked(this.isEdit)) untracked(() => this.toggleEditMode());
     });
     effect(() => {
       const req = this.uiSignalService.jumpIndexRequest();
@@ -519,7 +564,7 @@ export class ChatPaletteComponent {
    */
   onPaletteRowMenu(row: PaletteRow, event: MouseEvent): void {
     if (row.kind !== 'command') return;
-    if (!this.rolePermission.canEditTabletop) return;
+    if (!this.rolePermission.canEditTabletop()) return;
     event.preventDefault();
     event.stopPropagation();
 
@@ -568,9 +613,11 @@ export class ChatPaletteComponent {
    * ends.
    *
    * On opening, the text area is scrolled to about where the list was. It also runs when the panel
-   * closes mid-edit, so an edit is never lost by closing.
+   * closes mid-edit, so an edit is never lost by closing. A seat that may not rewrite the palette
+   * opens nothing, and writes nothing back.
    */
   toggleEditMode() {
+    if (!this.isEdit() && !this.mayEdit()) return;
     this.isEdit.update((v) => !v);
     if (!this.palette) return;
     if (this.isEdit()) {
@@ -578,13 +625,16 @@ export class ChatPaletteComponent {
       this.editPalette.set(this.palette.value + '');
       const listTop = listEl?.scrollTop ?? 0;
       const listHeight = listEl?.scrollHeight ?? 1;
-      setTimeout(() => {
-        const textEl = this.editTextRef()?.nativeElement;
-        if (textEl) {
-          textEl.scrollTop = (listTop * textEl.scrollHeight) / listHeight;
-        }
-      }, 10);
-    } else {
+      afterNextRender(
+        () => {
+          const textEl = this.editTextRef()?.nativeElement;
+          if (textEl) {
+            textEl.scrollTop = (listTop * textEl.scrollHeight) / listHeight;
+          }
+        },
+        { injector: this.injector }
+      );
+    } else if (this.mayEdit()) {
       this.palette.setPalette(this.editPalette());
     }
   }
@@ -601,10 +651,21 @@ export class ChatPaletteComponent {
 
   /**
    * Highlights a palette line and scrolls it into view; a heading picked from the headings menu or
-   * list lands here.
+   * list lands here, and so does a search result, which may stand in a tab other than the one open:
+   * that tab is opened first, and the line scrolled to once it is drawn.
    */
   japmIndex(lineNo: number) {
     this.selectedLine.set(lineNo);
+    const tab = this.paletteTabs().findIndex((candidate) => candidate.rows.some((row) => row.lineIndex === lineNo));
+    if (tab >= 0 && tab !== this.activeTab()) {
+      this.chooseTab(tab);
+      afterNextRender(() => this.scrollToLine(lineNo), { injector: this.injector });
+      return;
+    }
+    this.scrollToLine(lineNo);
+  }
+
+  private scrollToLine(lineNo: number): void {
     const el = this.paletteListRef()?.nativeElement;
     if (!el) return;
     const row = el.querySelector<HTMLElement>(`[data-line="${lineNo}"]`);

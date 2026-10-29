@@ -13,14 +13,15 @@ import {
   encodeRangeShapeField,
   RangeShapeFieldValue,
 } from '@axe/domain/data/range-shape-field';
-import { buildRangeShapeThumbnail } from '@axe/features/tabletop/range-shape-editor/range-shape-editor-utils';
+import { buildRangeShapeThumbnail } from '@axe/domain/tabletop/range-shape-editor-utils';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { TranslocoModule } from '@jsverse/transloco';
 
 @Component({
   selector: 'game-data-element-range-shape',
   templateUrl: './game-data-element-range-shape.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TranslocoModule],
+  imports: [TextTooltipDirective, TranslocoModule],
   host: { class: 'contents' },
 })
 export class GameDataElementRangeShapeComponent {
@@ -57,8 +58,7 @@ export class GameDataElementRangeShapeComponent {
       title: this.t('feature.range.custom.editorTitle'),
       ...sheetPanelBox(coordinate, 640, 540),
     };
-    const { RangeShapeEditorComponent } =
-      await import('@axe/features/tabletop/range-shape-editor/range-shape-editor.component');
+    const { RangeShapeEditorComponent } = await import('@axe/features/range-shape-editor/range-shape-editor.component');
     const editor = this.panelService.open(RangeShapeEditorComponent, option);
     editor.initialize({
       name: initial.name || this.element().name,

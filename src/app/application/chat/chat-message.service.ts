@@ -1,4 +1,5 @@
 import { inject, Injectable } from '@angular/core';
+import { ChatClockService } from '@axe/application/chat/chat-clock.service';
 import {
   calcChatTimestamp,
   emitChatMessageEvents,
@@ -18,31 +19,30 @@ import { encodeI18nMessage } from '@axe/application/i18n/i18n-message';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { emitDiceTableMessage, emitResourceEditMessage, emitSendMessage } from '@axe/core/event/domain-events';
 import { Network } from '@axe/core/index';
-import { Logger } from '@axe/core/logging/logger';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
-import { toHalfWidth } from '@axe/core/util/string-util';
 import { portraitNameOf } from '@axe/domain/character/character-portrait';
 import { GameCharacter } from '@axe/domain/character/game-character';
+import { liftImageReferences } from '@axe/domain/chat/chat-image-references';
 import { ChatMessage, ChatMessageContext, ChatMessageTargetContext } from '@axe/domain/chat/chat-message';
 import { copiedMessageContext } from '@axe/domain/chat/chat-message-copy';
 import { ChatOutgoing, OutgoingStamp } from '@axe/domain/chat/chat-outgoing';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
-import { canRoleSpeakTab, canRoleViewTab } from '@axe/domain/chat/chat-tab-permission';
+import { canRoleSpeakTab } from '@axe/domain/chat/chat-tab-permission';
 import { OUT_OF_STORY_TAG } from '@axe/domain/chat/constants';
 import { dieRollTag } from '@axe/domain/chat/die-roll-tag';
 import { stampOf } from '@axe/domain/chat/stamp-catalog';
 import { joinStampLine } from '@axe/domain/chat/stamp-line';
-import { DataElement, DataElementFieldType } from '@axe/domain/data/data-element';
+import { DEFAULT_NOTICE_PLACE, NOTICE_OFF, noticeRouteOf, SystemNoticeKind } from '@axe/domain/chat/system-notices';
+import { DataElement } from '@axe/domain/data/data-element';
 import { encodeDiceLook } from '@axe/domain/dice/dice-3d/dice-look';
 import { DiceBot } from '@axe/domain/dice/dice-bot';
+import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import GameSystemClass from 'bcdice/lib/game_system';
 
-const HOURS = 60 * 60 * 1000;
-
-@Injectable()
+@Injectable({ providedIn: 'root' })
 export class ChatMessageService {
   private readonly objectStore = inject(ObjectStore);
   private readonly rolePermission = inject(RolePermissionService);
@@ -50,68 +50,13 @@ export class ChatMessageService {
   private readonly chatTabList = inject(ChatTabList);
   private readonly myDice = inject(MyDiceService);
   private readonly stampRules = inject(StampRulesService);
-
-  private calibrationTimer: ReturnType<typeof setTimeout> | null = null;
-  private timeOffset: number = Date.now();
-  private performanceOffset: number = performance.now();
-
-  private ntpApiUrls: string[] = ['https://worldtimeapi.org/api/ip'];
+  private readonly clock = inject(ChatClockService);
 
   gameType: string = 'DiceBot';
 
   /** The room's chat tabs, in the order they are listed. */
   get chatTabs(): readonly ChatTab[] {
     return this.chatTabList.chatTabs;
-  }
-
-  /**
-   * Sets the chat clock by a public time server, then again every six hours.
-   *
-   * Lines are ordered by the time they are stamped with, so peers whose own clocks disagree would
-   * otherwise interleave wrongly. A failed request keeps the clock as it was and tries again on the
-   * same schedule. Calling it while a check is already scheduled does nothing.
-   */
-  calibrateTimeOffset() {
-    if (this.calibrationTimer != null) {
-      return;
-    }
-    const index = Math.floor(Math.random() * this.ntpApiUrls.length);
-    const ntpApiUrl = this.ntpApiUrls[index];
-    const sendTime = performance.now();
-    fetch(ntpApiUrl)
-      .then((response) => {
-        if (response.ok) return response.json();
-        throw new Error('Network response was not ok.');
-      })
-      .then((jsonObj) => {
-        const endTime = performance.now();
-        const latency = (endTime - sendTime) / 2;
-        const timeobj = jsonObj;
-        const st: number = new Date(timeobj.utc_datetime).getTime();
-        const fixedTime = st + latency;
-        this.timeOffset = fixedTime;
-        this.performanceOffset = endTime;
-        Logger.info(`[TimeSync] 時刻同期完了 (過延: ${latency.toFixed(0)}ms, offset: ${fixedTime.toFixed(0)})`);
-        this.scheduleCalibration();
-      })
-      .catch((error) => {
-        Logger.warn('[TimeSync] 時刻同期失敗', error.message);
-        this.scheduleCalibration();
-      });
-    this.scheduleCalibration();
-  }
-
-  private scheduleCalibration() {
-    if (this.calibrationTimer != null) clearTimeout(this.calibrationTimer);
-    this.calibrationTimer = setTimeout(() => {
-      this.calibrationTimer = null;
-      this.calibrateTimeOffset();
-    }, 6 * HOURS);
-  }
-
-  /** The current time in milliseconds by the calibrated chat clock, which is what lines are stamped with. */
-  getTime(): number {
-    return Math.floor(this.timeOffset + (performance.now() - this.performanceOffset));
   }
 
   /** Writes a notice into the system tab under the system's name, in green unless a colour is given. */
@@ -189,12 +134,34 @@ export class ChatMessageService {
   }
 
   /**
-   * Writes a notice into the first tab of the room, which is where the round and other table-wide
-   * events are announced.
+   * Writes a notice of one kind where the room sends that kind: the tab it chose, or, while it chose
+   * none or that tab is gone, the leftmost tab or the system tab the kind always went to. Nothing is
+   * written, and null comes back, for a kind the room sends nowhere. A secret notice is kept back as
+   * `sendSecretSystemMessageToTab` keeps it.
    */
-  sendSystemMessageToMainTab(text: string, color?: string): ChatMessage {
+  sendSystemNotice(
+    kind: SystemNoticeKind,
+    text: string,
+    options: { color?: string; from?: string; secret?: boolean; dieIdentifiers?: readonly string[] } = {}
+  ): ChatMessage | null {
+    const tab = this.noticeTabOf(kind);
+    if (!tab) return null;
+    if (options.secret) {
+      return this.sendSecretSystemMessageToTab(tab, text, options.from, options.color, options.dieIdentifiers);
+    }
+    return this.sendSystemMessageToTab(tab, text, options.color, options.from);
+  }
+
+  /** The tab a kind of notice goes to now, or null for a kind the room sends nowhere. */
+  noticeTabOf(kind: SystemNoticeKind): ChatTab | null {
     const chatTabList = this.objectStore.get<ChatTabList>('ChatTabList');
-    return this.sendSystemMessageToTab(chatTabList!.chatTabs[0], text, color);
+    if (!chatTabList) return null;
+    const config = Config.instance;
+    const route = noticeRouteOf(config.systemNotices, kind);
+    if (route === NOTICE_OFF) return null;
+    const chosen = route ? chatTabList.chatTabs.find((tab) => tab.identifier === route) : undefined;
+    if (chosen) return chosen;
+    return DEFAULT_NOTICE_PLACE[kind] === 'main' ? (chatTabList.chatTabs[0] ?? null) : chatTabList.systemMessageTab;
   }
 
   /**
@@ -229,11 +196,13 @@ export class ChatMessageService {
    * Speaks a notice as whoever this reader last spoke as, with that speaker's portrait where it
    * still matches.
    *
-   * It goes to the named tab, or the system tab when none is named or the name is not a tab.
+   * It goes to the named tab, or the system tab when none is named or the name is not a tab. A guest
+   * on a room server says nothing in a tab guests may not speak in, which the server would take back.
    */
   sendSystemMessageAsLastSpeaker(text: string, chatTabIdentifier?: string) {
     const chatTabList = this.objectStore.get<ChatTabList>('ChatTabList');
     const sysTab = this.resolveChatTab(chatTabIdentifier) ?? chatTabList!.systemMessageTab!;
+    if (PeerCursor.isMyselfKeptOffTable && !sysTab?.guestCanSpeak) return;
     const sendFrom = PeerCursor.myCursor.lastControlSendFrom
       ? PeerCursor.myCursor.lastControlSendFrom
       : PeerCursor.myCursor.identifier;
@@ -270,7 +239,8 @@ export class ChatMessageService {
    * `words` stand in for the stamp wherever it cannot be drawn: in a version that does not know it,
    * in a log, in a video. A stamp that is a picture in the room carries the picture as well, for
    * those to show. A stamp this version does not know, one the room does not let be sent, or one
-   * from a reader whose role may not speak in the tab, is not sent, and null comes back.
+   * from a reader whose role may not speak in the tab, is not sent, and null comes back. A guest on a
+   * room server stands no portrait in the tab's slots, which the server would put back.
    */
   sendStamp(
     chatTab: ChatTab,
@@ -289,12 +259,12 @@ export class ChatMessageService {
     const imgIndex = resolvePortraitIndex(portraitIndex);
     const chatMessage: ChatMessageContext = {
       from: Network.peerContext.userId,
-      to: sendTo != null ? this.findId(sendTo) : undefined,
+      to: sendTo != null ? this.whisperTo(sendTo) : undefined,
       name: this.makeMessageName(sendFrom, sendTo),
       imageIdentifier: this.findImageIdentifier(sendFrom, imgIndex),
       timestamp: this.calcTimeStamp(chatTab),
       text: words,
-      imagePos: this.findImagePos(sendFrom),
+      imagePos: PeerCursor.isMyselfKeptOffTable ? undefined : this.findImagePos(sendFrom),
       messColor: resolveMessageColor(color, '#000000'),
       sendFrom,
       senderRole: PeerCursor.myRole,
@@ -319,7 +289,9 @@ export class ChatMessageService {
    * room's images. A line not whispered to anyone also records who this reader last spoke as, which
    * `sendSystemMessageAsLastSpeaker` follows. A stamp sent with the line goes under it, with the
    * words standing in for it on a last line of their own, after everything else has been read out of
-   * the line.
+   * the line. A guest on a room server changes no piece by speaking: resource edits are not read out
+   * of the line, a portrait command picks the line's portrait but leaves the piece's alone, and the
+   * portrait stands in none of the tab's slots.
    */
   sendMessage(
     chatTab: ChatTab,
@@ -337,7 +309,12 @@ export class ChatMessageService {
     vnEmote?: string,
     stamp?: OutgoingStamp
   ): ChatMessage {
-    const resolvedMessage = this.resolveAttachmentImageReferences(text, sendFrom, attachmentImageIdentifiers ?? []);
+    const speaker = this.objectStore.get(sendFrom);
+    const resolvedMessage = liftImageReferences(
+      text,
+      speaker instanceof GameCharacter ? speaker.rootDataElement : null,
+      attachmentImageIdentifiers ?? []
+    );
     text = resolvedMessage.text;
 
     const imgIndex = resolvePortraitIndex(portraitIndex);
@@ -348,13 +325,14 @@ export class ChatMessageService {
 
     const chatMessage: ChatMessageContext = {
       from: Network.peerContext.userId,
-      to: sendTo != null ? this.findId(sendTo) : undefined,
+      to: sendTo != null ? this.whisperTo(sendTo) : undefined,
       name: this.makeMessageName(sendFrom, sendTo),
       imageIdentifier: this.findImageIdentifier(sendFrom, imgIndex),
       timestamp: this.calcTimeStamp(chatTab),
       tag: chatMessageTag,
       text,
-      imagePos: this.findImagePos(sendFrom),
+      // A guest on a room server stands no portrait in the tab's slots, which the server would put back.
+      imagePos: PeerCursor.isMyselfKeptOffTable ? undefined : this.findImagePos(sendFrom),
       messColor: messageColor,
       sendFrom: sendFrom,
       senderRole: PeerCursor.myRole,
@@ -374,7 +352,7 @@ export class ChatMessageService {
     const look = this.myDice.look();
     const diceLook = encodeDiceLook(look);
     if (diceLook) chatMessage.diceLook = diceLook;
-    if (look.picture && this.rolePermission.canEditTabletop) {
+    if (look.picture && this.rolePermission.canEditTabletop()) {
       chatMessage.diceImageIdentifier = look.picture;
       void this.myDice.ensureShared();
     }
@@ -393,10 +371,12 @@ export class ChatMessageService {
       });
     }
     emitDiceTableMessage({ messageIdentifier: chat.identifier });
-    emitResourceEditMessage({
-      messageIdentifier: chat.identifier,
-      messageTargetContext: eventPlan.resourceEditTargetContext,
-    });
+    if (!PeerCursor.isMyselfKeptOffTable) {
+      emitResourceEditMessage({
+        messageIdentifier: chat.identifier,
+        messageTargetContext: eventPlan.resourceEditTargetContext,
+      });
+    }
 
     return chat;
   }
@@ -477,36 +457,6 @@ export class ChatMessageService {
     chatMessage.attachmentImageIdentifiers = JSON.stringify(attached);
   }
 
-  private resolveAttachmentImageReferences(
-    text: string,
-    sendFrom: string,
-    attachmentImageIdentifiers: string[]
-  ): { text: string; attachmentImageIdentifiers: string[] } {
-    const object = this.objectStore.get(sendFrom);
-    if (!(object instanceof GameCharacter) || !object.rootDataElement) {
-      return { text, attachmentImageIdentifiers };
-    }
-
-    const resolvedAttachmentImageIdentifiers = [...attachmentImageIdentifiers];
-    const resolvedText = text.replace(/[tTｔＴ]?[{｛]\s*([^{}｛｝]+)\s*[}｝]/g, (match, name) => {
-      if (match.match(/^[tTｔＴ].*/)) return match;
-
-      const element = DataElement.findElementByReference(object.rootDataElement!, toHalfWidth(name));
-      if (!element || element.fieldType !== DataElementFieldType.IMAGE) return match;
-
-      const imageIdentifier = String(element.value ?? '').trim();
-      if (imageIdentifier.length > 0 && !resolvedAttachmentImageIdentifiers.includes(imageIdentifier)) {
-        resolvedAttachmentImageIdentifiers.push(imageIdentifier);
-      }
-      return '';
-    });
-
-    return {
-      text: resolvedText.replace(/[ \t]{2,}/g, ' ').trim(),
-      attachmentImageIdentifiers: resolvedAttachmentImageIdentifiers,
-    };
-  }
-
   private applyPortraitCommand(
     chatMessage: ChatMessageContext,
     text: string,
@@ -532,8 +482,17 @@ export class ChatMessageService {
     chatMessage.imageIdentifier = found.identifier;
     chatMessage.text = stripPortraitCommand(text);
     const obj = this.objectStore.get(sendFrom);
-    if (obj instanceof GameCharacter) obj.selectedPortraitIndex = found.index;
+    if (obj instanceof GameCharacter && !PeerCursor.isMyselfKeptOffTable) obj.selectedPortraitIndex = found.index;
     return found;
+  }
+
+  /**
+   * Whom a whisper goes to. One whose target's cursor is not here at the moment, as while it is on
+   * its way back or after its seat opened the page again, goes to the user it stood for rather than
+   * out to everybody.
+   */
+  private whisperTo(identifier: string): string {
+    return this.findId(identifier) || PeerCursor.userIdOf(identifier) || identifier;
   }
 
   private findId(identifier: string): string {
@@ -559,7 +518,7 @@ export class ChatMessageService {
     } else if (object instanceof PeerCursor) {
       return object.name;
     }
-    return identifier;
+    return PeerCursor.standingFor(identifier)?.name ?? identifier;
   }
 
   private makeMessageName(sendFrom: string, sendTo?: string): string {
@@ -633,130 +592,20 @@ export class ChatMessageService {
   }
 
   /**
-   * Opens the latest kept-back roll of a die to the table, across every tab.
-   *
-   * Answers how many were opened: 1, or 0 when the die has no kept-back roll or this reader may not
-   * show it.
-   */
-  discloseDieRolls(dieIdentifier: string): number {
-    const tag = dieRollTag(dieIdentifier);
-    let latest: ChatMessage | null = null;
-    for (const chatTab of this.chatTabs) {
-      for (const message of chatTab.chatMessages) {
-        if (!message.isSecret || !message.tags.includes(tag)) continue;
-        if (!latest || latest.placedAt < message.placedAt) latest = message;
-      }
-    }
-    if (!latest || !this.canDiscloseMessage(latest)) return 0;
-
-    this.discloseMessage(latest);
-    return 1;
-  }
-
-  /**
-   * Whether this reader may show a kept-back roll to the table.
-   *
-   * Whoever rolled it may, since it was theirs to keep back, and the master may, since a roll
-   * nobody can be made to show is a roll the master cannot rule on. Nobody else: a die kept
-   * back is the one thing a seat holds against the rest of the table.
-   */
-  canDiscloseMessage(message: ChatMessage): boolean {
-    if (!message.isSecret) return false;
-    return message.isSendFromSelf || this.rolePermission.canSeeHidden;
-  }
-
-  /**
-   * Shows a kept-back line to the table and moves it to the end of its tab, stamped with when it
-   * was shown.
-   *
-   * Does nothing for a line this reader may not disclose.
-   */
-  discloseMessage(message: ChatMessage): void {
-    if (!this.canDiscloseMessage(message)) return;
-    message.tag = message.tags.filter((tag) => tag !== 'secret').join(' ');
-    const chatTab = message.parent;
-    if (!(chatTab instanceof ChatTab)) return;
-    message.disclosedAt = this.calcTimeStamp(chatTab);
-    chatTab.appendChild(message);
-  }
-
-  /**
-   * Whether this reader may make the line an after-the-fact whisper, or whisper one to somebody
-   * else: they said it to everyone, and it is not a notice from the tool.
-   *
-   * A dice result is the dice bot's line, so a roll stays where the table saw it, and a line
-   * whispered from the start is a whisper already.
-   */
-  canMakeAfterWhisper(message: ChatMessage): boolean {
-    if (message.isDirect && !message.isAfterWhisper) return false;
-    return message.changeable;
-  }
-
-  /** Whether this reader may put a line they made an after-the-fact whisper back where it was. */
-  canUndoAfterWhisper(message: ChatMessage): boolean {
-    return message.isAfterWhisper && message.changeable;
-  }
-
-  /**
-   * The seats a line can be whispered to afterwards: everyone in the room but this reader, who said
-   * it and keeps it either way, and but those whose role may not read the tab it is in, who could
-   * never see it.
-   */
-  afterWhisperCandidates(message: ChatMessage): PeerCursor[] {
-    const me = PeerCursor.myCursor;
-    const tab = message.parent;
-    return this.objectStore
-      .getObjects(PeerCursor)
-      .filter((peer) => peer !== me && !!peer.userId)
-      .filter((peer) => !(tab instanceof ChatTab) || canRoleViewTab(tab, peer.role));
-  }
-
-  /**
-   * Makes a line an after-the-fact whisper to one seat, which with the speaker are then the only ones
-   * it reaches. Does nothing for a line this reader may not, or for a seat not in the room.
-   */
-  makeAfterWhisper(message: ChatMessage, peer: PeerCursor): void {
-    if (!this.canMakeAfterWhisper(message)) return;
-    if (!this.afterWhisperCandidates(message).includes(peer)) return;
-    message.makeAfterWhisper(peer.userId, peer.name, this.getTime());
-  }
-
-  /** Puts an after-the-fact whisper back where it was. Does nothing for a line this reader may not put back. */
-  undoAfterWhisper(message: ChatMessage): void {
-    if (!this.canUndoAfterWhisper(message)) return;
-    message.undoAfterWhisper();
-  }
-
-  /**
-   * Whether this reader may delete the line: they said it, and it is not a notice from the tool. A
-   * dice result is the dice bot's line, so a roll stays where the table saw it.
-   */
-  canPseudoDelete(message: ChatMessage): boolean {
-    return !message.isPseudoDeleted && message.changeable;
-  }
-
-  /**
-   * Deletes a line from everybody's chat as though it had never been said, leaving it in the room's
-   * data and its log; it is a pseudo-deletion, which is not put back. Does nothing for a line this
-   * reader may not delete.
-   */
-  pseudoDelete(message: ChatMessage): void {
-    if (!this.canPseudoDelete(message)) return;
-    message.pseudoDelete(this.getTime());
-  }
-
-  /**
    * Says a line again in another tab, as though it had been said there.
    *
    * It goes to the end of that tab rather than back into the middle of it under its old time:
-   * a line copied over is being brought into that conversation now.
+   * a line copied over is being brought into that conversation now. A guest on a room server's copy
+   * stands no portrait in the tab's slots, which the server would put back.
    */
   copyMessageToTab(message: ChatMessage, chatTab: ChatTab): ChatMessage {
-    return chatTab.addMessage(copiedMessageContext(message, this.calcTimeStamp(chatTab)));
+    const context = copiedMessageContext(message, this.calcTimeStamp(chatTab));
+    if (PeerCursor.isMyselfKeptOffTable) context.imagePos = undefined;
+    return chatTab.addMessage(context);
   }
 
   private calcTimeStamp(chatTab: ChatTab): number {
-    const now = this.getTime();
+    const now = this.clock.now();
     const latest = chatTab.latestTimeStamp;
     return calcChatTimestamp(now, latest);
   }

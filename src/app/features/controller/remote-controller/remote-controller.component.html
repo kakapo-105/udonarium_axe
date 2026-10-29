@@ -20,7 +20,7 @@
           'feature.controller.remote.sendTarget' | transloco
         }}</span>
         <form name="remote-controller-chat-tab" class="flex flex-wrap gap-0.5">
-          @for (chatTab of chatTabsVersion(); track chatTab) {
+          @for (chatTab of sendableChatTabs(); track chatTab) {
             <label
               class="text-ui-muted hover:bg-ui-hover hover:text-ui-text rounded-ui-sm inline-flex cursor-pointer items-center border border-solid border-transparent px-2 py-0.75 text-[12px] whitespace-nowrap transition-[background,color] select-none"
               [class.bg-ui-accent-bg!]="chatTabidentifier() === chatTab.identifier"
@@ -141,13 +141,15 @@
           } @else {
             <div class="box-border w-full font-sans" #paletteList>
               @for (row of paletteRows(); track row.lineIndex) {
-                @if (row.kind === 'heading') {
+                @if (row.kind === 'heading' || row.kind === 'tab') {
                   <div
                     class="text-ui-accent border-ui-border-panel box-border cursor-default overflow-hidden border-t bg-[color-mix(in_srgb,var(--ui-accent)_6%,transparent)] px-2.5 pt-1.5 pb-0.75 text-[11px] leading-[1.65] font-bold tracking-[0.04em] wrap-break-word whitespace-pre-wrap uppercase select-none first:border-t-0"
                     [attr.data-line]="row.lineIndex"
                   >
-                    <span class="mr-1 opacity-50">{{ row.headingLevel === 2 ? '■' : '◆' }}</span
-                    >{{ row.headingName }}
+                    <span class="mr-1 opacity-50">{{
+                      row.kind === 'heading' && row.headingLevel === 2 ? '■' : '◆'
+                    }}</span
+                    >{{ row.kind === 'tab' ? row.tabName : row.headingName }}
                   </div>
                 } @else if (row.kind === 'variable') {
                   <div
@@ -214,7 +216,7 @@
               (keydown.enter)="sendBuffChat($any($event))"
             ></textarea>
             <button
-              class="bg-ui-accent-bg border-ui-accent text-ui-accent hover:bg-ui-accent rounded-ui-sm inline-flex cursor-pointer items-center gap-0.75 border border-solid px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap transition-[background,border-color] select-none hover:text-white [&_.material-icons]:text-[14px]!"
+              class="bg-ui-accent-bg border-ui-accent text-ui-accent hover:bg-ui-accent-solid rounded-ui-sm inline-flex cursor-pointer items-center gap-0.75 border border-solid px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap transition-[background,border-color] select-none hover:text-white [&_.material-icons]:text-[14px]!"
               (click)="sendBuffChat(null)"
             >
               {{ 'feature.controller.remote.grant' | transloco }}
@@ -365,7 +367,8 @@
               ±
             </button>
             <button
-              class="bg-ui-accent-bg border-ui-accent text-ui-accent hover:bg-ui-accent rounded-ui-sm inline-flex cursor-pointer items-center gap-0.75 border border-solid px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap transition-[background,border-color] select-none hover:text-white [&_.material-icons]:text-[14px]!"
+              class="bg-ui-accent-bg border-ui-accent text-ui-accent hover:bg-ui-accent-solid rounded-ui-sm inline-flex cursor-pointer items-center gap-0.75 border border-solid px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap transition-[background,border-color] select-none hover:text-white [&_.material-icons]:text-[14px]!"
+              data-testid="remote-change-execute"
               (click)="remoteChangeValue()"
             >
               {{ 'feature.controller.remote.execute' | transloco }}
@@ -387,6 +390,30 @@
                 'feature.controller.remote.minLimit' | transloco
               }}
             </label>
+          </div>
+
+          <div class="flex items-center gap-2 px-2 py-1">
+            <label
+              class="text-ui-muted inline-flex cursor-pointer items-center gap-1 text-[12px] [accent-color:var(--ui-accent)]"
+            >
+              <input
+                name="battle_on_change_chk"
+                type="checkbox"
+                data-testid="remote-battle-on-change"
+                [checked]="battleOnChange()"
+                (change)="setBattleOnChange($any($event.target).checked)"
+              />{{ 'feature.controller.remote.battleOnChange' | transloco }}
+            </label>
+            <button
+              class="bg-ui-input border-ui-border-panel text-ui-text hover:bg-ui-hover hover:border-ui-muted rounded-ui-sm ml-auto inline-flex cursor-pointer items-center gap-0.75 border border-solid px-2.5 py-1 text-[12px] whitespace-nowrap transition-[background,border-color] select-none disabled:cursor-default disabled:opacity-45 [&_.material-icons]:text-[14px]!"
+              type="button"
+              data-testid="remote-battle-play"
+              [disabled]="!rolePermission.canEditTabletop()"
+              [title]="'feature.controller.remote.battlePlayHint' | transloco"
+              (click)="playBattle()"
+            >
+              <i class="material-icons">sports_martial_arts</i>{{ 'feature.controller.remote.battlePlay' | transloco }}
+            </button>
           </div>
         </div>
       }
@@ -438,6 +465,7 @@
     <ng-template #gameObjectCard let-gameObject="gameObject">
       <div
         class="bg-ui-input border-ui-border-panel rounded-ui-sm [&_.material-icons]:text-ui-dim relative flex size-10.5 shrink-0 cursor-pointer items-center justify-center overflow-hidden border border-solid [&_.material-icons]:text-[24px]!"
+        [attr.data-testid]="'remote-target-' + gameObject.name"
         (click)="targetBlockClick(gameObject)"
       >
         @if (gameObject.imageFile.url) {
@@ -460,6 +488,7 @@
           <span
             class="text-ui-text flex-1 truncate text-[13px] font-semibold"
             [class.text-ui-accent!]="$any(gameObject).targeted"
+            [appTextTooltip]="gameObject.name"
             >{{ gameObject.name }}</span
           >
           <button

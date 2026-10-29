@@ -1,15 +1,23 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { AssetOwnershipService } from '@axe/application/file/asset-ownership.service';
+import { AssetRemovalService } from '@axe/application/file/asset-removal.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { PersonalVolumeService } from '@axe/application/media/personal-volume.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { ConfirmService } from '@axe/application/ui/confirm.service';
 import { ContextMenuAction, ContextMenuService } from '@axe/application/ui/context-menu.service';
+import { ModalService } from '@axe/application/ui/modal.service';
+import { Network } from '@axe/core/network/network';
+import { AssetHttpStore } from '@axe/core/storage/asset-http-store';
 import { AudioFile } from '@axe/core/storage/audio-file';
-import { AudioPlayer, VolumeType } from '@axe/core/storage/audio-player';
+import { AudioOutput, VolumeType } from '@axe/core/storage/audio-output';
+import { AudioPlayer } from '@axe/core/storage/audio-player';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { LoopPlayer } from '@axe/core/storage/loop-player';
+import { SoundEffects } from '@axe/core/storage/sound-effects';
 import { ObjectStore } from '@axe/core/sync/object-store';
+import { AssetOwner } from '@axe/domain/media/asset-owner';
 import { AUDIO_TAG_BGS, AudioTag } from '@axe/domain/media/audio-tag';
 import { BackgroundSound } from '@axe/domain/media/background-sound';
 import { CutInLauncher } from '@axe/domain/media/cut-in-launcher';
@@ -21,6 +29,7 @@ import { PeerRole } from '@axe/domain/peer/peer-role';
 import { BackgroundSoundPlaybackService } from '@axe/features/media/background-sound-playback.service';
 import { JukeboxComponent } from '@axe/features/media/jukebox/jukebox.component';
 import { JukeboxPlaybackService } from '@axe/features/media/jukebox-playback.service';
+import { ReportDialogComponent } from '@axe/features/moderation/report-dialog/report-dialog.component';
 import { RoomPanelService } from '@axe/features/panels/room-panel.service';
 import { expectPanelDragRecovery, PanelDragTestHostComponent } from '@axe/testing/panel-drag-recovery';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
@@ -94,7 +103,7 @@ describe('JukeboxComponent', () => {
     });
 
     it('turns the music off for this player alone from its row, and back on', async () => {
-      vi.spyOn(AudioPlayer, 'setChannelVolume').mockImplementation(() => {});
+      vi.spyOn(AudioOutput, 'setChannelVolume').mockImplementation(() => {});
       const volumes = TestBed.inject(PersonalVolumeService);
       await fixture.whenStable();
       const mute = () =>
@@ -146,7 +155,7 @@ describe('JukeboxComponent', () => {
     beforeEach(() => {
       PeerCursor.createMyCursor();
       config().roomVolume = 1;
-      vi.spyOn(AudioPlayer, 'setChannelVolume').mockImplementation(() => {});
+      vi.spyOn(AudioOutput, 'setChannelVolume').mockImplementation(() => {});
     });
 
     it('is left alone for a player, who cannot move it', async () => {
@@ -278,6 +287,108 @@ describe('JukeboxComponent', () => {
       expect(component.getTagOf(AudioStorage.instance.get('other')!)).toBe('BGM');
       expect(ObjectStore.instance.getObjects(Playlist)).toHaveLength(playlists);
       expect(component.jukebox.isSeekLocked).toBe(true);
+    });
+  });
+
+  describe('reporting a sound to the room server’s operator', () => {
+    const trackId = 'e'.repeat(64);
+    const reportButtons = () =>
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('[data-testid="jukebox-report"]');
+
+    beforeEach(() => {
+      PeerCursor.createMyCursor();
+      AudioStorage.instance.add(makeReadyAudio(trackId, 'theme.ogg'));
+    });
+
+    it('offers it on the row of a sound to any seat in a room on a room server, and opens the report for it', async () => {
+      PeerCursor.myCursor.role = PeerRole.Guest;
+      vi.spyOn(Network, 'transport', 'get').mockReturnValue('server');
+      vi.spyOn(Network, 'peerContext', 'get').mockReturnValue({ isRoom: true } as never);
+      vi.spyOn(AssetHttpStore.instance, 'isEnabled', 'get').mockReturnValue(true);
+      const opened = vi.spyOn(TestBed.inject(ModalService), 'open').mockResolvedValue(null);
+      await fixture.whenStable();
+
+      expect(reportButtons()).toHaveLength(1);
+      reportButtons()[0].click();
+
+      expect(opened).toHaveBeenCalledWith(ReportDialogComponent, {
+        target: 'asset',
+        assetId: trackId,
+        name: 'theme.ogg',
+      });
+    });
+
+    it('offers none among peers', async () => {
+      vi.spyOn(Network, 'transport', 'get').mockReturnValue('skyway');
+      await fixture.whenStable();
+
+      expect(reportButtons()).toHaveLength(0);
+    });
+  });
+
+  describe('removing a sound from the room', () => {
+    const trackId = 'd'.repeat(64);
+    const removeButtons = () =>
+      (fixture.nativeElement as HTMLElement).querySelectorAll('[data-testid="jukebox-remove"]').length;
+
+    beforeEach(() => {
+      PeerCursor.createMyCursor();
+      AudioStorage.instance.add(makeReadyAudio(trackId, 'theme.ogg'));
+    });
+
+    afterEach(() => {
+      for (const record of AssetOwner.all()) ObjectStore.instance.remove(record);
+    });
+
+    it.each([
+      [PeerRole.GameMaster, 1],
+      [PeerRole.Player, 0],
+    ])(
+      'is offered on each row to a seat of role %s, of a sound nobody is known to have added: %i',
+      async (role, offered) => {
+        PeerCursor.myCursor.role = role;
+        await fixture.whenStable();
+
+        expect(removeButtons()).toBe(offered);
+      }
+    );
+
+    it('is offered to a player on the row of a sound they added', async () => {
+      PeerCursor.myCursor.role = PeerRole.Player;
+      AssetOwner.claim(trackId, 'audio', TestBed.inject(AssetOwnershipService).myOwnerKey());
+      await fixture.whenStable();
+
+      expect(removeButtons()).toBe(1);
+    });
+
+    it('asks to remove the sound, as the game master, and stops trying it here once removed', async () => {
+      PeerCursor.myCursor.role = PeerRole.GameMaster;
+      const removeAfterAsking = vi
+        .spyOn(TestBed.inject(AssetRemovalService), 'removeAfterAsking')
+        .mockResolvedValueOnce(0)
+        .mockResolvedValueOnce(1);
+      const audio = AudioStorage.instance.get(trackId)!;
+      component.auditionPlayer.audio = audio;
+      const stopTrying = vi.spyOn(component.auditionPlayer, 'stop').mockImplementation(() => {});
+
+      await component.removeAudio(audio);
+      expect(stopTrying).not.toHaveBeenCalled();
+      await component.removeAudio(audio);
+
+      expect(removeAfterAsking.mock.calls).toEqual([
+        ['audio', [trackId]],
+        ['audio', [trackId]],
+      ]);
+      expect(stopTrying).toHaveBeenCalledTimes(1);
+    });
+
+    it('asks nothing for a player', async () => {
+      PeerCursor.myCursor.role = PeerRole.Player;
+      const removeAfterAsking = vi.spyOn(TestBed.inject(AssetRemovalService), 'removeAfterAsking');
+
+      await component.removeAudio(AudioStorage.instance.get(trackId)!);
+
+      expect(removeAfterAsking).not.toHaveBeenCalled();
     });
   });
 
@@ -417,7 +528,7 @@ describe('JukeboxComponent', () => {
       const audio = makeReadyAudio('stop-bgm-02');
       AudioStorage.instance.add(audio);
 
-      component.jukebox.audioIdentifier = 'other-audio'; // 異なる identifier
+      component.jukebox.audioIdentifier = 'other-audio'; // a different identifier
       const otherAudio = makeReadyAudio('other-audio');
       AudioStorage.instance.add(otherAudio);
 
@@ -537,11 +648,10 @@ describe('JukeboxComponent', () => {
     it('sets this player’s own background volume, scaled by the room volume', () => {
       if (!ObjectStore.instance.get<Config>('Config')) new Config('Config').initialize();
       ObjectStore.instance.get<Config>('Config')!.roomVolume = 0.5;
-      const channel = vi.spyOn(AudioPlayer, 'setChannelVolume').mockImplementation(() => {});
+      const channel = vi.spyOn(AudioOutput, 'setChannelVolume').mockImplementation(() => {});
 
       component.backgroundVolume = 0.8;
 
-      expect(component.jukebox.backgroundVolume).toBe(0.8);
       expect(channel).toHaveBeenCalledWith(VolumeType.BACKGROUND, expect.closeTo(0.4));
     });
 
@@ -602,7 +712,7 @@ describe('JukeboxComponent', () => {
 
     it('reports whether an effect is playing', () => {
       const audio = makeReadyAudio('se-playing-01');
-      vi.spyOn(component.jukebox, 'isSePlaying').mockReturnValue(true);
+      vi.spyOn(SoundEffects, 'isPlaying').mockReturnValue(true);
 
       expect(component.isSePlaying(audio)).toBe(true);
     });

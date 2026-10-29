@@ -3,17 +3,18 @@ import { StatusAilmentService } from '@axe/application/character/status-ailment.
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { NamedCueService } from '@axe/application/media/named-cue.service';
+import { TableBgmService } from '@axe/application/media/table-bgm.service';
 import { MoveRangeService } from '@axe/application/tabletop/move-range.service';
+import { RoomRulesService } from '@axe/application/tabletop/room-rules.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { newStatusAilment } from '@axe/domain/character/status-ailment';
 import { DataElement } from '@axe/domain/data/data-element';
-import { Config } from '@axe/domain/peer/config';
-import { cellColRow, cellCount, CellGrid, cellGridOf, cellIndexOf } from '@axe/domain/tabletop/fog/cell-grid';
+import { cellCount, CellGrid } from '@axe/domain/tabletop/fog/cell-grid';
 import { GameTable } from '@axe/domain/tabletop/game-table';
 import { cheapestPath } from '@axe/domain/tabletop/move/cheapest-path';
-import { pieceCellOf, pieceCornerOn } from '@axe/domain/tabletop/move/piece-on-grid';
-import { resolveRoomRules } from '@axe/domain/tabletop/room-rules';
+import { cellHolding, isSquareGrid, moveGridOf, tableCellsOf } from '@axe/domain/tabletop/move/move-grid';
+import { pieceCellOf, pieceCornerInSquare, pieceCornerOn, standsAt } from '@axe/domain/tabletop/move/piece-on-grid';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { TableTrigger, triggersOn } from '@axe/domain/tabletop/table-trigger';
 import { rollTriggerAmount, triggerCatches, TriggerMoment, triggerPassTake } from '@axe/domain/tabletop/trigger-event';
@@ -42,11 +43,13 @@ export interface TriggerFiring {
 @Injectable({ providedIn: 'root' })
 export class TriggerFireService {
   private readonly tableSelecter = inject(TableSelecter);
+  private readonly roomRules = inject(RoomRulesService);
   private readonly chat = inject(ChatMessageService);
   private readonly ailments = inject(StatusAilmentService);
   private readonly moveRange = inject(MoveRangeService);
   private readonly cues = inject(NamedCueService);
   private readonly objectStore = inject(ObjectStore);
+  private readonly tableBgm = inject(TableBgmService);
   private readonly t = inject(TRANSLATE_FN);
 
   /** Where each piece was lifted from, so putting it down knows what it crossed to get here. */
@@ -77,7 +80,7 @@ export class TriggerFireService {
     this.lifted.delete(piece.identifier);
     const table = this.tableSelecter.viewTable;
     if (from === undefined || !table || table.gridSize <= 0) return [];
-    const grid = cellGridOf(table.width, table.height, table.gridSize, table.gridType);
+    const grid = moveGridOf(table);
     const to = this.cellOf(piece);
     if (to < 0 || to === from) return [];
     return this.walked(piece, grid, this.carriedWay(piece, grid, from, to));
@@ -88,10 +91,7 @@ export class TriggerFireService {
    * have made. The two ends alone where the room has not asked, or where no such walk exists.
    */
   private carriedWay(piece: GameCharacter, grid: CellGrid, from: number, to: number): number[] {
-    const rules = resolveRoomRules(
-      this.objectStore.get<Config>('Config')?.roomRuleAnswers ?? null,
-      this.tableSelecter.viewTable
-    );
+    const rules = this.roomRules.rulesFor(this.tableSelecter.viewTable);
     if (!rules.handTracesWay) return [from, to];
     const terms = this.moveRange.termsOf(piece);
     if (!terms) return [from, to];
@@ -121,7 +121,7 @@ export class TriggerFireService {
   private cellOf(piece: GameCharacter): number {
     const table = this.tableSelecter.viewTable;
     if (!table || table.gridSize <= 0 || table.width <= 0 || table.height <= 0) return -1;
-    const grid = cellGridOf(table.width, table.height, table.gridSize, table.gridType);
+    const grid = moveGridOf(table);
     return pieceCellOf(grid, piece, table.gridSize);
   }
 
@@ -181,13 +181,16 @@ export class TriggerFireService {
   standingOn(piece: GameCharacter, moment: TriggerMoment): TriggerFiring[] {
     const table = this.tableSelecter.viewTable;
     if (!table || table.gridSize <= 0 || table.width <= 0 || table.height <= 0) return [];
-    const grid = cellGridOf(table.width, table.height, table.gridSize, table.gridType);
+    const grid = moveGridOf(table);
     const cell = pieceCellOf(grid, piece, table.gridSize);
     if (cell < 0) return [];
     return this.fire(piece, grid, cell, true, (trigger) => trigger.firesOn === moment);
   }
 
-  /** Every piece of ground over one cell that answers to `wants`, sprung in the order it is laid. */
+  /**
+   * Every piece of ground over one cell that answers to `wants`, sprung in the order it is laid. On
+   * a grid of squares, ground over any of the table's cells in the square is sprung, once each.
+   */
   private fire(
     piece: GameCharacter,
     grid: CellGrid,
@@ -196,13 +199,13 @@ export class TriggerFireService {
     wants: (trigger: TableTrigger) => boolean
   ): TriggerFiring[] {
     const table = this.tableSelecter.viewTable;
-    const { col, row } = cellColRow(grid, cell);
+    const under = tableCellsOf(grid, cell);
     const firings: TriggerFiring[] = [];
     const round = this.round();
     for (const trigger of triggersOn(table)) {
       // Asked again each time: ground with one go in it is spent by the first cell of it.
       if (!trigger.hasGoFor(piece.identifier, round)) continue;
-      if (!trigger.covers(col, row)) continue;
+      if (!under.some(({ col, row }) => trigger.covers(col, row))) continue;
       if (!wants(trigger)) continue;
       if (!triggerCatches(trigger.catches, piece.isNpc)) continue;
       firings.push(this.spring(trigger, piece, ending, round));
@@ -217,10 +220,12 @@ export class TriggerFireService {
     const held = this.resourceOf(piece, trigger.element);
     if (held) {
       const current = Number(held.currentValue);
+      const start = Number.isFinite(current) ? current : 0;
       const most = Number(held.value);
-      const next = (Number.isFinite(current) ? current : 0) - taken;
-      // Given back rather than taken, a resource stops at the full it was written with.
-      held.currentValue = taken < 0 && Number.isFinite(most) ? Math.min(most, next) : next;
+      const next = start - taken;
+      // Given back rather than taken, a resource stops at the full it was written with, and one already
+      // past it is not brought down.
+      held.currentValue = taken < 0 && Number.isFinite(most) ? Math.max(start, Math.min(most, next)) : next;
     }
     this.leave(trigger, piece);
     trigger.spend(piece.identifier, round);
@@ -287,21 +292,35 @@ export class TriggerFireService {
    * Sets a piece down on a cell of a table, and turns the room's view to that table where it is not
    * the one being looked at, since a piece stands on every table at once and what changes is which
    * one the room is looking at.
+   *
+   * On a table counting squares of several cells the piece goes on the square holding the cell, and
+   * where the table keeps its pieces to the cells, on the cell itself as near as the square allows.
    */
   carryTo(piece: GameCharacter, col: number, row: number, table: GameTable | null): void {
     if (!table || table.gridSize <= 0 || table.width <= 0 || table.height <= 0) return;
-    const grid = cellGridOf(table.width, table.height, table.gridSize, table.gridType);
-    const to = cellIndexOf(grid, Math.round(col), Math.round(row));
+    const grid = moveGridOf(table);
+    const at = { col: Math.round(col), row: Math.round(row) };
+    const to = cellHolding(grid, at.col, at.row);
     // Ground pointing off the board carries nobody: a piece set down outside it would be a
     // piece nothing on the table could reach.
     if (to < 0) return;
     const floors = table.identifier !== this.tableSelecter.viewTableIdentifier;
-    if (!floors && pieceCellOf(grid, piece, table.gridSize) === to) return;
-    const corner = pieceCornerOn(grid, piece, table.gridSize, to);
+    const keeps = isSquareGrid(grid) && grid.keepsToCells;
+    const corner = keeps
+      ? pieceCornerInSquare(grid, piece, table.gridSize, to, {
+          x: (at.col + 0.5) * table.gridSize,
+          y: (at.row + 0.5) * table.gridSize,
+        })
+      : pieceCornerOn(grid, piece, table.gridSize, to);
+    const there = keeps ? standsAt(piece, corner) : pieceCellOf(grid, piece, table.gridSize) === to;
+    if (!floors && there) return;
     piece.location = { name: piece.location.name, x: corner.x, y: corner.y };
     piece.update();
     // Turned to last, so that the room arrives to find the piece already standing where it fell.
-    if (floors) this.tableSelecter.viewTableIdentifier = table.identifier;
+    if (floors) {
+      this.tableSelecter.viewTableIdentifier = table.identifier;
+      this.tableBgm.playFor(table);
+    }
   }
 
   /**
@@ -425,8 +444,7 @@ export class TriggerFireService {
    * that moved, the very player who was not to notice would be the one who could read it.
    */
   private tell(trigger: TableTrigger, text: string): void {
-    if (trigger.silent) this.chat.sendSecretSystemMessageToMainTab(text);
-    else this.chat.sendSystemMessageToMainTab(text);
+    this.chat.sendSystemNotice('trigger', text, { secret: trigger.silent });
   }
 
   private resourceOf(piece: GameCharacter, name: string): DataElement | null {

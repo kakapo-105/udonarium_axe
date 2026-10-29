@@ -112,7 +112,7 @@ export class BuffCommandService {
     if (removed.buffs > 0) {
       const what = this.describe(rule);
       this.chatWait.said(() =>
-        this.chat.sendSystemMessageToMainTab(this.t('feature.buffManager.sweepDone', { what, ...removed }))
+        this.chat.sendSystemNotice('round', this.t('feature.buffManager.sweepDone', { what, ...removed }))
       );
     }
     return removed;

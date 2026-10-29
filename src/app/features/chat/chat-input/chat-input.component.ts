@@ -20,6 +20,7 @@ import { StampPackService } from '@axe/application/chat/stamp-pack.service';
 import { StampRulesService } from '@axe/application/chat/stamp-rules.service';
 import { stampWords } from '@axe/application/chat/stamp-words';
 import { DiceBotCatalogService } from '@axe/application/dice/dice-bot-catalog.service';
+import { LanguageService } from '@axe/application/i18n/language.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
@@ -27,6 +28,7 @@ import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { TabletopDisplayService } from '@axe/application/tabletop/tabletop-display.service';
 import { VisionService } from '@axe/application/tabletop/vision.service';
 import { BatchService } from '@axe/application/ui/batch.service';
+import { ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
 import { UiSignalService } from '@axe/application/ui/ui-signal.service';
 import { ViewportService } from '@axe/application/ui/viewport.service';
@@ -38,16 +40,23 @@ import { ObjectStore } from '@axe/core/sync/object-store';
 import { portraitNameOf } from '@axe/domain/character/character-portrait';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { ChatBubbleColors, chatBubbleOf, chatColorOf, DEFAULT_CHAT_COLOR } from '@axe/domain/chat/chat-color';
+import { withoutChatDecoration, wrapChatSelection } from '@axe/domain/chat/chat-decoration';
 import { ChatMessage } from '@axe/domain/chat/chat-message';
 import { composeChatOutgoing, composeStampOutgoing, OutgoingStamp } from '@axe/domain/chat/chat-outgoing';
 import { ChatOutgoing } from '@axe/domain/chat/chat-outgoing';
 import { DataElement } from '@axe/domain/data/data-element';
 import { DiceBot } from '@axe/domain/dice/dice-bot';
+import { mayBeChosen } from '@axe/domain/peer/chosen-seat';
 import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
+import { canRoleEdit } from '@axe/domain/peer/peer-role';
 import { ChatColorSettingComponent } from '@axe/features/chat/chat-color-setting/chat-color-setting.component';
 import { ChatComposeService } from '@axe/features/chat/chat-compose.service';
+import {
+  buildChatDecorationMenu,
+  ChatDecorationMarks,
+} from '@axe/features/chat/chat-input/chat-decoration-context-menu';
 import { ChatInputDiceBotHelper } from '@axe/features/chat/chat-input/chat-input-dicebot';
 import { allowsChat } from '@axe/features/chat/chat-input/chat-input-helpers';
 import { ChatInputHistory } from '@axe/features/chat/chat-input/chat-input-history';
@@ -56,6 +65,7 @@ import { RoomPanelService } from '@axe/features/panels/room-panel.service';
 import { PortraitChoice, PortraitPickerComponent } from '@axe/ui/components/portrait-picker/portrait-picker.component';
 import { PortraitSliderComponent } from '@axe/ui/components/portrait-slider/portrait-slider.component';
 import { NgSelectWindowDirective } from '@axe/ui/directives/ng-select-window.directive';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
 import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
@@ -68,6 +78,7 @@ const COLOR_SETTING_PANEL = 'chat-color-setting';
   templateUrl: './chat-input.component.html',
   host: { class: 'block min-w-0 [container-type:inline-size]' },
   imports: [
+    TextTooltipDirective,
     NgClass,
     NgSelectComponent,
     FormsModule,
@@ -93,17 +104,22 @@ export class ChatInputComponent {
   private readonly tabletopDisplay = inject(TabletopDisplayService);
   private readonly tabletopService = inject(TabletopService);
 
-  /** The ticker is this screen's, so the switch is offered only where one is running. */
   /**
    * Whether this seat has a ticker to send a line to.
    *
    * The band only runs along the edge of a table being looked straight down on, so a seat in
    * perspective has none. Offered there all the same, the switch would send a line to everybody
-   * else's band and leave the sender's own screen with nothing to show for it.
+   * else's band and leave the sender's own screen with nothing to show for it. A guest, who puts
+   * nothing on anybody's screen, is not offered it, as the line's own menu offers it none.
    */
-  readonly showsTickerSwitch = computed(
-    () => this.tabletopService.mode2d() && this.tabletopDisplay.settings().multiAngleTickerEnabled
-  );
+  readonly showsTickerSwitch = computed(() => {
+    this.objectChange.trackMyCursor();
+    return (
+      canRoleEdit(PeerCursor.myRole) &&
+      this.tabletopService.mode2d() &&
+      this.tabletopDisplay.settings().multiAngleTickerEnabled
+    );
+  });
   readonly sendsToTicker = signal(false);
 
   private readonly roomPanels = inject(RoomPanelService);
@@ -128,7 +144,33 @@ export class ChatInputComponent {
   toggleTickerSend(): void {
     this.sendsToTicker.update((sends) => !sends);
   }
+
+  /** Opens the decorations under their button, to wrap what is selected in the box in the one picked. */
+  protected openDecorations(event: MouseEvent): void {
+    const button = event.currentTarget instanceof Element ? event.currentTarget : null;
+    const box = button?.getBoundingClientRect();
+    const at = box ? { x: box.left, y: box.bottom + 2 } : this.pointerDeviceService.pointers[0];
+    const menu = buildChatDecorationMenu(this.language.currentLang(), (marks) => this.decorate(marks), this.t);
+    this.contextMenu.open(at, menu, this.t('feature.chat.decoration.title'), { forGuests: true });
+  }
+
+  /**
+   * Wraps what is selected in the box in the marks, or puts them at the caret with nothing selected,
+   * and goes back to writing with the same words selected, or the caret between the marks.
+   */
+  decorate(marks: ChatDecorationMarks): void {
+    const box = this.textAreaElementRef()?.nativeElement;
+    if (!box) return;
+    const wrapped = wrapChatSelection(this.text, box.selectionStart, box.selectionEnd, marks);
+    this.text = wrapped.text;
+    box.value = wrapped.text;
+    box.focus();
+    box.setSelectionRange(wrapped.selectionStart, wrapped.selectionEnd);
+    this.kickCalcFitHeight();
+  }
   private readonly batchService = inject(BatchService);
+  private readonly contextMenu = inject(ContextMenuService);
+  private readonly language = inject(LanguageService);
   private readonly t = inject(TRANSLATE_FN);
   private readonly stampPicker = inject(StampPickerService);
   private readonly stampPacks = inject(StampPackService);
@@ -247,7 +289,9 @@ export class ChatInputComponent {
   readonly replyToText = computed(() => {
     const target = this.replyTarget();
     if (!target) return '';
-    const text = (target.text ?? '').replace(/\s+/g, ' ').trim();
+    const text = withoutChatDecoration(target.text ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
     return text.length > 80 ? text.slice(0, 80) + '…' : text;
   });
 
@@ -263,7 +307,9 @@ export class ChatInputComponent {
   readonly quoteToText = computed(() => {
     const target = this.quoteTarget();
     if (!target) return '';
-    const text = (target.text ?? '').replace(/\s+/g, ' ').trim();
+    const text = withoutChatDecoration(target.text ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
     return text.length > 80 ? text.slice(0, 80) + '…' : text;
   });
 
@@ -299,6 +345,14 @@ export class ChatInputComponent {
       if (object instanceof PeerCursor && object.peerId === event.peerId) {
         this.sendTo = '';
       }
+    }, this.destroyRef);
+    this.objectChange.onObjectChangedForAlias(
+      [PeerCursor.aliasName],
+      () => this.followWhisperTarget(),
+      this.destroyRef
+    );
+    this.objectChange.objectDeleted$.subscribe((event) => {
+      if (event.identifier === this.sendTo) this.followWhisperTarget();
     }, this.destroyRef);
     this.destroyRef.onDestroy(() => {
       this.batchService.remove(this);
@@ -429,10 +483,19 @@ export class ChatInputComponent {
     return this.chatColor(this.colorSelectNo());
   }
 
+  /**
+   * Whether the colours of the lines come from the character spoken as: they do but for a guest,
+   * whose colour panel sets the colours of their own lines instead.
+   */
+  private colorsFromCharacter(object: unknown): object is GameCharacter {
+    this.objectChange.trackMyCursor();
+    return object instanceof GameCharacter && canRoleEdit(PeerCursor.myRole);
+  }
+
   /** The bubble the sender asked for on each theme, which travels with the message. */
   private chatBubbles(num: number): ChatBubbleColors {
     const object = this.objectStore.get(this.sendFrom);
-    const source = object instanceof GameCharacter ? object : this.myPeer;
+    const source = this.colorsFromCharacter(object) ? object : this.myPeer;
     this.objectChange.versionOf(source.identifier)();
     return chatBubbleOf(source, num);
   }
@@ -443,7 +506,7 @@ export class ChatInputComponent {
    */
   chatColor(num: number): string {
     const object = this.objectStore.get(this.sendFrom);
-    if (object instanceof GameCharacter) return this.characterChatColor(num);
+    if (this.colorsFromCharacter(object)) return this.characterChatColor(num);
     return this.playerChatColor(num);
   }
 
@@ -527,9 +590,25 @@ export class ChatInputComponent {
   get myPeer(): PeerCursor {
     return PeerCursor.myCursor;
   }
-  /** Every peer cursor in the room, including this seat's own, offered as whisper targets. */
+  /**
+   * Every peer cursor in the room offered as whisper targets: this seat's own, the one whispered to
+   * now, so that it can be put back, and every other that may be chosen, which on a room server
+   * leaves out a seat not logged in, as whoever names itself the same would be handed the whisper.
+   */
   get otherPeers(): PeerCursor[] {
-    return this.objectStore.getObjects(PeerCursor);
+    return this.objectStore
+      .getObjects(PeerCursor)
+      .filter((peer) => peer === this.myPeer || peer.identifier === this.sendTo || mayBeChosen(peer));
+  }
+
+  /**
+   * Moves the whisper onto the cursor its target came back on, as after the target opened the page
+   * again, so that the choice shows who it still goes to.
+   */
+  private followWhisperTarget(): void {
+    if (!this.sendTo) return;
+    const standing = PeerCursor.standingFor(this.sendTo);
+    if (standing && standing.identifier !== this.sendTo) this.sendTo = standing.identifier;
   }
 
   private calcFitHeightInterval: ReturnType<typeof setTimeout> | null = null;
@@ -744,8 +823,9 @@ export class ChatInputComponent {
   showColorSetting() {
     // Pressing it again puts the panel away, rather than laying another one over it.
     if (this.panelService.closeSingle(COLOR_SETTING_PANEL)) return;
+    // A guest, who may not write a piece, sets the colours of their own lines instead.
     const object = this.objectStore.get(this.sendFrom);
-    if (object instanceof GameCharacter) {
+    if (object instanceof GameCharacter && canRoleEdit(PeerCursor.myRole)) {
       const coordinate = this.pointerDeviceService.pointers[0];
       const title = object.name.length
         ? this.t('feature.chat.input.colorSettingWithChar', { name: object.name })

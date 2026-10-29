@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, viewChild, ViewContainerRef } from '@angular/core';
+import { ChangeDetectionStrategy, Component, signal, viewChild, ViewContainerRef } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { TabletopDisplayService } from '@axe/application/tabletop/tabletop-display.service';
@@ -64,6 +64,21 @@ describe('UIPanelComponent', () => {
       fixture.detectChanges();
 
       expect(controls()[0].getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('draws a control of the frame only while it says it is shown', () => {
+      const shown = signal(false);
+      component.panelService.panelControls.set([
+        { icon: 'open_in_new', label: '別ウィンドウ', press: () => undefined, shown: () => shown() },
+      ]);
+      fixture.detectChanges();
+      const opener = () => fixture.nativeElement.querySelector('[data-testid="panel-control-open_in_new"]');
+      expect(opener()).toBeNull();
+
+      shown.set(true);
+      fixture.detectChanges();
+
+      expect(opener()).not.toBeNull();
     });
 
     it('keeps them out of what a window of its own puts away', () => {
@@ -166,6 +181,40 @@ describe('UIPanelComponent', () => {
 
       expect(component.contentMinimized).toBe(false);
       expect(component.isMinimized()).toBe(false);
+    });
+  });
+
+  describe("the names on the bar's own buttons", () => {
+    function button(icon: string): HTMLButtonElement {
+      const found = [...fixture.nativeElement.querySelectorAll('.material-icons')].find(
+        (element) => element.textContent === icon
+      );
+      return found?.closest('button') as HTMLButtonElement;
+    }
+
+    it('names the fold, full-screen and close buttons', () => {
+      fixture.detectChanges();
+
+      expect(button('remove').title).toBe('最小化');
+      expect(button('fullscreen').title).toBe('全画面');
+      expect(button('close').title).toBe('閉じる');
+      expect(button('close').getAttribute('aria-label')).toBe('閉じる');
+    });
+
+    it('calls the full-screen button a way back once the panel is full screen', () => {
+      fixture.detectChanges();
+      component.isFullScreen.set(true);
+      fixture.detectChanges();
+
+      expect(button('fullscreen').title).toBe('元の大きさに戻す');
+    });
+
+    it('names the button that lets a panel shrunk to its content back out', () => {
+      fixture.detectChanges();
+      component.panelService.shrinkRequest$.emit(true);
+      fixture.detectChanges();
+
+      expect(button('open_in_full').title).toBe('元の大きさに戻す');
     });
   });
 
@@ -615,7 +664,7 @@ describe('UIPanelComponent', () => {
   });
 
   describe('timerCheckWindowSize cleanup', () => {
-    it('watches the window size only for a cut-in panel', async () => {
+    it('does not watch the window size for a panel that needs no least size', async () => {
       const priv = component as unknown as { timerCheckWindowSize: ReturnType<typeof setInterval> | null };
       fixture.detectChanges();
       await fixture.whenStable();
@@ -623,9 +672,9 @@ describe('UIPanelComponent', () => {
       expect(priv.timerCheckWindowSize).toBeNull();
     });
 
-    it('watches the window size for a cut-in panel', async () => {
+    it('watches the window size for a panel whose content needs a least size', async () => {
       const priv = component as unknown as { timerCheckWindowSize: ReturnType<typeof setInterval> | null };
-      component.panelService.cutInIdentifier = 'cut-in';
+      component.panelService.leastSize = () => ({ width: 320, height: 180 });
       fixture.detectChanges();
       await fixture.whenStable();
 

@@ -8,6 +8,7 @@ import { GameCharacter } from '@axe/domain/character/game-character';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
 import { BuffManagerPanelComponent } from '@axe/features/buff/buff-manager-panel/buff-manager-panel.component';
+import { expectClosesForAGuest } from '@axe/testing/closes-for-a-guest';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 
 describe('BuffManagerPanelComponent', () => {
@@ -37,6 +38,10 @@ describe('BuffManagerPanelComponent', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('closes once its seat is made a guest, who may no longer write what it writes', () => {
+    expectClosesForAGuest(() => TestBed.createComponent(BuffManagerPanelComponent));
   });
 
   it('leaves out the pieces carrying nothing', () => {
@@ -265,10 +270,61 @@ describe('BuffManagerPanelComponent', () => {
       expect(component.builderCommand()).toBe('&!練技/筋力/+/2/3/turnStart/術者');
     });
 
+    it('writes a division in the amount so that the command still reads as the preview does', () => {
+      component.builderName.set('鼓舞');
+      component.builderStatus.set('攻撃');
+      component.builderOperator.set('+');
+      component.builderAmount.set('(3+4)/2');
+      component.builderRounds.set('1');
+
+      expect(component.builderPreview()).toBe('攻撃+3');
+      expect(component.builderCommand()).toBe('&!鼓舞/攻撃/+/(3+4)÷2/1');
+    });
+
     it('says nothing about an effect it cannot read', () => {
       component.builderAmount.set('たくさん');
 
       expect(component.builderPreview()).toBe('');
+    });
+
+    it('writes how far the status moves again at every count, where it is asked for', () => {
+      component.builderName.set('変身');
+      component.builderStatus.set('器用度');
+      component.builderOperator.set('+');
+      component.builderAmount.set('5');
+      component.builderStep.set('-1');
+      component.builderRounds.set('5');
+
+      expect(component.builderCommand()).toBe('&!変身/器用度/+/5~-1/5');
+      expect(component.builderPreview()).toBe('器用度+5~-1');
+
+      component.builderOperator.set('=');
+      expect(component.builderCommand()).toBe('&!変身/器用度/=/5/5');
+    });
+
+    it('writes several statuses together once more than one is asked for', () => {
+      component.builderName.set('全力攻撃');
+      component.builderStatus.set('追D');
+      component.builderOperator.set('+');
+      component.builderAmount.set('4');
+      component.builderRounds.set('1');
+      component.addBuilderStatus();
+      component.updateBuilderStatus(0, { status: '回避', operator: '-', amount: '2' });
+
+      expect(component.builderCommand()).toBe('&!全力攻撃/追D+4,回避-2/1');
+      expect(component.builderPreview()).toBe('追D+4,回避-2');
+
+      component.removeBuilderStatus(0);
+      expect(component.builderCommand()).toBe('&!全力攻撃/追D/+/4/1');
+    });
+
+    it('lays a buff holding any of its statuses at a value anew, rather than stacking it', () => {
+      component.builderStacks.set(true);
+      component.addBuilderStatus();
+      component.updateBuilderStatus(0, { status: '防護点', operator: '=', amount: '10', step: '1' });
+
+      expect(component.builderCanStack()).toBe(false);
+      expect(component.builderCommand()).toMatch(/^&!.*防護点=10\//);
     });
 
     it('marks the command for a second helping when one is asked for', () => {
@@ -356,9 +412,7 @@ describe('BuffManagerPanelComponent', () => {
     it('takes the chosen buffs off every piece once confirmed, and says so in chat', async () => {
       beRole(PeerRole.GameMaster);
       vi.spyOn(TestBed.inject(ConfirmService), 'ask').mockResolvedValue(true);
-      const said = vi
-        .spyOn(TestBed.inject(ChatMessageService), 'sendSystemMessageToMainTab')
-        .mockReturnValue(undefined as never);
+      const said = vi.spyOn(TestBed.inject(ChatMessageService), 'sendSystemNotice').mockReturnValue(undefined as never);
       component.sweepKind.set('name');
       component.sweepName.set('毒');
 
@@ -367,6 +421,7 @@ describe('BuffManagerPanelComponent', () => {
       expect(names(knight)).toEqual(['加速']);
       expect(names(archer)).toEqual([]);
       expect(said).toHaveBeenCalledOnce();
+      expect(said.mock.calls[0][0]).toBe('round');
     });
 
     it('takes nothing when the game master thinks better of it, or for anyone else', async () => {

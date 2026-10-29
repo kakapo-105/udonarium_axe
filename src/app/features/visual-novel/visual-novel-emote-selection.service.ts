@@ -1,6 +1,5 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
-import { ObjectChangeService } from '@axe/application/sync/object-change.service';
-import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { computed, inject, Injectable, linkedSignal, signal } from '@angular/core';
+import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import {
   hasVnEmote,
   VN_EMOTE_DEFAULT,
@@ -22,9 +21,17 @@ import {
  */
 @Injectable({ providedIn: 'root' })
 export class VisualNovelEmoteSelectionService {
-  private readonly objectChange = inject(ObjectChangeService);
+  private readonly rolePermission = inject(RolePermissionService);
 
-  readonly kind = signal<VnMessageKind>('normal');
+  /**
+   * The kind of the next line. A kind this seat may no longer choose, as a scene change once it is
+   * no longer the game master, falls back to a plain line.
+   */
+  readonly kind = linkedSignal<readonly VnMessageKind[], VnMessageKind>({
+    source: () => this.messageKindOptions(),
+    computation: (options, previous) =>
+      previous && options.includes(previous.value) ? previous.value : VN_EMOTE_DEFAULT.kind,
+  });
   readonly shape = signal<VnBubbleShape>('normal');
   readonly bubbleAnimation = signal<VnBubbleAnimation>('none');
   readonly portraitEmote = signal<VnPortraitEmote>('none');
@@ -43,10 +50,7 @@ export class VisualNovelEmoteSelectionService {
 
   readonly hasSelection = computed(() => hasVnEmote(this.emote()));
 
-  readonly isGameMaster = computed(() => {
-    this.objectChange.trackMyCursor();
-    return PeerCursor.isMyselfGameMaster;
-  });
+  readonly isGameMaster = computed(() => this.rolePermission.isGameMaster());
 
   /** A scene change sweeps the stage for everybody, so only the game master may send one. */
   readonly messageKindOptions = computed(() =>

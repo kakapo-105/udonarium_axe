@@ -67,6 +67,7 @@ const groupOf = (menu: { name: string; subActions?: { name: string }[] }[], name
   menu.find((m) => m.name === name)!.subActions! as ReturnType<typeof buildGameCharacterContextMenu>;
 const callbacks = () => ({
   onShowDetail: vi.fn(),
+  onShowMemo: vi.fn(),
   onShowChatPalette: vi.fn(),
   onShowRemoteController: vi.fn(),
   onShowBuffEdit: vi.fn(),
@@ -150,6 +151,57 @@ describe('buildGameCharacterContextMenu()', () => {
       expect(names).toContain('全員の共有視点を解除する');
       expect(namesIn(menuWith({}))).not.toContain('全員をこのコマの視点にする');
       expect(namesIn(menuWith({}))).not.toContain('全員の共有視点を解除する');
+    });
+  });
+
+  describe('the battle stage', () => {
+    type Entry = { name?: unknown; action?: () => void; subActions?: readonly unknown[] };
+    function battleEntries(char: MutableChar & { battleSide?: string }, extra: object): Entry[] {
+      const menu = buildGameCharacterContextMenu(
+        char as unknown as GameCharacter,
+        50,
+        makeService(),
+        { ...callbacks(), ...extra },
+        t
+      );
+      const buff = groupOf(menu, 'バフ・演出') as unknown as Entry[];
+      return (buff.find((entry) => entry.name === '戦闘カットイン')?.subActions ?? []) as Entry[];
+    }
+
+    it('plays the stage with the piece striking and opens the panel on it', () => {
+      const onPlayBattle = vi.fn();
+      const onShowBattle = vi.fn();
+      const entries = battleEntries(makeChar(), { onPlayBattle, onShowBattle });
+
+      entries.find((entry) => entry.name === 'このコマで攻撃')!.action!();
+      entries.find((entry) => entry.name === '攻撃演出を選ぶ…')!.action!();
+
+      expect(onPlayBattle).toHaveBeenCalled();
+      expect(onShowBattle).toHaveBeenCalled();
+    });
+
+    it('lets only the master put the piece on a side, marking the side it stands on', () => {
+      const onSetBattleSide = vi.fn();
+      const asMaster = battleEntries(
+        { ...makeChar(), battleSide: 'right' },
+        { onShowBattle: vi.fn(), onSetBattleSide }
+      );
+
+      expect(asMaster.map((entry) => entry.name)).toEqual([
+        '攻撃演出を選ぶ…',
+        '左の組に入れる',
+        '✔ 右の組に入れる',
+        '組に入れない',
+      ]);
+      asMaster.find((entry) => entry.name === '組に入れない')!.action!();
+      expect(onSetBattleSide).toHaveBeenCalledWith(null);
+
+      const asPlayer = battleEntries(makeChar(), { onShowBattle: vi.fn() });
+      expect(asPlayer.map((entry) => entry.name)).toEqual(['攻撃演出を選ぶ…']);
+    });
+
+    it('is left out where nothing about the stage is handed in', () => {
+      expect(battleEntries(makeChar(), {})).toEqual([]);
     });
   });
 
@@ -287,7 +339,7 @@ describe('buildGameCharacterContextMenu()', () => {
 
     expect(sections).toEqual([
       ['移動', '移動の仕方', '馬 から降りる'],
-      ['詳細を表示', 'チャットパレットを表示', 'リモコンを表示', 'バフ・演出', '視界と視点', '交戦エリア'],
+      ['詳細を表示', 'メモ', 'チャットパレットを表示', 'リモコンを表示', 'バフ・演出', '視界と視点', '交戦エリア'],
       ['表示と扱い', '駒の状態', '乗り物'],
       ['しまう'],
       ['固定する', 'コピーを作る'],
@@ -310,6 +362,7 @@ describe('buildGameCharacterContextMenu()', () => {
 
     expect(names(menu.filter((m) => m.type !== ContextMenuType.SEPARATOR))).toEqual([
       '詳細を表示',
+      'メモ',
       'チャットパレットを表示',
       'リモコンを表示',
       'バフ・演出',
@@ -352,14 +405,46 @@ describe('buildGameCharacterContextMenu()', () => {
     expect(altitude!.subActions?.length).toBe(3);
   });
 
-  it('opens the sheet, the palette, the remote and the buffs', () => {
+  it('switches every resource slider of the piece at once from the display and handling group', () => {
+    const onSetResourceSliders = vi.fn();
+    const menu = buildGameCharacterContextMenu(
+      makeChar() as unknown as GameCharacter,
+      50,
+      makeService(),
+      { ...callbacks(), onSetResourceSliders },
+      t
+    );
+    const sliders = groupOf(menu, '表示と扱い').find((m) => m.name === 'リソースのスライダー')!;
+    expect(names(sliders.subActions!)).toEqual(['すべて出す', 'すべて隠す']);
+
+    sliders.subActions![0].action!();
+    sliders.subActions![1].action!();
+
+    expect(onSetResourceSliders.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('offers no slider switch where it is left out', () => {
+    const menu = buildGameCharacterContextMenu(
+      makeChar() as unknown as GameCharacter,
+      50,
+      makeService(),
+      callbacks(),
+      t
+    );
+
+    expect(names(groupOf(menu, '表示と扱い'))).not.toContain('リソースのスライダー');
+  });
+
+  it('opens the sheet, the memo, the palette, the remote and the buffs', () => {
     const cb = callbacks();
     const menu = buildGameCharacterContextMenu(makeChar() as unknown as GameCharacter, 50, makeService(), cb, t);
     menu.find((m) => m.name === '詳細を表示')!.action!();
+    menu.find((m) => m.name === 'メモ')!.action!();
     menu.find((m) => m.name === 'チャットパレットを表示')!.action!();
     menu.find((m) => m.name === 'リモコンを表示')!.action!();
     groupOf(menu, 'バフ・演出').find((m) => m.name === 'バフ編集')!.action!();
     expect(cb.onShowDetail).toHaveBeenCalled();
+    expect(cb.onShowMemo).toHaveBeenCalled();
     expect(cb.onShowChatPalette).toHaveBeenCalled();
     expect(cb.onShowRemoteController).toHaveBeenCalled();
     expect(cb.onShowBuffEdit).toHaveBeenCalled();

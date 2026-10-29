@@ -10,7 +10,8 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ChatMessageService } from '@axe/application/chat/chat-message.service';
+import { ChatClockService } from '@axe/application/chat/chat-clock.service';
+import { ChatLineEditService } from '@axe/application/chat/chat-line-edit.service';
 import { LanguageService } from '@axe/application/i18n/language.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
@@ -34,15 +35,16 @@ import {
   VnMessageKind,
   VnPortraitEmote,
 } from '@axe/domain/visual-novel/vn-emote';
+import { vnEmoteLabel } from '@axe/domain/visual-novel/vn-emote-label';
 import { isVnPortraitPosSet, VN_PORTRAIT_POS_UNSET } from '@axe/domain/visual-novel/vn-portrait-position';
 import { VN_STAGE_SLOT_COUNT } from '@axe/domain/visual-novel/vn-stage-cast';
 import { buildBacklogEntryContextMenu } from '@axe/features/visual-novel/visual-novel-backlog/visual-novel-backlog-context-menu';
 import { VisualNovelDirectorService } from '@axe/features/visual-novel/visual-novel-director.service';
-import { vnEmoteLabel } from '@axe/features/visual-novel/visual-novel-emote-label';
 import { VisualNovelEmoteSelectionService } from '@axe/features/visual-novel/visual-novel-emote-selection.service';
 import { readableMessageName, readableMessageText } from '@axe/features/visual-novel/visual-novel-message';
 import { VisualNovelPlaybackService } from '@axe/features/visual-novel/visual-novel-playback.service';
 import { RubyTextComponent } from '@axe/ui/components/ruby-text/ruby-text.component';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { RubyPart, splitRubyNotation } from '@axe/ui/text-decoration/decorate-chat-text';
 import { TranslocoModule } from '@jsverse/transloco';
@@ -66,11 +68,12 @@ export interface VnBacklogEntry {
   selector: 'visual-novel-backlog',
   templateUrl: './visual-novel-backlog.component.html',
   host: { class: 'contents' },
-  imports: [DatePipe, FormsModule, RubyTextComponent, SafePipe, TranslocoModule],
+  imports: [TextTooltipDirective, DatePipe, FormsModule, RubyTextComponent, SafePipe, TranslocoModule],
 })
 export class VisualNovelBacklogComponent {
   private readonly objectChange = inject(ObjectChangeService);
-  private readonly chatMessageService = inject(ChatMessageService);
+  private readonly lineEdit = inject(ChatLineEditService);
+  private readonly clock = inject(ChatClockService);
   private readonly imageService = inject(ImageService);
   private readonly translate = inject(TRANSLATE_FN);
   private readonly language = inject(LanguageService);
@@ -239,7 +242,7 @@ export class VisualNovelBacklogComponent {
     if (!this.viewport.isTouch() && this.wordsPickedOutReach(event.currentTarget)) return;
     if (!this.pointerDeviceService.isAllowedToOpenContextMenu) return;
     const actions = buildBacklogEntryContextMenu(
-      entry.message.changeable,
+      this.canEdit(entry.message),
       { edit: () => this.startEditEntry(entry) },
       this.translate
     );
@@ -259,12 +262,17 @@ export class VisualNovelBacklogComponent {
     );
   }
 
+  /** Whether this reader may edit the line: one they said, where they may still write to it. */
+  protected canEdit(message: ChatMessage): boolean {
+    return this.lineEdit.canEditMessage(message);
+  }
+
   /**
    * Opens the edit form on a line, filled in with its text, its emote and where its portrait
    * stands. Does nothing for a line that may not be changed.
    */
   startEditEntry(entry: { message: ChatMessage; index: number }): void {
-    if (!entry.message.changeable) return;
+    if (!this.canEdit(entry.message)) return;
     const raw = entry.message.text ?? '';
     const parsed = vnEmoteOf(entry.message.vnEmote, raw);
     this.editText.set(vnBodyOf(entry.message.vnEmote, raw));
@@ -294,7 +302,7 @@ export class VisualNovelBacklogComponent {
    */
   saveEditEntry(): void {
     const message = this.playback.logMessages().find((candidate) => candidate.identifier === this.editingIdentifier());
-    if (!message?.changeable) {
+    if (!message || !this.canEdit(message)) {
       this.editingIdentifier.set('');
       return;
     }
@@ -310,7 +318,7 @@ export class VisualNovelBacklogComponent {
       exited: this.editExited(),
     });
     if (message.text !== text || message.vnEmote !== emote) {
-      message.edit(text, emote, this.chatMessageService.getTime());
+      message.edit(text, emote, this.clock.now());
     }
     if (message.vnPortraitPos !== this.editSlot()) {
       message.vnPortraitPos = this.editSlot();

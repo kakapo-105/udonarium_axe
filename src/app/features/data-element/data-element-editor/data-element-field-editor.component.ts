@@ -15,6 +15,7 @@ import {
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { BottomSheetRef } from '@axe/application/ui/bottom-sheet.service';
+import { closeSheetWhenOffTheTable } from '@axe/application/ui/close-sheet-when-off-the-table';
 import { SnackbarService } from '@axe/application/ui/snackbar.service';
 import { DataElement, type DataElementFieldTypeValue } from '@axe/domain/data/data-element';
 import { DataElementTypeGridComponent } from '@axe/features/data-element/data-element-editor/data-element-type-grid.component';
@@ -26,6 +27,7 @@ import {
   tableCellLineage,
 } from '@axe/features/data-element/game-data-element/game-data-element-utils';
 import { GameDataElementFieldOptionsComponent } from '@axe/features/data-element/game-data-element-field-options/game-data-element-field-options.component';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { TranslocoModule } from '@jsverse/transloco';
 
 /** The steps a field can take among the rows beside it, in the order the editor offers them. */
@@ -49,7 +51,7 @@ let nextEditorId = 0;
   selector: 'data-element-field-editor',
   templateUrl: './data-element-field-editor.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DataElementTypeGridComponent, GameDataElementFieldOptionsComponent, TranslocoModule],
+  imports: [TextTooltipDirective, DataElementTypeGridComponent, GameDataElementFieldOptionsComponent, TranslocoModule],
   host: { class: 'block' },
 })
 export class DataElementFieldEditorComponent {
@@ -98,6 +100,7 @@ export class DataElementFieldEditorComponent {
   });
 
   constructor() {
+    closeSheetWhenOffTheTable();
     afterNextRender(() => {
       if (this.focusName()) this.focusNameBox();
     });

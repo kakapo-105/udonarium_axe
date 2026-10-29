@@ -1,9 +1,20 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { encodeI18nMessage } from '@axe/application/i18n/i18n-message';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
+import { leavingLoss, leavingLossText } from '@axe/application/lobby/leaving-loss';
+import { ReportService } from '@axe/application/moderation/report.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { TabletopActionService } from '@axe/application/tabletop/tabletop-action.service';
 import { ConfirmService } from '@axe/application/ui/confirm.service';
@@ -15,7 +26,10 @@ import { transientSignal } from '@axe/application/ui/transient-signal';
 import { VoicePreferenceService } from '@axe/application/voice/voice-preference.service';
 import { Network } from '@axe/core/index';
 import { Logger } from '@axe/core/logging/logger';
-import { saveIdentity } from '@axe/core/storage/identity-storage';
+import { isNetworkIsolated } from '@axe/core/network/network-isolation';
+import { networkMessage$, networkSend } from '@axe/core/network/network-messaging';
+import { transportOf } from '@axe/core/network/transport';
+import { loadIdentity, saveIdentity } from '@axe/core/storage/identity-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { ObjectSynchronizer } from '@axe/core/sync/object-synchronizer';
 import { buildInviteLink } from '@axe/domain/peer/invite-link';
@@ -28,11 +42,25 @@ import {
   roleShortLabelKey,
 } from '@axe/domain/peer/peer-role';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
+import { IdleSeatService } from '@axe/features/lobby/idle-seat.service';
+import { dropInvitationFromAddress } from '@axe/features/lobby/leave-room';
 import { LobbyComponent } from '@axe/features/lobby/lobby/lobby.component';
 import { ReConnectComponent } from '@axe/features/lobby/re-connect/re-connect.component';
+import { roomDeletionMessageKey, RoomDeletionService } from '@axe/features/lobby/room-deletion.service';
+import { ServerWatchService } from '@axe/features/lobby/server-watch.service';
+import { ReportDialogComponent } from '@axe/features/moderation/report-dialog/report-dialog.component';
+import { RoomArchiveEventHandlerService } from '@axe/features/room-archive/room-archive-event-handler.service';
 import { FileSelecterComponent } from '@axe/ui/components/file-selecter/file-selecter.component';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
+
+/** Where an invitation is kept: one for each room and role. */
+function inviteKey(roomKey: string | null, role: PeerRole): string {
+  return `${roomKey ?? ''}:${role}`;
+}
+
+/** How long before it runs out an invitation from the room server is asked for afresh. */
+const INVITE_RENEW_MARGIN_MS = 24 * 60 * 60 * 1000;
 
 /** How this browser takes part: with the others over the network, or alone. */
 export const CONNECTION_MODES = ['online', 'offline'] as const;
@@ -53,6 +81,16 @@ export class PeerMenuComponent {
   protected readonly voice = inject(VoicePreferenceService);
 
   private readonly confirm = inject(ConfirmService);
+  protected readonly idleSeat = inject(IdleSeatService);
+  private readonly roomArchive = inject(RoomArchiveEventHandlerService);
+  /** Whether the page is on its way to reloading into the mode chosen, which takes no second choice. */
+  private switchingMode = false;
+  private readonly roomDeletion = inject(RoomDeletionService);
+
+  /** Whether the room is being deleted from here, which holds the button back. */
+  protected readonly isDeletingRoom = signal(false);
+  /** Why the room could not be deleted from here; empty while nothing went wrong. */
+  protected readonly roomDeletionFailure = signal('');
 
   /**
    * Whether this browser plays on its own, with nobody else to reach, or over the network.
@@ -71,16 +109,26 @@ export class PeerMenuComponent {
   /**
    * Switches between playing online and playing alone, once the reader has confirmed.
    *
-   * The choice is written down in this browser and the page reloads into it. Choosing the mode
-   * already in use does nothing.
+   * Going offline leaves the room, so the question also says what leaving a room server's room now
+   * would lose, the room is kept in this browser's automatic save first, and the invitation is taken
+   * off the address, which would wait for the room offline and go back into it online. The choice is
+   * written down in this browser and the page reloads into it, without the browser asking again
+   * whether to leave, which would keep the page in the mode left. Choosing the mode already in use,
+   * or another while on the way to one, does nothing.
    */
   async chooseConnectionMode(mode: ConnectionMode): Promise<void> {
-    if (mode === this.connectionMode()) return;
-    const asked = await this.confirm.ask(
-      this.t(mode === 'offline' ? 'feature.lobby.peerMenu.confirmOffline' : 'feature.lobby.peerMenu.confirmOnline')
+    if (mode === this.connectionMode() || this.switchingMode) return;
+    const lost = mode === 'offline' ? leavingLossText(leavingLoss(), this.t) : '';
+    const question = this.t(
+      mode === 'offline' ? 'feature.lobby.peerMenu.confirmOffline' : 'feature.lobby.peerMenu.confirmOnline'
     );
+    const asked = await this.confirm.ask(lost ? `${question}\n${lost}` : question);
     if (!asked) return;
+    this.switchingMode = true;
+    await this.roomArchive.flush();
     this.localModePreference.set(mode === 'offline');
+    if (mode === 'offline') dropInvitationFromAddress();
+    Network.letPageGo();
     this.reload();
   }
 
@@ -101,6 +149,7 @@ export class PeerMenuComponent {
   private readonly objectStore = inject(ObjectStore);
   private readonly tableSelecter = inject(TableSelecter);
   private readonly objectChange = inject(ObjectChangeService);
+  private readonly watching = inject(ServerWatchService);
   private readonly chatMessageService = inject(ChatMessageService);
   private readonly destroyRef = inject(DestroyRef);
   networkService = Network;
@@ -110,11 +159,69 @@ export class PeerMenuComponent {
   readonly dispDetailFlag = signal(false);
 
   readonly assignableRoles = ASSIGNABLE_PEER_ROLES;
+  /**
+   * Whether a room server decides the roles, which nobody then takes for themselves. Followed from
+   * the config, which may load after the panel opens at startup.
+   */
+  protected readonly isServerTransport = signal(Network.transport === 'server');
+  /** Whether this seat may report the room to the room server's operator, as anyone in it may. */
+  protected readonly canReport = inject(ReportService).canReport;
+  private readonly objectSynchronizer = inject(ObjectSynchronizer);
   protected readonly roleShortLabelKey = roleShortLabelKey;
   protected readonly roleBadgeClass = roleBadgeClass;
 
-  protected readonly inviteRoles: readonly PeerRole[] = [PeerRole.Player, PeerRole.Guest];
+  /**
+   * The roles a link may invite in. A room server signs an invitation, so its game master may
+   * invite in any role, a fellow game master among them.
+   */
+  protected readonly inviteRoles = computed<readonly PeerRole[]>(() =>
+    this.isServerTransport()
+      ? [PeerRole.GameMaster, PeerRole.Player, PeerRole.Guest]
+      : [PeerRole.Player, PeerRole.Guest]
+  );
   protected readonly inviteRole = signal<PeerRole>(PeerRole.Player);
+  /** The invitations the room server has signed this session, by room and role, while they last. */
+  private readonly serverInvites = signal<ReadonlyMap<string, { invite: string; expiresAt: number }>>(new Map());
+  /**
+   * Bumped when the room server keeps a role as it was, so that the role pickers are drawn again
+   * from the roles as they stand rather than as last picked.
+   */
+  protected readonly roleSelectsDrawn = signal(0);
+  /** The invitations being asked for, so a request is not sent again while one is on its way. */
+  private readonly askingInvites = new Set<string>();
+  /** Whether the room server turned down or did not answer the last request for an invitation. */
+  protected readonly serverInviteFailed = signal(false);
+  /**
+   * Whether the reader is the game master, followed as their cursor changes: the room server may
+   * make them one, or no longer one, at any time.
+   */
+  protected readonly amGameMaster = computed(() => {
+    this.objectChange.networkVersion();
+    this.objectChange.versionOf(PeerCursor.myCursor?.identifier ?? '')();
+    return PeerCursor.isMyselfGameMaster;
+  });
+  /**
+   * On a room server, the roles the reader may switch between: the one the room keeps for them,
+   * which they come back to, and watching. Empty where they have no choice of their own.
+   */
+  protected readonly ownRoleChoices = computed(() => {
+    this.objectChange.networkVersion();
+    this.objectChange.versionOf(PeerCursor.myCursor?.identifier ?? '')();
+    const kept = this.watching.roleToChoose();
+    if (!kept) return [];
+    return [
+      { role: kept, hintKey: 'feature.lobby.peerMenu.comeBackHint', testId: 'peer-menu-kept-role' },
+      { role: PeerRole.Guest, hintKey: 'feature.lobby.peerMenu.watchHint', testId: 'peer-menu-watch' },
+    ];
+  });
+  /** The invitation in the link, on a room server, while the reader is the game master. */
+  private readonly serverInvite = computed(() => {
+    this.objectChange.networkVersion();
+    if (!this.isServerTransport() || !this.amGameMaster()) return null;
+    return this.serverInvites().get(inviteKey(Network.roomKey, this.inviteRole())) ?? null;
+  });
+  /** When the invitation in the link runs out, on a room server; null without one. */
+  protected readonly serverInviteExpiresAt = computed(() => this.serverInvite()?.expiresAt ?? null);
   protected readonly includePasswordInInvite = signal(true);
   protected readonly inviteOverlay = signal(false);
   protected readonly isInviteCopied = transientSignal(false, 2000);
@@ -127,15 +234,47 @@ export class PeerMenuComponent {
     return buildInviteLink(location.origin + location.pathname, {
       roomId: peer.roomId,
       roomName: peer.roomName,
+      roomKey: Network.roomKey ?? '',
       password: this.includePasswordInInvite() ? peer.password : '',
-      role: this.inviteRole(),
+      role: this.isServerTransport() ? null : this.inviteRole(),
       overlay: this.inviteOverlay(),
+      invite: this.serverInvite()?.invite ?? '',
     });
   });
 
   /** This browser's own cursor, which carries the reader's name, icon, role and timeout. */
   get myPeer(): PeerCursor {
     return PeerCursor.myCursor;
+  }
+
+  /** Takes the seat let out for the page left alone back into its room. */
+  protected comeBackFromIdle(): void {
+    this.idleSeat.comeBack();
+  }
+
+  /**
+   * Deletes the room on the room server, once the reader has confirmed. The server then closes it
+   * for everybody, which takes the reader back to waiting; only a refusal or a failure is said here.
+   */
+  /** Asks the reader why they report this room to the room server's operator, and sends it. */
+  protected reportRoom(): void {
+    if (!this.canReport()) return;
+    void this.modalService.open(ReportDialogComponent, { target: 'room', name: Network.peerContext.roomName });
+  }
+
+  async deleteRoom(): Promise<void> {
+    const roomKey = Network.roomKey;
+    if (!roomKey || this.isDeletingRoom()) return;
+    this.isDeletingRoom.set(true);
+    this.roomDeletionFailure.set('');
+    try {
+      const { roomName, roomId } = Network.peerContext;
+      const outcome = await this.roomDeletion.delete({ roomKey, name: roomName, id: roomId });
+      const key = outcome === 'deleted' ? null : roomDeletionMessageKey(outcome);
+      if (key) this.roomDeletionFailure.set(this.t(key));
+    } finally {
+      this.isDeletingRoom.set(false);
+    }
   }
 
   /** Whether the reader is the game master, who may give the other peers their roles. */
@@ -169,21 +308,64 @@ export class PeerMenuComponent {
   /**
    * Takes a role for the reader, which the room sees.
    *
-   * The role is written down in this browser along with the room, so reconnecting keeps it. Does
-   * nothing for a role the reader may not take.
+   * The role is written down in this browser along with the room, so reconnecting keeps it. Outside
+   * a room only the role is written, beside the tab's user id and the room it was last in, which
+   * waiting or playing offline knows nothing of; but a game master's role taken there forgets that
+   * room where the seat was not one, as it would come back as one beside the room's own. Nothing is
+   * written while a replay's board is on the table, cut off from the room, where the role is taken on
+   * the recording's cursor and goes with it. Does nothing for a role the reader may not take.
    */
   setMyRole(role: PeerRole) {
     if (!this.isRoleSelfAssignable(role)) return;
     this.myPeer.role = role;
     this.myPeer.update();
     const peer = Network.peerContext;
+    if (isNetworkIsolated()) return;
+    if (!peer.isRoom) {
+      const saved = loadIdentity();
+      if (!saved) return;
+      const promoted = role === PeerRole.GameMaster && saved.roomRole !== PeerRole.GameMaster;
+      saveIdentity(
+        promoted ? { ...saved, role, roomRole: '', roomId: '', roomName: '', roomKey: '' } : { ...saved, role }
+      );
+      return;
+    }
     saveIdentity({
       userId: peer.userId,
       roomId: peer.roomId,
       roomName: peer.roomName,
       role,
       reConnectPass: this.myPeer.reConnectPass,
+      roomKey: Network.roomKey ?? '',
     });
+  }
+
+  /**
+   * Asks the room server for an invitation in a role, for the game master's link, unless one for
+   * that role is in hand with a day still to run. Anybody else's link carries none.
+   */
+  private async requestServerInvite(role: PeerRole): Promise<void> {
+    if (!this.isServerTransport() || !Network.peerContext.isRoom || !this.isMyselfGameMaster) return;
+    const key = inviteKey(Network.roomKey, role);
+    const held = this.serverInvites().get(key);
+    if (held && held.expiresAt - Date.now() > INVITE_RENEW_MARGIN_MS) return;
+    if (this.askingInvites.has(key)) return;
+    this.askingInvites.add(key);
+    try {
+      const answer = await Network.requestInvite(role);
+      if (!answer.invite || answer.expiresAt == null) {
+        this.serverInviteFailed.set(true);
+        return;
+      }
+      const invites = new Map(this.serverInvites());
+      invites.set(key, { invite: answer.invite, expiresAt: answer.expiresAt });
+      this.serverInvites.set(invites);
+      this.serverInviteFailed.set(false);
+    } catch {
+      this.serverInviteFailed.set(true);
+    } finally {
+      this.askingInvites.delete(key);
+    }
   }
 
   protected async copyInviteLink(): Promise<void> {
@@ -203,18 +385,55 @@ export class PeerMenuComponent {
   }
 
   /**
-   * Gives another peer a role, as the game master. Does nothing for anybody else, for the reader's
-   * own cursor, or for a peer that has gone.
+   * Switches the reader to one of the roles the room server lets them choose: watching, as a guest,
+   * or the role it keeps for them, which they come back to.
+   */
+  protected chooseOwnRole(role: PeerRole): void {
+    if (role === PeerRole.Guest) this.watching.watch();
+    else this.watching.comeBack();
+  }
+
+  /**
+   * Gives another peer a role, as the game master; on a room server, asks the server to. Does
+   * nothing for anybody else, for the reader's own cursor, or for a peer that has gone.
    */
   reassignRole(peerId: string, role: PeerRole) {
     if (!this.isMyselfGameMaster) return;
     const cursor = PeerCursor.findByPeerId(peerId);
     if (!cursor || cursor.isMine) return;
+    // A room server keeps the roles, so the game master asks it, and it changes the cursor
+    // for everybody or says why not.
+    const authority = Network.authorityPeerId;
+    if (authority) {
+      networkSend('ROLE_REQUEST', { peerId, role }, authority);
+      return;
+    }
     cursor.role = role;
     cursor.update();
   }
 
   constructor() {
+    this.objectChange.loadConfig$.subscribe((event) => {
+      this.isServerTransport.set(transportOf(event.config as Record<string, unknown>) === 'server');
+    }, this.destroyRef);
+    networkMessage$.subscribe((message) => {
+      if (message.eventName === 'ROLE_REJECTED') this.roleSelectsDrawn.update((drawn) => drawn + 1);
+    }, this.destroyRef);
+    effect(() => {
+      const role = this.inviteRole();
+      const gameMaster = this.amGameMaster();
+      this.objectChange.networkVersion();
+      untracked(() => {
+        // What the last request came to says nothing of this one, nor of a reader who is no longer
+        // the game master, whose invitations are put away.
+        this.serverInviteFailed.set(false);
+        if (!gameMaster) {
+          this.serverInvites.set(new Map());
+          return;
+        }
+        void this.requestServerInvite(role);
+      });
+    });
     queueMicrotask(() => (this.panelService.title = this.t('common.panel.peerMenu')));
     const timer = setInterval(() => this.dispInfo(), 1000);
     this.destroyRef.onDestroy(() => clearInterval(timer));
@@ -231,7 +450,10 @@ export class PeerMenuComponent {
     });
   }
 
-  /** Opens the lobby, to find a room to join. */
+  /**
+   * Opens the lobby, to find a room to join; on a room server, at any time, since its top is where
+   * the reader logs in or out.
+   */
   showLobby() {
     this.modalService.open(LobbyComponent, {
       title: this.t('feature.lobby.lobby.title'),
@@ -252,25 +474,30 @@ export class PeerMenuComponent {
     });
   }
 
-  /** Whether anybody else is connected, which is when there is a room to connect to again. */
+  /**
+   * Whether there is a room to connect to again: anybody else is connected, the peers listed being
+   * the others, or, on a room server, the server is, which holds the room whoever else is in it.
+   */
   get shouldShowReconnectButton(): boolean {
-    return this.networkService.peerIds.length > 1;
+    return this.networkService.peerIds.length > 0 || this.networkService.authorityPeerId !== null;
   }
 
-  /** Whether there is a connection to ask for the whole room over. */
+  /** Whether there is a connection to ask for the whole room over: a peer, or the room server. */
   get canRequestFullSync(): boolean {
-    return 0 < this.networkService.peerIds.length;
+    return 0 < this.networkService.peerIds.length || this.networkService.authorityPeerId !== null;
   }
 
   /**
    * Asks the connected peers to send the whole room again, and says in the chat how many were
-   * asked.
+   * asked; on a room server, which alone holds the room, that it was asked.
    */
   requestFullSync() {
-    const peerCount = ObjectSynchronizer.instance.requestFullSync();
-    this.chatMessageService.sendSystemMessage(
-      encodeI18nMessage('feature.lobby.peerMenu.fullSyncRequested', { count: peerCount })
-    );
+    const peerCount = this.objectSynchronizer.requestFullSync();
+    const notice =
+      this.networkService.authorityPeerId !== null
+        ? encodeI18nMessage('feature.lobby.peerMenu.fullSyncRequestedFromServer')
+        : encodeI18nMessage('feature.lobby.peerMenu.fullSyncRequested', { count: peerCount });
+    this.chatMessageService.sendSystemNotice('room', notice);
   }
 
   /** Shows the room's password as plain text, or hides it again. */

@@ -7,7 +7,9 @@ const KIND_ICONS: Record<HotbarSlotKind, string> = {
   effect: 'auto_awesome',
   range: 'radar',
   diceDeploy: 'casino',
+  diceRoll: 'autorenew',
   panel: 'article',
+  menu: 'apps',
   focus: 'my_location',
   firstPerson: 'visibility',
   sound: 'volume_up',
@@ -23,7 +25,9 @@ const KIND_COLORS: Record<HotbarSlotKind, string> = {
   effect: '#6a1b9a',
   range: '#1565c0',
   diceDeploy: '#ef6c00',
+  diceRoll: '#ef6c00',
   panel: '#455a64',
+  menu: '#37474f',
   focus: '#1565c0',
   firstPerson: '#00695c',
   sound: '#ad1457',
@@ -39,13 +43,15 @@ const DICE_PATTERN = /\d*[dD]\d+/;
 /**
  * The icon name a slot shows on the bar.
  *
- * An icon the reader chose wins. Otherwise each kind has its own, and a chat slot picks one
+ * An icon the reader chose wins, then the icon of what the slot points at (`resolvedIcon`, as a
+ * menu slot wears its entry's). Otherwise each kind has its own, and a chat slot picks one
  * from its first line: a stand-in for `:` commands, magic for `&`, sparkles for an effect in
  * 《》, a die for a dice roll, and a speech bubble for anything else.
  */
-export function hotbarSlotIcon(kind: HotbarSlotKind, argument: string, icon = ''): string {
+export function hotbarSlotIcon(kind: HotbarSlotKind, argument: string, icon = '', resolvedIcon = ''): string {
   const held = icon.trim();
   if (held.length > 0) return held;
+  if (resolvedIcon.trim().length > 0) return resolvedIcon.trim();
   if (kind !== 'chat') return KIND_ICONS[kind];
   return chatMacroIcon(argument);
 }

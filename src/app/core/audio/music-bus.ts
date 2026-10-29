@@ -1,6 +1,6 @@
 import { SidechainDucker } from '@axe/core/audio/sidechain-ducker';
 import { Logger } from '@axe/core/logging/logger';
-import { AudioPlayer, type ChannelInsert, VolumeType } from '@axe/core/storage/audio-player';
+import { AudioOutput, type ChannelInsert, VolumeType } from '@axe/core/storage/audio-output';
 
 /** The effects the music goes through. */
 export interface MusicEffects {
@@ -77,7 +77,7 @@ const ECHO_TONE_HZ = 3500;
  */
 export class MusicBus implements ChannelInsert {
   private static _instance: MusicBus | null = null;
-  private static watching = false;
+  private static stopWatching: (() => void) | null = null;
   private static duckingWanted = false;
   private static effectsWanted: MusicEffects = NO_MUSIC_EFFECTS;
 
@@ -143,7 +143,7 @@ export class MusicBus implements ChannelInsert {
     const taps = [VolumeType.SE, VolumeType.CUT_IN].map((type) => {
       const tap = context.createAnalyser();
       tap.fftSize = 512;
-      AudioPlayer.channelNode(type).connect(tap);
+      AudioOutput.channelNode(type).connect(tap);
       return tap;
     });
     this.ducker = new SidechainDucker(taps, this);
@@ -159,13 +159,16 @@ export class MusicBus implements ChannelInsert {
    * without making one before then. Asking again does nothing more.
    */
   static installWhenReady(): void {
-    if (MusicBus.watching) return;
-    MusicBus.watching = true;
-    AudioPlayer.whenContextReady((context) => MusicBus.install(context));
+    MusicBus.stopWatching ??= AudioOutput.whenContextReady((context) => MusicBus.install(context));
   }
 
-  /** Lets go of the bus and of what it was asked, as a test starts afresh. Anything playing through it carries on. */
+  /**
+   * Lets go of the bus and of what it was asked, and stops waiting for an audio context, as a test
+   * starts afresh. Anything playing through it carries on.
+   */
   static forget(): void {
+    MusicBus.stopWatching?.();
+    MusicBus.stopWatching = null;
     MusicBus._instance?.ducker.setEnabled(false);
     MusicBus._instance = null;
     MusicBus.duckingWanted = false;
@@ -192,7 +195,7 @@ export class MusicBus implements ChannelInsert {
     MusicBus._instance?.ducker.setEnabled(false);
     try {
       const bus = new MusicBus(context);
-      AudioPlayer.setChannelInsert(VolumeType.MASTER, bus);
+      AudioOutput.setChannelInsert(VolumeType.MASTER, bus);
       MusicBus._instance = bus;
       bus.ducker.setEnabled(MusicBus.duckingWanted);
       bus.applyEffects(MusicBus.effectsWanted, 0);

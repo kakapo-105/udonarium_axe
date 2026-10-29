@@ -1,6 +1,5 @@
 import { signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
-import { ReplayEditorService } from '@axe/application/replay/replay-editor.service';
 import { ReplayPlaybackService } from '@axe/application/replay/replay-playback.service';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
@@ -10,6 +9,7 @@ import {
   type ReplayEvent,
   ReplayEventKind,
 } from '@axe/domain/replay/replay-event';
+import { ReplayEditorService } from '@axe/features/replay/replay-editor.service';
 import { ReplayScriptPanelComponent } from '@axe/features/replay/replay-script-panel/replay-script-panel.component';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 
@@ -116,6 +116,24 @@ describe('ReplayScriptPanelComponent', () => {
     buttonByText('書き出す')?.click();
 
     expect(await saved[0].blob.text()).toContain('**アリス**');
+  });
+
+  it('still shows the layout chosen when it is opened again', async () => {
+    await setup();
+    buttonByText('読み物にする')?.click();
+    fixture.detectChanges();
+    const chosen = fixture.nativeElement.querySelector('select') as HTMLSelectElement;
+    chosen.value = 'script';
+    chosen.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+
+    buttonByText('読み物にする')?.click();
+    fixture.detectChanges();
+    buttonByText('読み物にする')?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect((fixture.nativeElement.querySelector('select') as HTMLSelectElement).value).toBe('script');
   });
 
   it('leaves out what the role of whoever exports it may not see', async () => {

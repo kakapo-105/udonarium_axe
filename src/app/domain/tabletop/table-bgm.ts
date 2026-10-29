@@ -1,24 +1,58 @@
-/** A table's music setting that asks for silence when the table is chosen. */
-export const TABLE_BGM_STOP = '__stop__';
-
-/** What choosing a table does to the room's music. */
-export type TableBgmAction = { kind: 'keep' } | { kind: 'stop' } | { kind: 'play'; identifier: string };
+import { tableBgmModeOf } from '@axe/domain/media/table-bgm';
 
 /**
- * What the room's music should do when a table with this music setting is chosen.
- *
- * An empty setting leaves the music as it is, and so does a track the room no longer holds. A
- * track already playing is left playing rather than started again from the top, and asking for
- * silence when nothing is playing does nothing.
+ * A table's music as automation reads and writes it, in one string: an audio file's identifier to
+ * put on, `'stop'` for silence, or empty to leave the music as it is. The table itself keeps this as
+ * `tableBgm` and `tableBgmIdentifier`.
  */
-export function tableBgmAction(
-  setting: string,
-  playing: { audioIdentifier: string; isPlaying: boolean },
-  hasTrack: (identifier: string) => boolean
-): TableBgmAction {
-  if (setting === '') return { kind: 'keep' };
-  if (setting === TABLE_BGM_STOP) return playing.isPlaying ? { kind: 'stop' } : { kind: 'keep' };
-  if (!hasTrack(setting)) return { kind: 'keep' };
-  if (playing.isPlaying && playing.audioIdentifier === setting) return { kind: 'keep' };
-  return { kind: 'play', identifier: setting };
+export type TableBgmSetting = string;
+
+/** The setting that asks for silence when the table is switched to. */
+export const TABLE_BGM_STOP_SETTING = 'stop';
+
+/** What a table holding its music in `tableBgm` and `tableBgmIdentifier` asks for, as one setting. */
+interface TableBgmFields {
+  tableBgm: string;
+  tableBgmIdentifier: string;
+}
+
+/** A table's music as one setting: its track, `'stop'`, or empty. */
+export function tableBgmSettingOf(table: TableBgmFields): TableBgmSetting {
+  switch (tableBgmModeOf(table)) {
+    case 'play':
+      return table.tableBgmIdentifier;
+    case 'stop':
+      return TABLE_BGM_STOP_SETTING;
+    case '':
+      return '';
+  }
+}
+
+/** Writes one setting into a table's music: a track to put on, `'stop'`, or empty to leave it. */
+export function setTableBgmSetting(table: TableBgmFields, setting: TableBgmSetting): void {
+  if (setting === '' || setting === TABLE_BGM_STOP_SETTING) {
+    table.tableBgm = setting;
+    table.tableBgmIdentifier = '';
+    return;
+  }
+  table.tableBgm = 'play';
+  table.tableBgmIdentifier = setting;
+}
+
+/** What an older version of this fork kept in a table's `bgm` attribute to ask for silence. */
+const LEGACY_STOP = '__stop__';
+
+/**
+ * Moves the music a table saved by an older version of this fork names in its `bgm` attribute into
+ * `tableBgm` and `tableBgmIdentifier`, and forgets the attribute. A table that already names its
+ * music the newer way keeps that.
+ */
+export function adoptLegacyTableBgm(
+  table: TableBgmFields & { getAttribute(name: string): string; removeAttribute(name: string): void }
+): void {
+  const legacy = String(table.getAttribute('bgm') ?? '');
+  if (legacy === '') return;
+  table.removeAttribute('bgm');
+  if (tableBgmModeOf(table) !== '') return;
+  setTableBgmSetting(table, legacy === LEGACY_STOP ? TABLE_BGM_STOP_SETTING : legacy);
 }

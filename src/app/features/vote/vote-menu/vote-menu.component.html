@@ -42,6 +42,13 @@
             name="voteContents"
           />
         </label>
+        <label
+          class="text-ui-muted inline-flex cursor-pointer items-center gap-1 text-[12px] select-none [&_input[type=checkbox]]:cursor-pointer [&_input[type=checkbox]]:[accent-color:var(--ui-accent)]"
+          [title]="'feature.vote.secretHint' | transloco"
+        >
+          <input type="checkbox" [(ngModel)]="isSecret" name="isSecret" data-testid="vote-menu-secret" />
+          <span>{{ 'feature.vote.secret' | transloco }}</span>
+        </label>
       </div>
     }
     <div class="flex items-center gap-2">
@@ -49,7 +56,7 @@
         'feature.vote.targetCount' | transloco: { count: selectedNum() }
       }}</span>
       <button
-        class="bg-ui-accent rounded-ui-sm inline-flex cursor-pointer items-center gap-1 border-none px-3.5 py-1 text-[13px] text-white transition-(--ui-transition) hover:not-disabled:opacity-85 disabled:cursor-not-allowed disabled:opacity-40 [&_.material-icons]:text-[15px]!"
+        class="bg-ui-accent-solid rounded-ui-sm inline-flex cursor-pointer items-center gap-1 border-none px-3.5 py-1 text-[13px] text-white transition-(--ui-transition) hover:not-disabled:opacity-85 disabled:cursor-not-allowed disabled:opacity-40 [&_.material-icons]:text-[15px]!"
         type="button"
         (click)="send()"
         [disabled]="selectedNum() === 0"
@@ -92,7 +99,9 @@
           }
         </div>
         <div class="min-w-0 flex-1">
-          <div class="text-ui-text truncate text-[13px] font-semibold">{{ findPeerName(peer.peerId) }}</div>
+          <div class="text-ui-text truncate text-[13px] font-semibold" [appTextTooltip]="findPeerName(peer.peerId)">
+            {{ findPeerName(peer.peerId) }}
+          </div>
           <div class="text-ui-muted mt-0.5 truncate text-[11px]">
             {{ controlName || ('feature.vote.noControlCharacter' | transloco) }}
           </div>

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ResourceSliderService } from '@axe/application/character/resource-slider.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import {
@@ -9,7 +10,6 @@ import {
   ResourceSoundSet,
   soundSetOnChange,
 } from '@axe/domain/character/resource-feedback';
-import { showsResourceSlider } from '@axe/domain/character/resource-slider';
 import { DataElement, DataElementAttribute } from '@axe/domain/data/data-element';
 import {
   isTableCellField,
@@ -44,6 +44,7 @@ const SHEET_CLASSES =
 })
 export class GameDataElementFieldOptionsComponent {
   private readonly objectChange = inject(ObjectChangeService);
+  private readonly resourceSliders = inject(ResourceSliderService);
   private readonly t = inject(TRANSLATE_FN);
 
   readonly element = input.required<DataElement>();
@@ -225,16 +226,39 @@ export class GameDataElementFieldOptionsComponent {
     if (this.canShowPieceGauge()) this.toggleFlag(DataElementAttribute.GAUGE_INVERTED);
   }
 
-  /** Whether the resource is moved with a slider as well as typed. */
-  hasResourceSlider(): boolean {
-    const element = this.element();
-    this.objectChange.versionOf(element.identifier)();
-    return showsResourceSlider(element);
+  /** Whether the resource's current value may go over its maximum. */
+  isOverResource(): boolean {
+    return this.hasFlag(DataElementAttribute.OVER_RESOURCE);
   }
 
-  /** Moves the resource with a slider as well, or stops. */
+  /**
+   * Lets the resource's current value go over its maximum, or holds it there again, bringing a value
+   * already over it back to the maximum.
+   */
+  toggleOverResource(): void {
+    if (!this.canShowPieceGauge()) return;
+    this.toggleFlag(DataElementAttribute.OVER_RESOURCE);
+    if (this.isOverResource()) return;
+    const element = this.element();
+    const current = Number(element.currentValue);
+    const most = Number(element.value);
+    if (Number.isFinite(current) && Number.isFinite(most) && current > most) element.currentValue = most;
+  }
+
+  /** Whether the resource is moved with a slider as well as typed, by its own choice or the room's. */
+  hasResourceSlider(): boolean {
+    return this.resourceSliders.shows(this.element());
+  }
+
+  /**
+   * Moves the resource with a slider as well, or stops. The choice is written down either way, so a
+   * resource taken off a room's default stays off.
+   */
   toggleResourceSlider(): void {
-    if (this.canShowPieceGauge()) this.toggleFlag(DataElementAttribute.RESOURCE_SLIDER);
+    if (!this.canShowPieceGauge()) return;
+    const element = this.element();
+    element.setAttribute(DataElementAttribute.RESOURCE_SLIDER, this.hasResourceSlider() ? 'false' : 'true');
+    this.objectChange.notifyChanged(element.identifier);
   }
 
   /** Whether the element can play an effect or a sound when it changes, which only a resource can. */

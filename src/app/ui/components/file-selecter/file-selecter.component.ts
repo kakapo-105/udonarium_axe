@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ImageTagLockService } from '@axe/application/file/image-tag-lock.service';
 import { ImageUploadPreferenceService } from '@axe/application/file/image-upload-preference.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
@@ -11,6 +12,7 @@ import { ImageFile } from '@axe/core/storage/image-file';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import { canBrowseImage, ImageTag } from '@axe/domain/media/image-tag';
 import { ImageEditQueue } from '@axe/ui/components/image-editor/image-edit-queue.service';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
 
@@ -19,7 +21,7 @@ import { TranslocoModule } from '@jsverse/transloco';
   templateUrl: './file-selecter.component.html',
   host: { class: 'block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, SafePipe, TranslocoModule],
+  imports: [TextTooltipDirective, FormsModule, SafePipe, TranslocoModule],
 })
 export class FileSelecterComponent {
   private readonly panelService = inject(PanelService);
@@ -29,6 +31,7 @@ export class FileSelecterComponent {
   protected readonly uploadPreference = inject(ImageUploadPreferenceService);
   private readonly objectChange = inject(ObjectChangeService);
   private readonly rolePermission = inject(RolePermissionService);
+  private readonly tagLock = inject(ImageTagLockService);
   private readonly t = inject(TRANSLATE_FN);
 
   isAllowedEmpty: boolean = false;
@@ -38,11 +41,13 @@ export class FileSelecterComponent {
   }
 
   /**
-   * A picture the master is keeping back is not offered to anyone else. Nothing here hides
-   * one already standing on the table: this is about what may be picked, not what is seen.
+   * A picture the master is keeping back is not offered to anyone else, nor one under a tag someone
+   * keeps to themselves to anyone but them and the master. Nothing here hides one already standing
+   * on the table: this is about what may be picked, not what is seen.
    */
   private mayShow(imageFile: ImageFile): boolean {
-    return canBrowseImage(ImageTag.get(imageFile.context.identifier) ?? null, this.rolePermission.canSeeHidden);
+    const tag = ImageTag.get(imageFile.context.identifier) ?? null;
+    return canBrowseImage(tag, this.rolePermission.canSeeHidden(), true, this.tagLock.hides);
   }
 
   /**
@@ -56,6 +61,7 @@ export class FileSelecterComponent {
 
   readonly images = computed(() => {
     this.objectChange.fileVersion();
+    this.tagLock.track();
     const imageFileList: ImageFile[] = [];
     if (this.selectTag() == this.allTag) return this.getAllImage();
 
@@ -145,7 +151,7 @@ export class FileSelecterComponent {
 
   /** Only a seat that may edit the table may bring in new pictures, as in the media library. */
   get canUpload(): boolean {
-    return this.rolePermission.canEditTabletop;
+    return this.rolePermission.canEditTabletop();
   }
 
   /** True while the pictures just chosen are being edited and read into storage. */

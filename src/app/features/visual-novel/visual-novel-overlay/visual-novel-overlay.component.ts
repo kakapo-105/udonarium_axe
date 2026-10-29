@@ -11,10 +11,12 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
+import { ChatPaletteHandle, ChatPaletteRegistryService } from '@axe/application/chat/chat-palette-registry.service';
 import { SystemAvatarKind, SystemAvatarService } from '@axe/application/chat/system-avatar.service';
 import { DiceBotCatalogService } from '@axe/application/dice/dice-bot-catalog.service';
 import { LanguageService } from '@axe/application/i18n/language.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
+import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ImageService } from '@axe/application/storage/image.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { VisionService } from '@axe/application/tabletop/vision.service';
@@ -22,6 +24,7 @@ import { KeyboardInsetService } from '@axe/application/ui/keyboard-inset.service
 import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
 import { sheetPanelTitle } from '@axe/application/ui/sheet-panel';
 import { ViewportService } from '@axe/application/ui/viewport.service';
+import { VisualNovelModeService } from '@axe/application/ui/visual-novel-mode.service';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { portraitNameOf } from '@axe/domain/character/character-portrait';
@@ -29,13 +32,18 @@ import { GameCharacter } from '@axe/domain/character/game-character';
 import { chatColorOf } from '@axe/domain/chat/chat-color';
 import { ChatMessage } from '@axe/domain/chat/chat-message';
 import { canRoleSpeakTab } from '@axe/domain/chat/chat-tab-permission';
+import { isPaletteTabLine } from '@axe/domain/chat/palette-rows';
 import { DataElement } from '@axe/domain/data/data-element';
 import { DiceBot } from '@axe/domain/dice/dice-bot';
-import { Config } from '@axe/domain/peer/config';
 import { Jukebox } from '@axe/domain/media/jukebox';
+import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { canRoleEdit } from '@axe/domain/peer/peer-role';
 import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
+import { keyboardShortcutsOf, shortcutKeysText } from '@axe/domain/ui/keyboard-shortcuts';
+import { isAudienceOffered } from '@axe/domain/ui/menu-command';
 import { encodeVnEmote, VN_EMOTION_MARK_CHARS, vnEmoteOf, VnEmotionMark } from '@axe/domain/visual-novel/vn-emote';
+import { vnEmoteLabel } from '@axe/domain/visual-novel/vn-emote-label';
 import {
   isVnPortraitPosSet,
   toPortraitSlot,
@@ -56,21 +64,15 @@ import {
 } from '@axe/domain/visual-novel/vn-stage-cast';
 import { GameCharacterSheetComponent } from '@axe/features/character/game-character-sheet/game-character-sheet.component';
 import { allowsChat } from '@axe/features/chat/chat-input/chat-input-helpers';
-import {
-  ChatPaletteHandle,
-  ChatPaletteRegistryService,
-} from '@axe/features/chat/chat-palette/chat-palette-registry.service';
 import { ChatStreamPanelService } from '@axe/features/chat/chat-stream/chat-stream-panel.service';
 import { SystemAvatarMenuService } from '@axe/features/chat/system-avatar-menu.service';
 import { VisualNovelBacklogComponent } from '@axe/features/visual-novel/visual-novel-backlog/visual-novel-backlog.component';
 import { VisualNovelDirectionPanelComponent } from '@axe/features/visual-novel/visual-novel-direction-panel/visual-novel-direction-panel.component';
 import { VisualNovelDirectorService } from '@axe/features/visual-novel/visual-novel-director.service';
 import { VisualNovelDisplayPanelComponent } from '@axe/features/visual-novel/visual-novel-display-panel/visual-novel-display-panel.component';
-import { vnEmoteLabel } from '@axe/features/visual-novel/visual-novel-emote-label';
 import { VisualNovelEmotePanelComponent } from '@axe/features/visual-novel/visual-novel-emote-panel/visual-novel-emote-panel.component';
 import { VisualNovelEmoteSelectionService } from '@axe/features/visual-novel/visual-novel-emote-selection.service';
 import { readableMessageName, readableMessageText } from '@axe/features/visual-novel/visual-novel-message';
-import { VisualNovelModeService } from '@axe/features/visual-novel/visual-novel-mode.service';
 import {
   closeVisualNovelPanels,
   VISUAL_NOVEL_PANELS,
@@ -105,17 +107,6 @@ import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
 const OFF_STAGE_LOCATIONS: ReadonlySet<string> = new Set([CONCEALED_LOCATION, 'graveyard']);
 
 const WHEEL_THROTTLE_MS = 160;
-
-const SHORTCUT_HELP_ITEMS: readonly { keys: string; labelKey: string }[] = [
-  { keys: 'Enter / Space / → / ↓', labelKey: 'next' },
-  { keys: '← / ↑', labelKey: 'prev' },
-  { keys: 'Ctrl', labelKey: 'skip' },
-  { keys: 'Home / End', labelKey: 'edges' },
-  { keys: 'A', labelKey: 'autoPlay' },
-  { keys: 'L', labelKey: 'log' },
-  { keys: 'S', labelKey: 'slot' },
-  { keys: 'Esc', labelKey: 'close' },
-];
 
 const EMOTION_MARK_COLORS: Record<Exclude<VnEmotionMark, 'none'>, string> = {
   surprise: 'text-red-500',
@@ -154,6 +145,7 @@ type VisualNovelPopover = 'soundBoard' | 'slotGuide' | 'palette' | 'shortcutHelp
 })
 export class VisualNovelOverlayComponent {
   protected readonly isCompact = inject(ViewportService).isCompact;
+  private readonly rolePermission = inject(RolePermissionService);
   protected readonly keyboardInset = inject(KeyboardInsetService).inset;
   protected readonly isControlsOpen = signal(false);
 
@@ -235,7 +227,14 @@ export class VisualNovelOverlayComponent {
   readonly messageKindOptions = this.emoteSelection.messageKindOptions;
   readonly isGameMaster = this.emoteSelection.isGameMaster;
   readonly slotIndexes = Array.from({ length: VN_STAGE_SLOT_COUNT }, (_, i) => i);
-  readonly shortcutHelpItems = SHORTCUT_HELP_ITEMS;
+  /** The keys novel mode answers, less those for what this reader's role may not do. */
+  readonly shortcutHelpItems = computed(() => {
+    this.objectChange.trackMyCursor();
+    const role = PeerCursor.myRole;
+    return keyboardShortcutsOf('visualNovel')
+      .filter((shortcut) => isAudienceOffered(shortcut.audience ?? 'anyone', role))
+      .map((shortcut) => ({ keys: shortcutKeysText(shortcut), labelKey: shortcut.labelKey }));
+  });
 
   /**
    * The chat tab being read in novel mode; choosing another stops auto play, returns to its newest
@@ -685,7 +684,7 @@ export class VisualNovelOverlayComponent {
     const object = this.objectStore.get(this._sendFrom());
     if (!(object instanceof GameCharacter)) return [] as string[];
     this.objectChange.versionOf(object.identifier)();
-    return object.chatPalette?.getPalette() ?? [];
+    return (object.chatPalette?.getPalette() ?? []).filter((line) => !isPaletteTabLine(line));
   });
 
   readonly canSpeak = computed(() => {
@@ -773,6 +772,11 @@ export class VisualNovelOverlayComponent {
   }
 
   readonly attachedSe = signal<AttachedSound | null>(null);
+  /**
+   * Whether this reader may change the table: play sounds and cut-ins for the room from the board,
+   * as on the jukebox, and move or turn the portrait of the piece they speak as. A guest may not.
+   */
+  readonly mayEditTable = computed(() => this.rolePermission.canEditTabletop());
 
   /**
    * Attaches a sound from the sound board to the next line, played when the line is sent, and
@@ -801,9 +805,11 @@ export class VisualNovelOverlayComponent {
    * Mirrors the speaker's portrait for the lines they send, or turns it back.
    *
    * The setting lives on the character's sheet, where a flip field is added next to the portrait
-   * position when it has none.
+   * position when it has none, under a name of its own: it is found by its field name, and a row
+   * deleted from the sheet stays deleted under its name on a room server.
    */
   toggleSpeakerFlip(): void {
+    if (!this.mayEditTable()) return;
     const object = this.objectStore.get(this._sendFrom());
     if (!(object instanceof GameCharacter)) return;
     let element = object.detailDataElement?.getFirstElementByName('FLIP') ?? null;
@@ -811,7 +817,7 @@ export class VisualNovelOverlayComponent {
       const posElement = object.detailDataElement?.getFirstElementByName('POS');
       const parent = posElement?.parent instanceof DataElement ? posElement.parent : object.detailDataElement;
       if (!parent) return;
-      element = DataElement.create('FLIP', 0, {}, `FLIP_${object.identifier}`);
+      element = DataElement.create('FLIP', 0, {});
       parent.appendChild(element);
     }
     element.value = Number(element.value) === 1 ? 0 : 1;
@@ -1074,7 +1080,7 @@ export class VisualNovelOverlayComponent {
    * the speaker is not a character.
    */
   toggleSlotGuide(): void {
-    if (this.speakerSlot() < 0) return;
+    if (this.speakerSlot() < 0 || !this.mayEditTable()) return;
     this.togglePopover('slotGuide');
   }
 
@@ -1135,7 +1141,7 @@ export class VisualNovelOverlayComponent {
    * closes the guide.
    */
   pickSlot(slot: number): void {
-    const character = this.speakerCharacter();
+    const character = this.mayEditTable() ? this.speakerCharacter() : null;
     if (character) character.vnPortraitPos = Math.min(VN_STAGE_SLOT_COUNT - 1, Math.max(0, slot));
     this.closePopovers();
   }
@@ -1145,7 +1151,7 @@ export class VisualNovelOverlayComponent {
    * guide.
    */
   followChatSlot(): void {
-    const character = this.speakerCharacter();
+    const character = this.mayEditTable() ? this.speakerCharacter() : null;
     if (character) character.vnPortraitPos = VN_PORTRAIT_POS_UNSET;
     this.closePopovers();
   }
@@ -1269,7 +1275,7 @@ export class VisualNovelOverlayComponent {
         undefined,
         emote
       );
-      if (attachedSe) this.jukebox?.play(attachedSe.identifier);
+      if (attachedSe && this.mayEditTable()) this.jukebox?.play(attachedSe.identifier);
     });
     if (this.selectedKind() === 'scene') this.scene.playTransition();
     this.attachedSe.set(null);
@@ -1282,8 +1288,10 @@ export class VisualNovelOverlayComponent {
     return object instanceof GameCharacter ? object.selectedPortraitIndex : 0;
   }
 
+  /** The colour a line goes in: the character's, but a guest's own, as the chat input has it. */
   private colorOf(sendFrom: string): string {
     const object = this.objectStore.get(sendFrom);
-    return chatColorOf(object instanceof GameCharacter ? object : PeerCursor.myCursor, 0);
+    const fromCharacter = object instanceof GameCharacter && canRoleEdit(PeerCursor.myRole);
+    return chatColorOf(fromCharacter ? object : PeerCursor.myCursor, 0);
   }
 }

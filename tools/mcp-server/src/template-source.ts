@@ -48,8 +48,12 @@ function composedKeys<T>(index: Record<string, T>): Record<string, T> {
 }
 
 const SAVED_PICTURE = /^([0-9a-f]{64})\.([a-z0-9]+)$/;
-/** Where a saved room names a sound: a table's music, a cut-in's sound and the sounds of its scene. */
+/**
+ * Where a saved room names a sound: a table's music (`tableBgmIdentifier`, or `bgm` as an older
+ * version of the fork saved it), a cut-in's sound and the sounds of its scene.
+ */
 const HEARD = [
+  /\btableBgmIdentifier="([0-9a-f]{64})"/g,
   /\bbgm="([0-9a-f]{64})"/g,
   /\baudioIdentifier="([0-9a-f]{64})"/g,
   /&quot;a&quot;:&quot;([0-9a-f]{64})&quot;/g,

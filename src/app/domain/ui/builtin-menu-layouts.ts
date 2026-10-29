@@ -43,11 +43,17 @@ const FAB: MenuLayout = {
       'diceTableSetting',
       'handRail',
     ]),
-    group('media', 'movie', 'app.fab.media', ['images', 'jukebox', 'cutIn', 'effectLibrary']),
-    group('saveLoad', 'sd_storage', 'app.fab.saveLoad', ['save', 'zipLoad', 'importCharacter'], {
-      testId: 'fab-save-load',
-      menuTestId: 'save-load',
-    }),
+    group('media', 'movie', 'app.fab.media', ['images', 'jukebox', 'cutIn', 'effectLibrary', 'battleCutIn']),
+    group(
+      'saveLoad',
+      'sd_storage',
+      'app.fab.saveLoad',
+      ['save', 'zipLoad', 'importCharacter', 'startRoomKeep', 'startRoomForget'],
+      {
+        testId: 'fab-save-load',
+        menuTestId: 'save-load',
+      }
+    ),
     group(
       'widgets',
       'widgets',
@@ -120,6 +126,7 @@ const PL_TOOLBAR: MenuLayout = {
     item('buffs'),
     item('speechBubbles'),
     item('buffView'),
+    item('buffIconSize'),
     item('turnIndicator'),
     item('activeCharacter'),
   ],

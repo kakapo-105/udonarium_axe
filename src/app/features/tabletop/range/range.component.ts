@@ -19,7 +19,6 @@ import { ObjectChangeService } from '@axe/application/sync/object-change.service
 import { EngagementZoneService } from '@axe/application/tabletop/engagement-zone.service';
 import { PieceTargetService } from '@axe/application/tabletop/piece-target.service';
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
-import { TabletopActionService } from '@axe/application/tabletop/tabletop-action.service';
 import { VisionService } from '@axe/application/tabletop/vision.service';
 import { ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
@@ -27,18 +26,20 @@ import { PieceContextMenuService } from '@axe/application/ui/piece-context-menu.
 import { sheetPanelBox } from '@axe/application/ui/sheet-panel';
 import { sheetPanelTitle } from '@axe/application/ui/sheet-panel';
 import { UiSignalService } from '@axe/application/ui/ui-signal.service';
-import { ObjectStore } from '@axe/core/sync/object-store';
+import { isInStore, ObjectStore } from '@axe/core/sync/object-store';
 import { PERF_RANGE_RENDER, perfCounters } from '@axe/core/util/perf-counters';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
 import { cellPatternBoundingBox, parseCellPattern } from '@axe/domain/tabletop/cell-pattern';
 import { GameTable } from '@axe/domain/tabletop/game-table';
 import { isHexGrid } from '@axe/domain/tabletop/hex-geometry';
+import { squareCentreAt } from '@axe/domain/tabletop/move/move-grid';
 import { multiAngleFontScaleFactor } from '@axe/domain/tabletop/multi-angle-font-scale';
 import { RangeArea } from '@axe/domain/tabletop/range';
 import { rangeCovers } from '@axe/domain/tabletop/range-coverage';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { ObjectPanelService } from '@axe/features/panels/object-panel.service';
+import { CreateObjectMenuService } from '@axe/features/tabletop/create-menu/create-object-menu.service';
 import { buildRangeContextMenuModel } from '@axe/features/tabletop/range/range-context-menu';
 import {
   initialRangeClip,
@@ -46,8 +47,7 @@ import {
   RangeClip,
   rangeClipPathCss,
   rangeQuadrantCells,
-} from '@axe/features/tabletop/range/range-paint';
-import { RangeDockingCharacterComponent } from '@axe/features/tabletop/range-docking-character/range-docking-character.component';
+} from '@axe/infrastructure/tabletop/range/range-paint';
 import { MovableOption } from '@axe/ui/directives/movable.directive';
 import { MovableDirective } from '@axe/ui/directives/movable.directive';
 import { RotableOption } from '@axe/ui/directives/rotable.directive';
@@ -68,7 +68,7 @@ import { translateZCss, Z_OFFSET_RANGE_PX } from '@axe/ui/tabletop/z-offset';
   },
 })
 export class RangeComponent {
-  private readonly tabletopActionService = inject(TabletopActionService);
+  private readonly createMenu = inject(CreateObjectMenuService);
   private readonly contextMenuService = inject(ContextMenuService);
   private readonly pieceContextMenu = inject(PieceContextMenuService);
   private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -95,7 +95,7 @@ export class RangeComponent {
   readonly clipPath = computed<string>(() => {
     this._clipVersion();
     const range = this.range();
-    return rangeClipPathCss(this.painted() ?? initialRangeClip(range.type), range, this.gridSize);
+    return rangeClipPathCss(this.painted() ?? initialRangeClip(range.type), range, this.squarePx);
   });
 
   /** What the canvases were last painted to be cut to, or nothing before the first paint. */
@@ -160,11 +160,11 @@ export class RangeComponent {
     return ['SQUARE', 'RHOMBUS', 'TRIANGLE', 'PENTAGON', 'HEXAGON', 'CUSTOM'].includes(this.range().type);
   });
 
-  readonly rotateGrabDistancePx = computed(() => Math.max(1, this.length()) * this.gridSize);
+  readonly rotateGrabDistancePx = computed(() => Math.max(1, this.length()) * this.tabletopService.squarePx());
 
   readonly singleRotateGrabX = 0;
 
-  readonly singleRotateGrabY = computed(() => -Math.max(1, this.length()) * this.gridSize);
+  readonly singleRotateGrabY = computed(() => -Math.max(1, this.length()) * this.tabletopService.squarePx());
 
   readonly altitude = computed(() => {
     this.rangeVersion();
@@ -191,6 +191,14 @@ export class RangeComponent {
   private readonly _clipVersion = signal(0);
 
   /** The table's grid cell size in pixels, which the range's length, width and altitude are measured in. */
+  /**
+   * The size of a square in px, which a range is counted and painted in: a cell, or several across
+   * on a table that counts squares of several cells.
+   */
+  get squarePx(): number {
+    return this.tabletopService.squarePx();
+  }
+
   get gridSize(): number {
     return this.tabletopService.gridSize();
   }
@@ -215,7 +223,7 @@ export class RangeComponent {
       (e) => {
         if (!this._initialized) return;
         const range = this.range();
-        if (e.identifier === range.followingCharacterIdentifier) range.following();
+        if (e.identifier === range.followingCharacterIdentifier) range.following(this.gridSize);
         this.setRange();
       },
       this.destroyRef
@@ -224,6 +232,7 @@ export class RangeComponent {
       target: this.range,
       collideLayers: ['terrain'],
       transformCssOffset: translateZCss(Z_OFFSET_RANGE_PX),
+      snapToSquare: (_, at) => squareCentreAt(this.currentTable, at),
       snapOrigin: () => {
         const half = this.gridSize / 2;
         const snapXY = isHexGrid(this.currentTable.gridType) ? 0 : half;
@@ -277,7 +286,7 @@ export class RangeComponent {
       objectPosition,
       this.objectStore,
       this.inventoryService,
-      this.tabletopActionService,
+      this.createMenu,
       () => this.dockingWindowOpen(),
       (r) => this.showDetail(r),
       this.translateFn,
@@ -317,7 +326,7 @@ export class RangeComponent {
     const inside = this.objectStore
       .getObjects<GameCharacter>(GameCharacter)
       .filter((piece) => piece.isVisibleOnTable && piece.offField !== '1' && this.vision.isTokenVisible(piece))
-      .filter((piece) => rangeCovers(shape, this.gridSize, reading.pointOf(piece)) === true);
+      .filter((piece) => rangeCovers(shape, this.squarePx, reading.pointOf(piece)) === true);
     this.pieceTarget.setOnly(inside);
   }
 
@@ -331,8 +340,15 @@ export class RangeComponent {
       height: 200,
     };
     option.title = this.translateFn('feature.tabletop.panel.rangeFollow');
-    const component = this.panelService.open<RangeDockingCharacterComponent>(RangeDockingCharacterComponent, option);
-    component.tabletopObject = this.range();
+    const range = this.range();
+    this.panelService.openLazy(
+      () =>
+        import('@axe/features/tabletop/range-docking-character/range-docking-character.component').then(
+          (m) => m.RangeDockingCharacterComponent
+        ),
+      { ...option, stillWanted: () => isInStore(range) },
+      (component) => (component.tabletopObject = range)
+    );
   }
 
   /** Plays the pick-up sound when a drag or a turn of the range begins. */
@@ -356,8 +372,7 @@ export class RangeComponent {
       title: this.translateFn('feature.range.custom.editorTitle'),
       ...sheetPanelBox(coordinate, 640, 540),
     };
-    const { RangeShapeEditorComponent } =
-      await import('@axe/features/tabletop/range-shape-editor/range-shape-editor.component');
+    const { RangeShapeEditorComponent } = await import('@axe/features/range-shape-editor/range-shape-editor.component');
     const editor = this.panelService.open(RangeShapeEditorComponent, option);
     editor.initialize({
       name: range.name,
@@ -406,7 +421,7 @@ export class RangeComponent {
     const range = this.range();
     this.painted.set(
       paintRange(gridCanvasRef.nativeElement, rangeCanvasRef.nativeElement, range, {
-        gridSize: this.gridSize,
+        gridSize: this.squarePx,
         gridType: this.currentTable.gridType,
         docked: this.objectStore.get(range.followingCharacterIdentifier) !== null,
         degree,

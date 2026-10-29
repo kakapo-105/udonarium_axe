@@ -152,6 +152,15 @@ export class GameObject {
   }
 
   /**
+   * Puts the change count past the given one, for an object made again under a name whose last
+   * holder had been through more changes, so a copy of that one held elsewhere loses to this.
+   * Nothing is sent.
+   */
+  outrank(majorVersion: number) {
+    if (this.context.majorVersion <= majorVersion) this.context.majorVersion = majorVersion + 1;
+  }
+
+  /**
    * Takes on a received context, replacing the version and all of the sync data.
    *
    * A null context or one for another identifier is ignored. Versions are not compared here, that is
@@ -182,6 +191,11 @@ export class GameObject {
     return this.context.majorVersion;
   }
 
+  /** The random fraction that version adds to the count of changes. */
+  get minorVersion(): number {
+    return this.context.minorVersion;
+  }
+
   /**
    * A snapshot of the object as it travels to peers: alias, identifier, version and sync data.
    *
@@ -195,6 +209,14 @@ export class GameObject {
       minorVersion: this.context.minorVersion,
       syncData: structuredClone(this.context.syncData),
     };
+  }
+
+  /**
+   * The sync data as it stands, to read without the copy `toContext` makes, as when looking through
+   * the whole room. Nothing is to be changed through it.
+   */
+  readSyncData(): Readonly<ObjectContext['syncData']> {
+    return this.context.syncData;
   }
 
   /** The object, and for nodes their children, as the XML used by saved rooms and by clone. */

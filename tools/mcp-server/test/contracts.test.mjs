@@ -402,14 +402,14 @@ async function workspace(work) {
 }
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
-test('loads a room template from this machine, finding the sounds its tables name by their content', async () => {
+test('loads a room template from this machine, finding the sounds its tables name by their content, the newer way or the older', async () => {
   await workspace(async ({ root, templates, audio }) => {
     const picture = Buffer.from([1, 2, 3]);
     const music = Buffer.from([4, 5, 6]);
     const lost = 'e'.repeat(64);
     await writeFile(
       path.join(templates, 'battle', 'data.xml'),
-      `<room><game-table name="上級戦闘" imageIdentifier="${sha(picture)}" bgm="${sha(music)}"></game-table>` +
+      `<room><game-table name="上級戦闘" imageIdentifier="${sha(picture)}" tableBgm="play" tableBgmIdentifier="${sha(music)}"></game-table>` +
         `<game-table name="シナリオ前" bgm="${lost}"></game-table></room>`
     );
     await writeFile(path.join(templates, 'battle', 'config.xml'), '<config _defaultDiceBot="SwordWorld2.5"></config>');

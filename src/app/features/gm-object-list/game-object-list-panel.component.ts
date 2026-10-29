@@ -2,14 +2,18 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FormsModule } from '@angular/forms';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
+import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
+import { NpcDragService } from '@axe/application/tabletop/npc-drag.service';
 import { TableFocusService } from '@axe/application/tabletop/table-focus.service';
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { ContextMenuAction, ContextMenuSeparator, ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
+import { PieceDragGhostService } from '@axe/application/ui/piece-drag-ghost.service';
 import { buildSurfaceSwitchContextMenu } from '@axe/application/ui/surface-switch-context-menu';
 import { buildCopyAction, buildLockToggleAction } from '@axe/application/ui/tabletop-context-menu-actions';
-import { ObjectStore } from '@axe/core/sync/object-store';
+import { capturePointer, releasePointer } from '@axe/core/input/pointer-capture';
+import { isInStore, ObjectStore } from '@axe/core/sync/object-store';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { CharacterSheetTarget } from '@axe/domain/tabletop/character-sheet-target';
@@ -22,8 +26,7 @@ import {
   OBJECT_LIST_TYPES,
   ObjectRow,
 } from '@axe/features/gm-object-list/game-object-list-row';
-import { NpcDragService } from '@axe/features/gm-tools/npc-bar/npc-drag.service';
-import { LightSettingsComponent } from '@axe/features/tabletop/light-settings/light-settings.component';
+import { LightSettingsComponent } from '@axe/features/light-settings/light-settings.component';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
 
@@ -38,6 +41,7 @@ type DisclosableArg = Parameters<typeof buildDisclosureContextMenu>[0];
 })
 export class GameObjectListPanelComponent {
   private readonly panelService = inject(PanelService);
+  private readonly rolePermission = inject(RolePermissionService);
   private readonly objectStore = inject(ObjectStore);
   private readonly objectChange = inject(ObjectChangeService);
   private readonly contextMenuService = inject(ContextMenuService);
@@ -45,6 +49,7 @@ export class GameObjectListPanelComponent {
   private readonly tabletopService = inject(TabletopService);
   private readonly tableFocus = inject(TableFocusService);
   private readonly npcDrag = inject(NpcDragService);
+  private readonly pieceGhost = inject(PieceDragGhostService);
   protected readonly t = inject(TRANSLATE_FN);
 
   private dragPending: { row: ObjectRow; startX: number; startY: number; dragging: boolean } | null = null;
@@ -75,10 +80,7 @@ export class GameObjectListPanelComponent {
     return result;
   });
 
-  protected readonly isGameMaster = computed(() => {
-    this.objectChange.trackMyCursor();
-    return PeerCursor.isMyselfGameMaster;
-  });
+  protected readonly isGameMaster = computed(() => this.rolePermission.isGameMaster());
 
   protected readonly rows = computed<ObjectRow[]>(() => {
     this.objectChange.trackMyCursor();
@@ -237,7 +239,7 @@ export class GameObjectListPanelComponent {
     if (row.typeKey !== 'character' || event.button !== 0) return;
     if ((event.target as HTMLElement).closest('button')) return;
     this.dragPending = { row, startX: event.clientX, startY: event.clientY, dragging: false };
-    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+    capturePointer(event.currentTarget, event.pointerId);
   }
 
   protected onRowPointerMove(event: PointerEvent): void {
@@ -247,10 +249,11 @@ export class GameObjectListPanelComponent {
       if (Math.hypot(event.clientX - pending.startX, event.clientY - pending.startY) < 6) return;
       pending.dragging = true;
       if (pending.row.object instanceof GameCharacter) {
-        this.npcDrag.begin(pending.row.object, event.clientX, event.clientY);
+        this.npcDrag.begin(pending.row.object);
+        this.pieceGhost.show(pending.row.object, event.clientX, event.clientY);
       }
     } else {
-      this.npcDrag.move(event.clientX, event.clientY);
+      this.pieceGhost.move(event.clientX, event.clientY);
     }
   }
 
@@ -258,11 +261,21 @@ export class GameObjectListPanelComponent {
     const pending = this.dragPending;
     this.dragPending = null;
     if (!pending) return;
-    (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
+    releasePointer(event.currentTarget, event.pointerId);
     if (!pending.dragging) return;
     this.suppressNextClick = true;
+    this.pieceGhost.hide();
     const target = document.elementFromPoint(event.clientX, event.clientY);
     this.npcDrag.end(!!target?.closest('.npc-bar-dropzone'));
+  }
+
+  /** Puts away a carry the browser called off, as a touch taken for a scroll, with nothing let go anywhere. */
+  protected onRowPointerCancel(): void {
+    const pending = this.dragPending;
+    this.dragPending = null;
+    if (!pending?.dragging) return;
+    this.pieceGhost.hide();
+    this.npcDrag.end(false);
   }
 
   protected openRowMenu(event: MouseEvent, row: ObjectRow): void {
@@ -276,7 +289,7 @@ export class GameObjectListPanelComponent {
   }
 
   private openDetail(object: TabletopObject): void {
-    const option: PanelOption = { width: 700, height: 600, left: 100 };
+    const option: PanelOption = { width: 700, height: 600, left: 100, stillWanted: () => isInStore(object) };
     this.panelService.openLazy(
       () =>
         import('@axe/features/character/game-character-sheet/game-character-sheet.component').then(

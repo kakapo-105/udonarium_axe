@@ -13,6 +13,7 @@ import {
   buildToggleAction,
 } from '@axe/application/ui/tabletop-context-menu-actions';
 import { Network } from '@axe/core/index';
+import type { BattleSide } from '@axe/domain/battle/battle-lineup';
 import { BUFF_VIEW_MODES } from '@axe/domain/character/buff-view-mode';
 import { heldDiceOf } from '@axe/domain/character/character-dice';
 import { GameCharacter } from '@axe/domain/character/game-character';
@@ -31,6 +32,8 @@ export interface RegisteredRangeShape {
 
 export interface GameCharacterContextMenuCallbacks {
   onShowDetail: () => void;
+  /** Opens the memo kept with the piece. */
+  onShowMemo: () => void;
   onShowChatPalette: () => void;
   onShowRemoteController: () => void;
   onShowBuffEdit: () => void;
@@ -39,6 +42,17 @@ export interface GameCharacterContextMenuCallbacks {
   onInvokeRangeShape?: (value: RangeShapeFieldValue) => void;
   onInvokeEffect?: (name: string) => void;
   onDeployDice?: () => void;
+  /** Opens the battle stage's panel on the piece, to choose what it strikes with. */
+  onShowBattle?: () => void;
+  /** Plays the battle stage with the piece striking. Left out for a seat that may not play it. */
+  onPlayBattle?: () => void;
+  /** Puts the piece on a side of the battle stage's lineup, or takes it off. Left out but for the master. */
+  onSetBattleSide?: (side: BattleSide | null) => void;
+  /**
+   * Gives every resource of the piece a slider, or takes them all away. Left out for a seat that may
+   * not, or a piece with no resource.
+   */
+  onSetResourceSliders?: (shown: boolean) => void;
   /** Opens a move to be worked out. Left out for a piece with no reach to work one out in. */
   onPlanMove?: () => void;
   /** Aims at the piece, or stops aiming at it. The keys do the same on a board with a keyboard. */
@@ -109,6 +123,36 @@ export function collectRegisteredEffects(char: GameCharacter): string[] {
   };
   for (const child of sheetElementsOf(char)) walk(child);
   return names;
+}
+
+/**
+ * The battle stage, from the piece: play it with the piece striking, choose what it strikes with,
+ * and, for the master, the side of the lineup it stands on.
+ */
+function buildBattleAction(
+  char: GameCharacter,
+  callbacks: GameCharacterContextMenuCallbacks,
+  t: TranslateFn
+): ContextMenuAction {
+  const sides: (BattleSide | null)[] = ['left', 'right', null];
+  return {
+    name: t('feature.character.contextMenu.battle'),
+    action: undefined,
+    subActions: [
+      ...(callbacks.onPlayBattle
+        ? [{ name: t('feature.character.contextMenu.battlePlay'), action: () => callbacks.onPlayBattle?.() }]
+        : []),
+      { name: t('feature.character.contextMenu.battleEffect'), action: () => callbacks.onShowBattle?.() },
+      ...(callbacks.onSetBattleSide
+        ? sides.map((side) => ({
+            name:
+              (char.battleSide === (side ?? '') ? '✔ ' : '') +
+              t(`feature.character.contextMenu.battleSide_${side ?? 'none'}`),
+            action: () => callbacks.onSetBattleSide?.(side),
+          }))
+        : []),
+    ],
+  };
 }
 
 function capitalize(value: string): string {
@@ -199,6 +243,10 @@ export function buildGameCharacterContextMenuModel(
     ...(callbacks.onShowEveryone
       ? [{ name: t('feature.character.contextMenu.showEveryone'), action: () => callbacks.onShowEveryone?.() }]
       : []),
+    {
+      name: t('feature.character.contextMenu.memo'),
+      action: () => callbacks.onShowMemo(),
+    },
   ];
   const chatActions: ContextMenuAction[] = [
     {
@@ -249,6 +297,7 @@ export function buildGameCharacterContextMenuModel(
           } as ContextMenuAction,
         ]
       : []),
+    ...(callbacks.onShowBattle ? [buildBattleAction(char, callbacks, t)] : []),
     ...(registeredEffects.length > 0 && callbacks.onInvokeEffect
       ? [
           {
@@ -407,6 +456,21 @@ export function buildGameCharacterContextMenuModel(
             SoundEffect.play(PresetSound.sweep);
           },
         },
+    ...(callbacks.onSetResourceSliders
+      ? [
+          {
+            name: t('feature.character.contextMenu.resourceSliders'),
+            action: undefined,
+            subActions: [true, false].map((shown) => ({
+              name: t(`feature.character.contextMenu.resourceSliders${shown ? 'ShowAll' : 'HideAll'}`),
+              action: () => {
+                callbacks.onSetResourceSliders?.(shown);
+                SoundEffect.play(PresetSound.sweep);
+              },
+            })),
+          },
+        ]
+      : []),
   ];
   const displayActions: ContextMenuAction[] = [
     altitudeAction,

@@ -9,6 +9,17 @@ export type CalcEnv = Record<string, number>;
  */
 export type CalcLookup = (name: string) => number;
 
+export interface CalcOptions {
+  /**
+   * How a division comes out: as a fraction (`exact`, the default), or rounded down at each division
+   * (`floor`), the way a dice bot's sums are.
+   *
+   * Rounding down at each division would leave nothing for `ceil` or `round` to round, so inside
+   * floor, ceil and round the divisions stay exact and the function does the rounding.
+   */
+  division?: 'exact' | 'floor';
+}
+
 /**
  * Works out a calculating field's formula: numbers, field names, `+ - * / **`, parentheses, the comparisons
  * `< <= > >= == !=` (1 when true, 0 when not) and the functions floor, ceil, round, abs, min, max and
@@ -17,10 +28,10 @@ export type CalcLookup = (name: string) => number;
  * A name with spaces or symbols is written in square brackets. Names are matched without regard to case.
  * A formula that does not parse, or names a field with no number, gives NaN rather than throwing.
  */
-export function evalCalcFormula(formula: string, env: CalcEnv | CalcLookup): number {
+export function evalCalcFormula(formula: string, env: CalcEnv | CalcLookup, options: CalcOptions = {}): number {
   try {
     const tokens = tokenize(formula);
-    const parser = new Parser(tokens, typeof env === 'function' ? env : foldCase(env));
+    const parser = new Parser(tokens, typeof env === 'function' ? env : foldCase(env), options.division === 'floor');
     const result = parser.parseExpr();
     if (parser.pos !== tokens.length) return NaN;
     return result;
@@ -147,11 +158,17 @@ const COMPARISONS: Record<string, (left: number, right: number) => boolean> = {
   '!=': (left, right) => left !== right,
 };
 
+/** The functions whose own rounding takes over from rounding at each division. */
+const ROUNDING_FUNCTIONS = new Set(['floor', 'ceil', 'round']);
+
 class Parser {
   pos = 0;
+  /** How many floor, ceil or round calls the parser is inside, where divisions stay exact. */
+  private insideRounding = 0;
   constructor(
     private readonly tokens: Token[],
-    private readonly env: CalcLookup
+    private readonly env: CalcLookup,
+    private readonly floorDivision: boolean = false
   ) {}
 
   peek(): Token | undefined {
@@ -199,7 +216,8 @@ class Parser {
       if (tok?.type !== 'OP' || (tok.value !== '*' && tok.value !== '/')) break;
       this.consume();
       const right = this.parsePower();
-      left = tok.value === '*' ? left * right : left / right;
+      if (tok.value === '*') left = left * right;
+      else left = this.floorDivision && this.insideRounding === 0 ? Math.floor(left / right) : left / right;
     }
     return left;
   }
@@ -250,11 +268,14 @@ class Parser {
 
       if (FUNCTIONS.has(name) && this.peek()?.type === 'LPAREN') {
         this.consume();
+        const rounds = ROUNDING_FUNCTIONS.has(name);
+        if (rounds) this.insideRounding++;
         const args: number[] = [];
         while (this.peek()?.type !== 'RPAREN') {
           args.push(this.parseExpr());
           if (this.peek()?.type === 'COMMA') this.consume();
         }
+        if (rounds) this.insideRounding--;
         if (this.peek()?.type !== 'RPAREN') throw new Error('missing )');
         this.consume();
         switch (name) {

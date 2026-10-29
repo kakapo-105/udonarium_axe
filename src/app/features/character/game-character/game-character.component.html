@@ -29,6 +29,19 @@
         ></div>
       </div>
     }
+    @if (inStealth()) {
+      <!-- Drawn only for the few who see a piece in stealth, to tell them the others do not. -->
+      <div
+        data-testid="stealth-mark"
+        class="border-ui-accent/70 pointer-events-none absolute inset-[-6%] rounded-full border-2 border-dashed [-webkit-transform-style:preserve-3d] transform-3d"
+      >
+        <i
+          class="material-icons bg-ui-panel text-ui-accent shadow-ui-sm absolute -top-1.5 -right-1.5 rounded-full p-0.5 text-[13px]! leading-none"
+          aria-hidden="true"
+          >visibility_off</i
+        >
+      </div>
+    }
     @if (hitFlash() === 'damage') {
       <div
         data-testid="hit-flash"
@@ -135,6 +148,7 @@
             </div>
           }
           @if (isDropShadow && 0 < imageFile().url.length && specifyKomaImageFlag() && !imageView.fitsInCell()) {
+            @let shadowWidth = komaImageWidthApart();
             <img
               class="chrome-smooth-image-trick pointer-events-none filter-[brightness(0)_opacity(0.7)_blur(1px)]"
               [ngStyle]="{
@@ -142,7 +156,7 @@
                 bottom: '0',
                 left: '50%',
                 height: komaImageHeightSignal() + 'px',
-                width: 'auto',
+                width: shadowWidth === null ? 'auto' : shadowWidth + 'px',
                 maxWidth: 'none',
                 transform:
                   'translateX(-50%) ' +
@@ -192,6 +206,7 @@
           @if (isPoster() && 0 < imageFile().url.length) {
             <img
               class="image chrome-smooth-image-trick pointer-events-none absolute inset-0 m-auto block size-full object-contain"
+              [class.opacity-50]="inStealth()"
               [ngStyle]="{
                 width: imageView.supersamplePercent(),
                 height: imageView.supersamplePercent(),
@@ -286,7 +301,9 @@
                               @default {
                                 <div
                                   class="animate-buff-swap grid w-max items-end gap-[0.8em]"
+                                  data-testid="buff-badge-grid"
                                   [style.grid-template-columns]="buffBadgeColumns"
+                                  [style.font-size.em]="buffIconScale()"
                                 >
                                   @for (badge of buffBadges(); track badge.identifier) {
                                     <ng-container
@@ -418,6 +435,7 @@
                             <div
                               class="grid w-max items-end gap-[0.8em]"
                               [style.grid-template-columns]="buffBadgeColumns"
+                              [style.font-size.em]="buffIconScale()"
                             >
                               @for (badge of label.badges; track badge.identifier) {
                                 <ng-container
@@ -495,110 +513,68 @@
                   </div>
                 }
                 @if (!isPoster() && 0 < imageFile().url.length && specifyKomaImageFlag() && !imageView.fitsInCell()) {
-                  <img
-                    appSeeThrough
-                    class="image chrome-smooth-image-trick pointer-events-auto inset-x-0 bottom-0 m-auto h-auto align-bottom [-webkit-transform-style:preserve-3d] transform-3d"
-                    [appBillboard]="imageView.komaFacing()"
-                    [ngStyle]="{
-                      height: komaImageHeightSignal() * imageView.supersample() + 'px',
-                      width: 'auto',
-                      maxWidth: 'none',
-                      display: 'inline-block',
-                      left: 'auto',
-                      right: 'auto',
-                    }"
-                    [style.mask-image]="inWater()?.mask ?? null"
-                    (load)="imageView.onImageLoad($event)"
-                    [src]="imageFile().url | safe: 'resourceUrl'"
+                  @let pictureWidth = komaImageWidthApart();
+                  @let komaHeight = komaImageHeightSignal() * imageView.supersample() + 'px';
+                  @let komaWidth = pictureWidth === null ? 'auto' : pictureWidth * imageView.supersample() + 'px';
+                  <ng-container
+                    *ngTemplateOutlet="
+                      picture;
+                      context: {
+                        facing: imageView.komaFacing(),
+                        sizing: 'h-auto',
+                        style: {
+                          height: komaHeight,
+                          width: komaWidth,
+                          maxWidth: 'none',
+                          display: 'inline-block',
+                          left: 'auto',
+                          right: 'auto',
+                        },
+                        copyStyle: { height: komaHeight, width: komaWidth, maxWidth: 'none', display: 'inline-block' },
+                      }
+                    "
                   />
-                  @if (inWater(); as water) {
-                    <img
-                      data-water-copy
-                      class="chrome-smooth-image-trick pointer-events-none absolute top-0 left-0 h-auto align-bottom [-webkit-transform-style:preserve-3d] transform-3d"
-                      [appBillboard]="imageView.komaFacing()"
-                      [ngStyle]="{
-                        height: komaImageHeightSignal() * imageView.supersample() + 'px',
-                        width: 'auto',
-                        maxWidth: 'none',
-                        display: 'inline-block',
-                      }"
-                      [style.clip-path]="water.clip"
-                      [style.filter]="water.tint"
-                      [style.opacity]="water.tintOpacity"
-                      [style.mask-image]="water.fade"
-                      [src]="imageFile().url | safe: 'resourceUrl'"
-                    />
-                  }
                 }
                 @if (!isPoster() && 0 < imageFile().url.length && !specifyKomaImageFlag() && !imageView.fitsInCell()) {
-                  <img
-                    appSeeThrough
-                    class="image chrome-smooth-image-trick pointer-events-auto inset-x-0 bottom-0 m-auto h-auto align-bottom [-webkit-transform-style:preserve-3d] transform-3d"
-                    [appBillboard]="imageView.pieceFacing()"
-                    [ngStyle]="{
+                  @let naturalStyle =
+                    {
                       width: imageView.supersamplePercent(),
                       maxWidth: 'none',
                       marginLeft: imageView.supersampleInset(),
                       marginRight: imageView.supersampleInset(),
-                    }"
-                    [style.mask-image]="inWater()?.mask ?? null"
-                    (load)="imageView.onImageLoad($event)"
-                    [src]="imageFile().url | safe: 'resourceUrl'"
+                    };
+                  <ng-container
+                    *ngTemplateOutlet="
+                      picture;
+                      context: {
+                        facing: imageView.pieceFacing(),
+                        sizing: 'h-auto',
+                        style: naturalStyle,
+                        copyStyle: naturalStyle,
+                      }
+                    "
                   />
-                  @if (inWater(); as water) {
-                    <img
-                      data-water-copy
-                      class="chrome-smooth-image-trick pointer-events-none absolute top-0 left-0 h-auto align-bottom [-webkit-transform-style:preserve-3d] transform-3d"
-                      [appBillboard]="imageView.pieceFacing()"
-                      [ngStyle]="{
-                        width: imageView.supersamplePercent(),
-                        maxWidth: 'none',
-                        marginLeft: imageView.supersampleInset(),
-                        marginRight: imageView.supersampleInset(),
-                      }"
-                      [style.clip-path]="water.clip"
-                      [style.filter]="water.tint"
-                      [style.opacity]="water.tintOpacity"
-                      [style.mask-image]="water.fade"
-                      [src]="imageFile().url | safe: 'resourceUrl'"
-                    />
-                  }
                 }
                 @if (!isPoster() && 0 < imageFile().url.length && imageView.fitsInCell()) {
-                  <img
-                    appSeeThrough
-                    class="image chrome-smooth-image-trick pointer-events-auto inset-x-0 bottom-0 m-auto block object-contain align-bottom [-webkit-transform-style:preserve-3d] transform-3d"
-                    [appBillboard]="imageView.pieceFacing()"
-                    [ngStyle]="{
+                  @let cellStyle =
+                    {
                       width: imageView.supersamplePercent(),
                       height: size() * gridSize * imageView.supersample() + 'px',
                       maxWidth: 'none',
                       marginLeft: imageView.supersampleInset(),
                       marginRight: imageView.supersampleInset(),
-                    }"
-                    [style.mask-image]="inWater()?.mask ?? null"
-                    (load)="imageView.onImageLoad($event)"
-                    [src]="imageFile().url | safe: 'resourceUrl'"
+                    };
+                  <ng-container
+                    *ngTemplateOutlet="
+                      picture;
+                      context: {
+                        facing: imageView.pieceFacing(),
+                        sizing: 'block object-contain',
+                        style: cellStyle,
+                        copyStyle: cellStyle,
+                      }
+                    "
                   />
-                  @if (inWater(); as water) {
-                    <img
-                      data-water-copy
-                      class="chrome-smooth-image-trick pointer-events-none absolute top-0 left-0 block object-contain align-bottom [-webkit-transform-style:preserve-3d] transform-3d"
-                      [appBillboard]="imageView.pieceFacing()"
-                      [ngStyle]="{
-                        width: imageView.supersamplePercent(),
-                        height: size() * gridSize * imageView.supersample() + 'px',
-                        maxWidth: 'none',
-                        marginLeft: imageView.supersampleInset(),
-                        marginRight: imageView.supersampleInset(),
-                      }"
-                      [style.clip-path]="water.clip"
-                      [style.filter]="water.tint"
-                      [style.opacity]="water.tintOpacity"
-                      [style.mask-image]="water.fade"
-                      [src]="imageFile().url | safe: 'resourceUrl'"
-                    />
-                  }
                 }
                 @if (isTargeted()) {
                   <div
@@ -826,7 +802,15 @@
                         [style.background]="badge.color"
                         [title]="badge.name"
                       >
-                        {{ badge.icon }}
+                        @if (badge.iconUrl) {
+                          <img
+                            class="pointer-events-none size-[0.9em] object-contain"
+                            [src]="badge.iconUrl | safe: 'resourceUrl'"
+                            alt=""
+                          />
+                        } @else {
+                          {{ badge.icon }}
+                        }
                       </span>
                     </div>
                   }
@@ -1013,7 +997,7 @@
       }
       @if (badge.strength) {
         <span
-          class="bg-ui-accent pointer-events-none absolute top-[-0.35em] left-[-0.4em] rounded-[0.3em] px-[0.18em] text-[0.45em] leading-tight font-bold text-white shadow-[0_0.1em_0.2em_rgba(0,0,0,0.7)]"
+          class="bg-ui-accent-solid pointer-events-none absolute top-[-0.35em] left-[-0.4em] rounded-[0.3em] px-[0.18em] text-[0.45em] leading-tight font-bold text-white shadow-[0_0.1em_0.2em_rgba(0,0,0,0.7)]"
           >{{ badge.strength }}</span
         >
       }
@@ -1026,4 +1010,32 @@
       >
     }
   </span>
+</ng-template>
+
+<ng-template #picture let-facing="facing" let-sizing="sizing" let-style="style" let-copyStyle="copyStyle">
+  <img
+    appSeeThrough
+    class="image chrome-smooth-image-trick pointer-events-auto inset-x-0 bottom-0 m-auto align-bottom [-webkit-transform-style:preserve-3d] transform-3d"
+    [class]="sizing"
+    [class.opacity-50]="inStealth()"
+    [appBillboard]="facing"
+    [ngStyle]="style"
+    [style.mask-image]="inWater()?.mask ?? null"
+    (load)="imageView.onImageLoad($event)"
+    [src]="imageFile().url | safe: 'resourceUrl'"
+  />
+  @if (inWater(); as water) {
+    <img
+      data-water-copy
+      class="chrome-smooth-image-trick pointer-events-none absolute top-0 left-0 align-bottom [-webkit-transform-style:preserve-3d] transform-3d"
+      [class]="sizing"
+      [appBillboard]="facing"
+      [ngStyle]="copyStyle"
+      [style.clip-path]="water.clip"
+      [style.filter]="water.tint"
+      [style.opacity]="water.tintOpacity"
+      [style.mask-image]="water.fade"
+      [src]="imageFile().url | safe: 'resourceUrl'"
+    />
+  }
 </ng-template>

@@ -6,6 +6,7 @@ import { DEFAULT_AMBIENCE_DENSITY } from '@axe/domain/effect/ambience/ambience-k
 import { CutInMultiDirectionMode } from '@axe/domain/tabletop/cut-in-multi-direction';
 import { DEFAULT_FOG_COLOR, DEFAULT_FOG_MODE, FogMode } from '@axe/domain/tabletop/fog/fog-mode';
 import { GameTableMask } from '@axe/domain/tabletop/game-table-mask';
+import { GridSnapStyle } from '@axe/domain/tabletop/grid-snap-style';
 import { GridType } from '@axe/domain/tabletop/grid-type';
 import { HoverDetailPlacement } from '@axe/domain/tabletop/hover-detail-placement';
 import { LightSource } from '@axe/domain/tabletop/light-source';
@@ -37,14 +38,8 @@ import { Terrain } from '@axe/domain/tabletop/terrain';
 import { DEFAULT_AMBIENT_COLOR } from '@axe/domain/tabletop/vision-types';
 import { WhiteBoard } from '@axe/domain/tabletop/white-board';
 
+export { GridSnapStyle, keepsPiecesOnCells } from '@axe/domain/tabletop/grid-snap-style';
 export { GridType } from '@axe/domain/tabletop/grid-type';
-
-export enum GridSnapStyle {
-  CENTER = 0,
-  VERTEX = 1,
-  BOTH = 2,
-  ALL = 3,
-}
 
 export enum FilterType {
   NONE = '',
@@ -69,6 +64,11 @@ export class GameTable extends ObjectNode {
   @SyncVar() gridShow: boolean = false;
   @SyncVar() gridSnap: boolean = true;
   @SyncVar() gridSnapStyle: GridSnapStyle = GridSnapStyle.CENTER;
+  /**
+   * How many cells across one square is, for moving pieces and counting ranges: 1 counts every
+   * cell, and 2 to 4 put that many cells across together into one square. Square grids only.
+   */
+  @SyncVar() squareSpan: number = 1;
   @SyncVar() imageBillboard: boolean = false;
   @SyncVar() mode2d: boolean = false;
   /**
@@ -180,10 +180,12 @@ export class GameTable extends ObjectNode {
   /** Cut-ins to play when this table is chosen. Several are separated by commas, and one is drawn. */
   @SyncVar() cutInIdentifiers: string = '';
   /**
-   * The music to play when this table is chosen: an audio file's identifier, `TABLE_BGM_STOP` for
-   * silence, or empty to leave the music as it is.
+   * What the music does when the table is switched to: `''` leaves it, `'stop'` stops it, and
+   * `'play'` puts on {@link tableBgmIdentifier}.
    */
-  @SyncVar() bgm: string = '';
+  @SyncVar() tableBgm: string = '';
+  /** The track put on when the table is switched to, while {@link tableBgm} is `'play'`. */
+  @SyncVar() tableBgmIdentifier: string = '';
 
   gridClipRect: { top: number; right: number; bottom: number; left: number } | null = null;
   /** The terrain pieces on this table. */

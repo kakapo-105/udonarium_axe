@@ -1,11 +1,12 @@
 import { ViewContainerRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
+import { RoomPanelName } from '@axe/domain/ui/room-panel';
 import { DiceTableSettingComponent } from '@axe/features/dice/dice-table-setting/dice-table-setting.component';
+import { DungeonGeneratorComponent } from '@axe/features/dungeon-generator/dungeon-generator.component';
 import { MapEditorPanelComponent } from '@axe/features/map-editor/editor/map-editor-panel.component';
 import { PanelWindowRequest, PanelWindowService } from '@axe/features/panels/panel-window.service';
 import { RoomPanelService } from '@axe/features/panels/room-panel.service';
-import { DungeonGeneratorComponent } from '@axe/features/tabletop/dungeon-generator/dungeon-generator.component';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 
 describe('RoomPanelService', () => {
@@ -41,6 +42,17 @@ describe('RoomPanelService', () => {
 
     expect(option().controls?.map((control) => control.icon)).toEqual(['open_in_new']);
     expect(option().windowed).toBe(false);
+  });
+
+  it('shows the button only while this browser lets a panel out, as that can change once a mouse is seen', () => {
+    const supported = vi.spyOn(TestBed.inject(PanelWindowService), 'isSupported', 'get').mockReturnValue(false);
+    service.open('cutInList');
+    const control = option().controls![0];
+    expect(control.shown?.()).toBe(false);
+
+    supported.mockReturnValue(true);
+
+    expect(control.shown?.()).toBe(true);
   });
 
   it('does nothing when the button travelled to a window with the panel it was made for', () => {
@@ -99,10 +111,65 @@ describe('RoomPanelService', () => {
     expect(option().minimizeToContent).toBeFalsy();
   });
 
+  it('opens a panel without a place of its own clear of the toolbars along the top, each next one a step lower', () => {
+    service.open('diceTableSetting');
+    service.open('statusAilment');
+
+    expect(openLazy.mock.calls.map(([, given]) => (given as PanelOption).top)).toEqual([64, 84]);
+  });
+
   it('loads the dice table settings, so the menu and the chat window open the same panel', async () => {
     service.open('diceTableSetting');
 
     expect(option()).toEqual(expect.objectContaining({ width: 650, height: 400 }));
     await expect(openLazy.mock.calls[0][0]()).resolves.toBe(DiceTableSettingComponent);
+  });
+
+  describe('several panels opened together', () => {
+    let opened: string[];
+    let arrive: Map<RoomPanelName, { resolve: (component: unknown) => void; reject: (reason: unknown) => void }>;
+
+    beforeEach(() => {
+      opened = [];
+      arrive = new Map();
+      openLazy.mockImplementation((load: () => Promise<unknown>, given: PanelOption) => {
+        void load().then(
+          () => opened.push(given.title!),
+          () => undefined
+        );
+      });
+      vi.spyOn(service as unknown as { panelOf(name: RoomPanelName): unknown }, 'panelOf').mockImplementation(
+        (name: RoomPanelName) => ({
+          load: () => new Promise((resolve, reject) => arrive.set(name, { resolve, reject })),
+          option: {},
+        })
+      );
+    });
+
+    it('stands each over those before it, whichever code comes back first', async () => {
+      service.openInTurn([
+        ['peerMenu', { title: 'first' }],
+        ['chatWindow', { title: 'second' }],
+      ]);
+
+      arrive.get('chatWindow')!.resolve({});
+      await new Promise((resolve) => setTimeout(resolve));
+      expect(opened).toEqual([]);
+      arrive.get('peerMenu')!.resolve({});
+
+      await vi.waitFor(() => expect(opened).toEqual(['first', 'second']));
+    });
+
+    it('still opens the rest when the code of one ahead of them cannot be fetched', async () => {
+      service.openInTurn([
+        ['peerMenu', { title: 'first' }],
+        ['chatWindow', { title: 'second' }],
+      ]);
+
+      arrive.get('chatWindow')!.resolve({});
+      arrive.get('peerMenu')!.reject(new Error('no chunk'));
+
+      await vi.waitFor(() => expect(opened).toEqual(['second']));
+    });
   });
 });

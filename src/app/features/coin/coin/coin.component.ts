@@ -10,7 +10,6 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { CoinFlipService } from '@axe/application/coin/coin-flip.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
@@ -26,10 +25,12 @@ import { sheetPanelBox } from '@axe/application/ui/sheet-panel';
 import { sheetPanelTitle } from '@axe/application/ui/sheet-panel';
 import { buildSurfaceSwitchContextMenu } from '@axe/application/ui/surface-switch-context-menu';
 import { imageFileEqual } from '@axe/core/storage/image-file';
+import { isInStore } from '@axe/core/sync/object-store';
 import { Coin, CoinFace } from '@axe/domain/coin/coin';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
 import { buildCoinContextMenu } from '@axe/features/coin/coin/coin-context-menu';
 import { laurelLeaves, starPoints } from '@axe/features/coin/coin/coin-emblem';
+import { CoinFlipService } from '@axe/features/coin/coin-flip.service';
 import { MovableDirective, MovableOption } from '@axe/ui/directives/movable.directive';
 import { RotableDirective, RotableOption } from '@axe/ui/directives/rotable.directive';
 import { SelectableDirective } from '@axe/ui/directives/selectable.directive';
@@ -209,10 +210,13 @@ export class CoinComponent {
     e.preventDefault();
   }
 
-  /** On a press on the coin, brings it to the top and starts watching for a double tap. */
+  /**
+   * On a press on the coin, brings it to the top for a seat that may change the table, and starts
+   * watching for a double tap.
+   */
   onInputStart(e: MouseEvent | TouchEvent) {
     this.startDoubleClickTimer(e);
-    this.coin().toTopmost();
+    if (this.rolePermission.canEditTabletop()) this.coin().toTopmost();
   }
 
   /** Counts a press towards a double tap, which flips the coin when the second one lands. */
@@ -223,7 +227,7 @@ export class CoinComponent {
   /** Flips the coin on a double tap, if this player may edit the table and the pointer has not moved. */
   onDoubleClick() {
     this.doubleTap.cancel();
-    if (!this.rolePermission.canEditTabletop) return;
+    if (!this.rolePermission.canEditTabletop()) return;
     if (this.doubleTap.isInPlace()) this.flip();
   }
 
@@ -297,6 +301,7 @@ export class CoinComponent {
     const option: PanelOption = {
       title,
       ...sheetPanelBox(coordinate, 400, 380),
+      stillWanted: () => isInStore(coin),
     };
     this.panelService.openLazy(
       () => import('@axe/features/coin/coin-sheet/coin-sheet.component').then((m) => m.CoinSheetComponent),

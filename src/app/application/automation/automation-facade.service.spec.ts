@@ -1810,10 +1810,10 @@ describe('AutomationFacadeService', () => {
       expect(table.imageIdentifier).toBe(pictureId);
       expect(table.backgroundImageIdentifier).toBe(pictureId);
       expect(table.backgroundFilterType).toBe('black');
-      expect(table.bgm).toBe(musicId);
+      expect([table.tableBgm, table.tableBgmIdentifier]).toEqual(['play', musicId]);
 
       expect((await call('table_set', { identifier: table.identifier, bgm: 'stop', filter: 'none' })).ok).toBe(true);
-      expect(table.bgm).toBe('__stop__');
+      expect([table.tableBgm, table.tableBgmIdentifier]).toEqual(['stop', '']);
       expect(table.backgroundFilterType).toBe('');
       error(await call('table_set', { identifier: table.identifier, bgm: 'f'.repeat(64) }), 'NOT_FOUND');
       error(await call('table_set', { identifier: table.identifier, filter: 'sepia' }), 'INVALID_ARGUMENT');
@@ -1982,6 +1982,8 @@ describe('AutomationFacadeService', () => {
           },
         });
         expect(tables().map((t) => t.name)).toEqual(['上級戦闘']);
+        // A template saved by an older version names the music in `bgm`; the table takes it the newer way.
+        expect([tables()[0].tableBgm, tables()[0].tableBgmIdentifier]).toEqual(['play', battle.identifier]);
         expect(store.get<CutIn>('template-cut-in')?.name).toBe('戦闘開始');
         expect(AudioStorage.instance.get(battle.identifier)?.name).toBe('bgm-1.mp3');
         expect(store.getObjects(EffectPreset)).toHaveLength(0);

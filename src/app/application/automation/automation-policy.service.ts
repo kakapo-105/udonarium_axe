@@ -68,26 +68,26 @@ export class AutomationPolicyService {
    */
   canSeeConcealed(piece: { location: { name: string }; owner: string }): boolean {
     if (piece.location.name !== CONCEALED_LOCATION) return false;
-    return this.role.canSeeHidden || this.isMine(piece.owner);
+    return this.role.canSeeHidden() || this.isMine(piece.owner);
   }
   /** Only the game master puts things out of sight and brings them back, as in the table's own menus. */
   requireGameMaster(): void {
-    if (!this.role.canSeeHidden) fail('FORBIDDEN', 'Only the game master can put pieces out of sight.');
+    if (!this.role.canSeeHidden()) fail('FORBIDDEN', 'Only the game master can put pieces out of sight.');
   }
   /**
    * Whether what a piece carries may be managed across the table, as the buff manager lets anyone at
    * the table do: any piece that can be seen, whoever owns it. Guests only watch.
    */
   canManage(piece: GameCharacter): void {
-    if (!this.role.canEditTabletop) fail('FORBIDDEN', 'Guests cannot manage pieces.');
+    if (!this.role.canEditTabletop()) fail('FORBIDDEN', 'Guests cannot manage pieces.');
     if (!this.canSee(piece)) fail('NOT_FOUND', 'Visible piece not found.');
   }
   /** Whether new pieces may be put on the table, which a guest, who only watches, may not. */
   canCreatePieces(): void {
-    if (!this.role.canEditTabletop) fail('FORBIDDEN', 'Guests cannot put pieces on the table.');
+    if (!this.role.canEditTabletop()) fail('FORBIDDEN', 'Guests cannot put pieces on the table.');
   }
   canControl(piece: GameCharacter): void {
-    if (!this.role.canEditTabletop) fail('FORBIDDEN', 'Guests cannot control pieces.');
+    if (!this.role.canEditTabletop()) fail('FORBIDDEN', 'Guests cannot control pieces.');
     if (!this.canSee(piece)) fail('NOT_FOUND', 'Visible piece not found.');
     // A lock keeps others from moving a piece; whoever owns it can still move it through automation.
     if (piece.isLock && !this.isMine(piece.owner)) fail('LOCKED', 'The piece is locked.');

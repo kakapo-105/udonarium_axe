@@ -9,6 +9,7 @@ import { buffIconUrlOf } from '@axe/domain/character/buff-badge';
 import { BUFF_TIMINGS, BuffTiming } from '@axe/domain/character/buff-timing';
 import { StatusAilment, withRounds } from '@axe/domain/character/status-ailment';
 import { FileSelecterComponent } from '@axe/ui/components/file-selecter/file-selecter.component';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
 
@@ -25,7 +26,7 @@ import { TranslocoModule } from '@jsverse/transloco';
   selector: 'status-ailment-panel',
   templateUrl: './status-ailment-panel.component.html',
   host: { class: 'block h-full' },
-  imports: [FormsModule, SafePipe, TranslocoModule],
+  imports: [TextTooltipDirective, FormsModule, SafePipe, TranslocoModule],
 })
 export class StatusAilmentPanelComponent {
   private readonly ailmentService = inject(StatusAilmentService);
@@ -39,10 +40,7 @@ export class StatusAilmentPanelComponent {
 
   readonly newName = signal('');
 
-  readonly canEdit = computed<boolean>(() => {
-    this.objectChange.trackMyCursor();
-    return this.rolePermission.canEditTabletop;
-  });
+  readonly canEdit = computed<boolean>(() => this.rolePermission.canEditTabletop());
 
   /** The CSS colour of a state's swatch, transparent for a state left at the default colour. */
   swatchOf(color: string): string {

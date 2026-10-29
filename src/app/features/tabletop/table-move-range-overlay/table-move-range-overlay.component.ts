@@ -9,7 +9,7 @@ import {
   viewChildren,
 } from '@angular/core';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
-import { MovePlan, MovePlanService } from '@axe/application/tabletop/move-plan.service';
+import { MoveLanding, MovePlan, MovePlanService } from '@axe/application/tabletop/move-plan.service';
 import { MoveRangeService } from '@axe/application/tabletop/move-range.service';
 import { VisionService } from '@axe/application/tabletop/vision.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
@@ -17,17 +17,11 @@ import { PERF_MOVE_RANGE_PAINT, perfCounters } from '@axe/core/util/perf-counter
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { CellBits } from '@axe/domain/tabletop/fog/cell-bits';
-import {
-  cellCenterOf,
-  cellCount,
-  CellGrid,
-  cellGridOf,
-  gridExtentPx,
-  sameCellGrid,
-} from '@axe/domain/tabletop/fog/cell-grid';
+import { cellCenterOf, cellCount, CellGrid, gridExtentPx, sameCellGrid } from '@axe/domain/tabletop/fog/cell-grid';
+import { moveGridOf } from '@axe/domain/tabletop/move/move-grid';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { cellPathsFor, wayRunsOn } from '@axe/features/tabletop/table-move-range-overlay/move-range-render';
-import { overlayScale } from '@axe/features/tabletop/table-vision-overlay/vision-overlay-render';
+import { overlayScale } from '@axe/infrastructure/tabletop/vision/vision-overlay-render';
 import { translateZCss, Z_OFFSET_RANGE_PX } from '@axe/ui/tabletop/z-offset';
 
 export const MOVE_RANGE_FILL = 'rgba(90, 170, 255, 0.28)';
@@ -48,6 +42,10 @@ export const MOVE_WAY_SETTLED = 'rgba(255, 200, 60, 0.95)';
 const MOVE_WAY_WIDTH_PX = 5;
 const MOVE_WAY_HEAD_PX = 16;
 const MOVE_WAYPOINT_RADIUS_PX = 7;
+/** The outline of the cells a piece will be put down on, in the last square of its way. */
+export const MOVE_LANDING_STROKE = 'rgba(255, 255, 255, 0.95)';
+/** How far inside the cells a piece will be put down on their outline is drawn. */
+const MOVE_LANDING_INSET_PX = 3;
 /** Somebody else's move, drawn cooler and thinner so it is not mistaken for one's own. */
 export const MOVE_WAY_OTHERS = 'rgba(150, 205, 255, 0.9)';
 const MOVE_WAY_OTHERS_WIDTH_PX = 4;
@@ -185,7 +183,7 @@ export class TableMoveRangeOverlayComponent {
     this.objectChange.versionOf(table.identifier)();
 
     const mine = PeerCursor.myCursor?.identifier;
-    const grid = cellGridOf(table.width, table.height, table.gridSize, table.gridType);
+    const grid = moveGridOf(table);
     const drawn: DrawnMove[] = [];
     for (const cursor of this.objectStore.getObjects<PeerCursor>(PeerCursor)) {
       if (cursor.identifier === mine) continue;
@@ -437,6 +435,30 @@ export class TableMoveRangeOverlayComponent {
     for (const waypoint of plan.waypoints) {
       if (onLayer(waypoint)) this.paintWaypoint(context, plan.grid, waypoint);
     }
+    const landing = plan.landing;
+    const last = whole[whole.length - 1];
+    if (landing && landing.cell === last && onLayer(last)) {
+      if (whole.length > 1 || this.movePlan.movesWithinSquare()) this.paintLanding(context, landing);
+    }
+  }
+
+  /** The outline of the cells of the last square a piece will be put down on. */
+  private paintLanding(context: CanvasRenderingContext2D, landing: MoveLanding): void {
+    const left = landing.x + MOVE_LANDING_INSET_PX;
+    const top = landing.y + MOVE_LANDING_INSET_PX;
+    const side = Math.max(1, landing.width - MOVE_LANDING_INSET_PX * 2);
+    const outline = new Path2D();
+    outline.moveTo(left, top);
+    outline.lineTo(left + side, top);
+    outline.lineTo(left + side, top + side);
+    outline.lineTo(left, top + side);
+    outline.closePath();
+    context.lineWidth = 5;
+    context.strokeStyle = MOVE_WAY_SHADOW;
+    context.stroke(outline);
+    context.lineWidth = 3;
+    context.strokeStyle = MOVE_LANDING_STROKE;
+    context.stroke(outline);
   }
 
   /** One way drawn on its own: a shadow under it, the line, and a head to say which end is which. */

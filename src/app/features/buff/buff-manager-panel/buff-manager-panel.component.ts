@@ -3,9 +3,11 @@ import { FormsModule } from '@angular/forms';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { GameObjectInventoryService } from '@axe/application/inventory/game-object-inventory.service';
+import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { VisionService } from '@axe/application/tabletop/vision.service';
 import { TurnOrderService } from '@axe/application/turn/turn-order.service';
+import { closeWhenOffTheTable } from '@axe/application/ui/close-when-off-the-table';
 import { ConfirmService } from '@axe/application/ui/confirm.service';
 import { PanelService } from '@axe/application/ui/panel.service';
 import { transientSignal } from '@axe/application/ui/transient-signal';
@@ -29,14 +31,21 @@ import { BUFF_TIMINGS, BuffTiming } from '@axe/domain/character/buff-timing';
 import { buffTriggerOptions, selectedTriggerValue } from '@axe/domain/character/buff-trigger-options';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { DataElement, DataElementAttribute } from '@axe/domain/data/data-element';
-import { PeerCursor } from '@axe/domain/peer/peer-cursor';
-import { PeerRole } from '@axe/domain/peer/peer-role';
 import { STATUS_AILMENT_PANEL } from '@axe/domain/ui/room-panel';
 import { RoomPanelService } from '@axe/features/panels/room-panel.service';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
 
 const BUILDER_OPERATORS = ['+', '-', '='] as const;
+
+/** One more status the built buff moves, beside the first. */
+interface BuilderStatusRow {
+  readonly status: string;
+  readonly operator: string;
+  readonly amount: string;
+  readonly step: string;
+}
 const COLUMN_WIDTH_MIN_PX = 16;
 const COLUMN_WIDTH_MAX_PX = 112;
 const COLUMN_WIDTH_STEP_PX = 12;
@@ -47,14 +56,20 @@ const CHART_LABEL_WIDTH_PX = 176;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-buff-manager-panel',
   templateUrl: './buff-manager-panel.component.html',
-  imports: [FormsModule, SafePipe, TranslocoModule],
+  imports: [TextTooltipDirective, FormsModule, SafePipe, TranslocoModule],
 })
 export class BuffManagerPanelComponent {
   private readonly objectStore = inject(ObjectStore);
+  private readonly rolePermission = inject(RolePermissionService);
   private readonly vision = inject(VisionService);
   private readonly objectChange = inject(ObjectChangeService);
   private readonly inventory = inject(GameObjectInventoryService);
   private readonly panelService = inject(PanelService);
+
+  constructor() {
+    // Made a guest meanwhile, the seat may no longer write what this panel writes.
+    closeWhenOffTheTable();
+  }
   private readonly roomPanels = inject(RoomPanelService);
   private readonly turnOrder = inject(TurnOrderService);
   private readonly t = inject(TRANSLATE_FN);
@@ -64,10 +79,7 @@ export class BuffManagerPanelComponent {
   readonly timingChoices = BUFF_TIMINGS;
   readonly operatorChoices = BUILDER_OPERATORS;
 
-  readonly round = computed(() => {
-    this.objectChange.versionOf('TurnState')();
-    return Math.max(1, this.turnOrder.round);
-  });
+  readonly round = computed(() => Math.max(1, this.turnOrder.progress().round));
 
   readonly rows = computed<BuffTimelineRow[]>(() => {
     this.objectChange.collectionOf('character')();
@@ -271,17 +283,14 @@ export class BuffManagerPanelComponent {
     const element = this.selectedElement();
     if (!element) return;
     const owner = this.ownerOf(element);
-    if (owner) owner.buffs.remove(element);
+    if (owner) owner.buffs.removeWhole(element);
     else element.destroy();
     this.selected.set('');
     this.refresh();
   }
 
   /** Whether this seat runs the game, the only one allowed to sweep buffs off the whole table. */
-  readonly isGameMaster = computed(() => {
-    this.objectChange.trackMyCursor();
-    return PeerCursor.myRole === PeerRole.GameMaster;
-  });
+  readonly isGameMaster = computed(() => this.rolePermission.isGameMaster());
 
   /** Which buffs the sweep takes: those held until cleared, those with so many rounds left, or one name. */
   readonly sweepKind = signal<BuffRemovalRule['kind']>('held');
@@ -364,7 +373,7 @@ export class BuffManagerPanelComponent {
     this.selected.set('');
     this.refresh();
     if (removed.buffs > 0) {
-      this.chat.sendSystemMessageToMainTab(this.t('feature.buffManager.sweepDone', { what, ...removed }));
+      this.chat.sendSystemNotice('round', this.t('feature.buffManager.sweepDone', { what, ...removed }));
     }
   }
 
@@ -395,23 +404,65 @@ export class BuffManagerPanelComponent {
   readonly builderStatus = signal('命中');
   readonly builderOperator = signal<string>('+');
   readonly builderAmount = signal('2');
+  readonly builderStep = signal('');
   readonly builderRounds = signal('3');
   readonly builderTiming = signal<BuffTiming>('roundEnd');
   readonly builderTrigger = signal('');
   readonly builderStacks = signal(false);
   readonly builderExtends = signal(false);
 
-  /** Whether a second helping would mean anything: holding a status at a value twice still holds it there. */
-  readonly builderCanStack = computed(() => this.builderOperator() !== '=');
+  /** The statuses the built buff moves beyond the first, a row apiece. */
+  readonly builderMore = signal<readonly BuilderStatusRow[]>([]);
 
+  /** Adds a status for the built buff to move as well. */
+  addBuilderStatus(): void {
+    this.builderMore.update((rows) => [...rows, { status: '', operator: '+', amount: '1', step: '' }]);
+  }
+
+  /** Changes one of the further statuses the built buff moves. */
+  updateBuilderStatus(index: number, change: Partial<BuilderStatusRow>): void {
+    this.builderMore.update((rows) => rows.map((row, at) => (at === index ? { ...row, ...change } : row)));
+  }
+
+  /** Takes one of the further statuses off the built buff. */
+  removeBuilderStatus(index: number): void {
+    this.builderMore.update((rows) => rows.filter((_, at) => at !== index));
+  }
+
+  /** Whether the first status can move again at every count: one held at a value never does. */
+  readonly builderCanStep = computed(() => this.builderOperator() !== '=');
+
+  /**
+   * Whether a second helping would mean anything: holding a status at a value twice still holds it
+   * there, so a buff holding any of its statuses so is laid anew.
+   */
+  readonly builderCanStack = computed(
+    () => this.builderOperator() !== '=' && this.builderMore().every((row) => row.operator !== '=')
+  );
+
+  /** Every status the built buff moves, the first among them, as the command writes each. */
+  private readonly builderRows = computed<BuilderStatusRow[]>(() => [
+    {
+      status: this.builderStatus(),
+      operator: this.builderOperator(),
+      amount: this.builderAmount(),
+      step: this.builderStep(),
+    },
+    ...this.builderMore(),
+  ]);
+
+  /**
+   * The `&!` command the builder's fields make up: the older layout for one status, and the statuses
+   * written together for several. A slash typed in an amount divides there, but the command is cut
+   * into its fields at every slash, so it is written as ÷, which reads the same.
+   */
   readonly builderCommand = computed(() => {
-    const parts = [
-      this.builderName().trim() || 'バフ',
-      this.builderStatus().trim(),
-      this.builderOperator(),
-      this.builderAmount().trim(),
-      this.builderRounds().trim(),
-    ];
+    const rows = this.builderRows();
+    const statusParts =
+      rows.length > 1
+        ? [rows.map((row) => `${row.status.trim()}${row.operator}${builderAmountText(row)}`).join(',')]
+        : [rows[0].status.trim(), rows[0].operator, builderAmountText(rows[0])];
+    const parts = [this.builderName().trim() || 'バフ', ...statusParts, this.builderRounds().trim()];
     const timing = this.builderTiming();
     const trigger = this.builderTrigger().trim();
     if (timing !== 'roundEnd' || trigger.length > 0) parts.push(timing);
@@ -422,8 +473,12 @@ export class BuffManagerPanelComponent {
   });
 
   readonly builderPreview = computed(() => {
-    const request = parseBuffModifierRequest(this.builderStatus(), this.builderOperator(), this.builderAmount());
-    return request ? describeBuffModifier(request) : '';
+    const requests = this.builderRows().map((row) =>
+      parseBuffModifierRequest(row.status, row.operator, builderAmountText(row).replace(/÷/g, '/'))
+    );
+    return requests.every((request) => request)
+      ? requests.map((request) => describeBuffModifier(request!)).join(',')
+      : '';
   });
 
   readonly copied = transientSignal(false, 1200);
@@ -449,4 +504,15 @@ export class BuffManagerPanelComponent {
       /* clipboard unavailable (permission, insecure context) — the text is on screen to copy by hand */
     }
   }
+}
+
+/**
+ * The amount of one status as the command writes it, with how far it moves again at every count
+ * where that is asked for, and any slash written as ÷, as the command is cut at every slash.
+ */
+function builderAmountText(row: BuilderStatusRow): string {
+  const step = row.step.trim();
+  const amount = row.amount.trim();
+  const written = step.length > 0 && row.operator !== '=' ? `${amount}~${step}` : amount;
+  return written.replace(/\//g, '÷');
 }

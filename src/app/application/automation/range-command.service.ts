@@ -80,8 +80,7 @@ export class RangeCommandService {
     if (change.place !== undefined) range.location = { ...range.location, name: change.place };
     if (change.follow !== undefined) {
       range.followingCharacterIdentifier = change.follow;
-      range.gridSize = grid;
-      if (change.follow) range.following();
+      if (change.follow) range.following(grid);
     }
     range.update();
     return {

@@ -8,9 +8,11 @@ import { ObjectStore } from '@axe/core/sync/object-store';
 import { xml2element } from '@axe/core/util/xml-util';
 import { CutIn } from '@axe/domain/media/cut-in';
 import { Jukebox } from '@axe/domain/media/jukebox';
+import { tableBgmModeOf } from '@axe/domain/media/table-bgm';
 import { Config } from '@axe/domain/peer/config';
 import { GameTable } from '@axe/domain/tabletop/game-table';
 import { clearOwnership } from '@axe/domain/tabletop/ownership';
+import { adoptLegacyTableBgm, tableBgmSettingOf } from '@axe/domain/tabletop/table-bgm';
 
 /** What a saved room brings that is not a table but goes with one, as a battlefield's ranges and cut-ins do. */
 const TEMPLATE_PARTS = new Set([
@@ -64,6 +66,7 @@ export interface TemplateRequest {
 @Injectable({ providedIn: 'root' })
 export class RoomTemplateCommandService {
   private readonly store = inject(ObjectStore);
+  private readonly serializer = inject(ObjectSerializer);
   private readonly images = inject(AutomationImageService);
   private readonly audios = inject(AutomationAudioService);
 
@@ -78,7 +81,7 @@ export class RoomTemplateCommandService {
     if (unknown.length > 0)
       fail('NOT_FOUND', `The template has no table named ${unknown.join(', ')}. It has ${tableNames.join(', ')}.`);
     const config = request.config === null ? null : xml2element(request.config);
-    if (request.config !== null && config?.tagName !== Config.aliasName)
+    if (request.config !== null && config?.tagName !== 'config')
       fail('INVALID_ARGUMENT', 'A template config must be save data <config>.');
     const audioTags = request.audioTags === null ? null : xml2element(request.audioTags);
     if (request.audioTags !== null && audioTags?.tagName !== 'audio-tag-list')
@@ -108,13 +111,14 @@ export class RoomTemplateCommandService {
     guard();
 
     const built = GameObject.batch(() =>
-      wanted.map((child) => ObjectSerializer.instance.parseXml(child)).filter((object) => object !== null)
+      wanted.map((child) => this.serializer.parseXml(child)).filter((object) => object !== null)
     );
     clearOwnership(built);
-    if (audioTags) ObjectSerializer.instance.parseXml(audioTags);
+    if (audioTags) this.serializer.parseXml(audioTags);
     if (config) this.applyConfig(config);
 
     const tables = built.filter((object): object is GameTable => object instanceof GameTable);
+    for (const table of tables) adoptLegacyTableBgm(table);
     const cutIns = built.filter((object): object is CutIn => object instanceof CutIn);
     return {
       tables: tables.map((table) => ({
@@ -122,7 +126,7 @@ export class RoomTemplateCommandService {
         name: table.name.slice(0, 256),
         width: table.width,
         height: table.height,
-        bgm: table.bgm || null,
+        bgm: tableBgmSettingOf(table) || null,
         cutIns: table.cutInIdentifiers.split(',').filter((identifier) => identifier.length > 0),
       })),
       cutIns: cutIns.map((cutIn) => ({ identifier: cutIn.identifier, name: cutIn.name.slice(0, 256) })),
@@ -142,6 +146,7 @@ export class RoomTemplateCommandService {
     guard();
     await this.audios.add(sounds);
     guard();
+    for (const table of this.store.getObjects<GameTable>(GameTable)) adoptLegacyTableBgm(table);
     return {
       added: sounds.length,
       missingAudio: this.unheard(this.store.getObjects<GameTable>(GameTable), this.store.getObjects<CutIn>(CutIn)),
@@ -151,7 +156,7 @@ export class RoomTemplateCommandService {
   /** The sounds the tables play and the cut-ins sound that the room does not hold. */
   private unheard(tables: readonly GameTable[], cutIns: readonly CutIn[]): string[] {
     const heard = [
-      ...tables.map((table) => table.bgm),
+      ...tables.map((table) => (tableBgmModeOf(table) === 'play' ? table.tableBgmIdentifier : '')),
       ...cutIns.flatMap((cutIn) => [cutIn.audioIdentifier, ...(cutIn.scene?.soundList.map((sound) => sound.a) ?? [])]),
     ].filter((identifier) => identifier.length > 0);
     return [...new Set(heard)].filter((identifier) => !this.audios.has(identifier));

@@ -3,10 +3,12 @@ import { FormsModule } from '@angular/forms';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PartyService } from '@axe/application/party/party.service';
 import { TableFocusService } from '@axe/application/tabletop/table-focus.service';
+import { closeWhenOffTheTable } from '@axe/application/ui/close-when-off-the-table';
 import { ConfirmService } from '@axe/application/ui/confirm.service';
 import { SelectionSignalService } from '@axe/application/ui/selection-signal.service';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { Party, PARTY_COLORS } from '@axe/domain/party/party';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
 
@@ -15,7 +17,7 @@ import { TranslocoModule } from '@jsverse/transloco';
   selector: 'party-list-panel',
   templateUrl: './party-list-panel.component.html',
   host: { class: 'block h-full' },
-  imports: [FormsModule, SafePipe, TranslocoModule],
+  imports: [TextTooltipDirective, FormsModule, SafePipe, TranslocoModule],
 })
 export class PartyListPanelComponent {
   private readonly partyService = inject(PartyService);
@@ -23,6 +25,11 @@ export class PartyListPanelComponent {
   private readonly tableFocus = inject(TableFocusService);
   private readonly t = inject(TRANSLATE_FN);
   private readonly confirm = inject(ConfirmService);
+
+  constructor() {
+    // Made a guest meanwhile, the seat may no longer write what this panel writes.
+    closeWhenOffTheTable();
+  }
 
   protected readonly colors = PARTY_COLORS;
   protected readonly parties = this.partyService.parties;

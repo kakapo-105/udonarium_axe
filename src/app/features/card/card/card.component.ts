@@ -10,7 +10,6 @@ import {
   linkedSignal,
   signal,
 } from '@angular/core';
-import { CardFlipCutInService } from '@axe/application/card/card-flip-cut-in.service';
 import { CardTargetService } from '@axe/application/card/card-target.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
@@ -31,6 +30,7 @@ import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { buildCardContextMenu } from '@axe/features/card/card/card-context-menu';
 import { selectOverlappingCards } from '@axe/features/card/card/overlapping-cards';
+import { CardFlipCutInService } from '@axe/features/card/card-flip-cut-in.service';
 import { elementsAt } from '@axe/features/card/hand-rail/elements-at';
 import { HandDragService } from '@axe/features/card/hand-rail/hand-drag.service';
 import { ObjectPanelService } from '@axe/features/panels/object-panel.service';
@@ -386,7 +386,7 @@ export class CardComponent {
         (cardStack.location.x - this.card().location.x) ** 2 +
         (cardStack.location.y - this.card().location.y) ** 2 +
         (cardStack.posZ - this.card().posZ) ** 2;
-      if (distance < 25 ** 2) {
+      if (distance < (this.gridSize / 2) ** 2) {
         cardStack.location.x = this.card().location.x;
         cardStack.location.y = this.card().location.y;
         cardStack.posZ = this.card().posZ;
@@ -411,7 +411,7 @@ export class CardComponent {
    */
   onDoubleClick() {
     this.doubleTap.cancel();
-    if (!this.rolePermission.canEditTabletop) return;
+    if (!this.rolePermission.canEditTabletop()) return;
     if (!this.doubleTap.isInPlace()) return;
     if (this.ownerIsOnline && !this.isPeeking) return;
     const turnsToFront = !(this.isVisible && !this.isPeeking);
@@ -427,10 +427,13 @@ export class CardComponent {
     e.preventDefault();
   }
 
-  /** Brings the card to the top when it is pressed, and starts watching for a double tap. */
+  /**
+   * Brings the card to the top when it is pressed, for a seat that may change the table, and starts
+   * watching for a double tap.
+   */
   onInputStart(e: MouseEvent | TouchEvent) {
     this.startDoubleClickTimer(e);
-    this.card().toTopmost();
+    if (this.rolePermission.canEditTabletop()) this.card().toTopmost();
     this.iconHiding.touch();
   }
 

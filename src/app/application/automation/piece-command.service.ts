@@ -2,7 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { fail } from '@axe/application/automation/automation-contract';
 import { AutomationImage, AutomationImageService } from '@axe/application/automation/automation-image.service';
 import { AutomationPolicyService } from '@axe/application/automation/automation-policy.service';
-import { CharacterImportService } from '@axe/application/character/character-import.service';
+import { SheetReader } from '@axe/application/automation/sheet-reader';
 import { ConcealmentService } from '@axe/application/tabletop/concealment.service';
 import { GameObject } from '@axe/core/sync/game-object';
 import { ObjectSerializer } from '@axe/core/sync/object-serializer';
@@ -59,7 +59,7 @@ export interface PieceAnchor {
  */
 @Injectable({ providedIn: 'root' })
 export class PieceCommandService {
-  private readonly importer = inject(CharacterImportService);
+  private readonly importer = inject(SheetReader);
   private readonly store = inject(ObjectStore);
   private readonly tables = inject(TableSelecter);
   private readonly concealment = inject(ConcealmentService);

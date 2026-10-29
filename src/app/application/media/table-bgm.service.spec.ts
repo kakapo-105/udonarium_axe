@@ -5,7 +5,6 @@ import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { Jukebox } from '@axe/domain/media/jukebox';
 import { GameTable } from '@axe/domain/tabletop/game-table';
-import { TABLE_BGM_STOP } from '@axe/domain/tabletop/table-bgm';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 
 describe('TableBgmService', () => {
@@ -15,12 +14,16 @@ describe('TableBgmService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [...TEST_PROVIDERS] });
+    service = TestBed.inject(TableBgmService);
     jukebox = ObjectStore.instance.get<Jukebox>('Jukebox') ?? new Jukebox('Jukebox');
     if (!ObjectStore.instance.get('Jukebox')) jukebox.initialize();
-    AudioStorage.instance.add(AudioFile.createEmpty('battle-theme'));
+    jukebox.isPlaying = false;
+    jukebox.audioIdentifier = '';
     table = new GameTable();
     table.initialize();
-    service = TestBed.inject(TableBgmService);
+    vi.spyOn(TestBed.inject(AudioStorage), 'get').mockImplementation((identifier: string) =>
+      identifier === 'track-a' || identifier === 'track-b' ? ({ identifier } as AudioFile) : null
+    );
   });
 
   afterEach(() => {
@@ -28,29 +31,64 @@ describe('TableBgmService', () => {
     table.destroy();
   });
 
-  it("plays the table's track on the room's jukebox", () => {
+  function asking(mode: string, identifier = ''): void {
+    table.tableBgm = mode;
+    table.tableBgmIdentifier = identifier;
+  }
+
+  it('puts on the track the table names', () => {
     const play = vi.spyOn(jukebox, 'play').mockImplementation(() => undefined);
-    table.bgm = 'battle-theme';
+    asking('play', 'track-a');
 
-    expect(service.applyFor(table)).toEqual({ kind: 'play', identifier: 'battle-theme' });
-    expect(play).toHaveBeenCalledWith('battle-theme', true);
+    service.playFor(table);
+
+    expect(play).toHaveBeenCalledWith('track-a');
   });
 
-  it('stops the music for a table that asks for silence', () => {
-    jukebox.audioIdentifier = 'battle-theme';
+  it('lets the track carry on when it is already playing', () => {
+    const play = vi.spyOn(jukebox, 'play').mockImplementation(() => undefined);
+    jukebox.audioIdentifier = 'track-a';
     jukebox.isPlaying = true;
-    const stop = vi.spyOn(jukebox, 'stop').mockImplementation(() => undefined);
-    table.bgm = TABLE_BGM_STOP;
+    asking('play', 'track-a');
 
-    expect(service.applyFor(table)).toEqual({ kind: 'stop' });
-    expect(stop).toHaveBeenCalledOnce();
+    service.playFor(table);
+
+    expect(play).not.toHaveBeenCalled();
   });
 
-  it('touches nothing for a table left to keep the music', () => {
-    const play = vi.spyOn(jukebox, 'play');
-    const stop = vi.spyOn(jukebox, 'stop');
+  it('puts the track on over another that is playing', () => {
+    const play = vi.spyOn(jukebox, 'play').mockImplementation(() => undefined);
+    jukebox.audioIdentifier = 'track-b';
+    jukebox.isPlaying = true;
+    asking('play', 'track-a');
 
-    expect(service.applyFor(table)).toEqual({ kind: 'keep' });
+    service.playFor(table);
+
+    expect(play).toHaveBeenCalledWith('track-a');
+  });
+
+  it('stops the music where the table asks it to', () => {
+    const stop = vi.spyOn(jukebox, 'stop').mockImplementation(() => undefined);
+    jukebox.isPlaying = true;
+    asking('stop');
+
+    service.playFor(table);
+
+    expect(stop).toHaveBeenCalled();
+  });
+
+  it('leaves the music where the table asks nothing, or names a track the room does not have', () => {
+    const play = vi.spyOn(jukebox, 'play').mockImplementation(() => undefined);
+    const stop = vi.spyOn(jukebox, 'stop').mockImplementation(() => undefined);
+    jukebox.isPlaying = true;
+
+    asking('');
+    service.playFor(table);
+    asking('play', 'gone');
+    service.playFor(table);
+    asking('something else', 'track-a');
+    service.playFor(table);
+
     expect(play).not.toHaveBeenCalled();
     expect(stop).not.toHaveBeenCalled();
   });

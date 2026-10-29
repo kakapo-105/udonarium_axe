@@ -1,15 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { AbsentHand, CardGameService } from '@axe/application/card/card-game.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ImageService } from '@axe/application/storage/image.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
+import { closeWhenOffTheTable } from '@axe/application/ui/close-when-off-the-table';
 import { ConfirmService } from '@axe/application/ui/confirm.service';
 import { ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { Card } from '@axe/domain/card/card';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { AbsentHand, CardGameService } from '@axe/features/card/card-game.service';
 import { buildCardReceiverMenu } from '@axe/features/card/hand-rail/hand-card-context-menu';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
 
@@ -24,7 +26,7 @@ export interface HandDrawTarget {
   selector: 'hand-draw-panel',
   templateUrl: './hand-draw-panel.component.html',
   host: { class: 'text-ui-text block h-full overflow-y-auto p-3' },
-  imports: [SafePipe, TranslocoModule],
+  imports: [TextTooltipDirective, SafePipe, TranslocoModule],
 })
 export class HandDrawPanelComponent {
   private readonly objectStore = inject(ObjectStore);
@@ -36,9 +38,15 @@ export class HandDrawPanelComponent {
   private readonly confirm = inject(ConfirmService);
   private readonly t = inject(TRANSLATE_FN);
 
+  constructor() {
+    closeWhenOffTheTable();
+  }
+
   readonly selectedUserId = signal('');
 
+  /** The other participants holding cards to draw from, as they come and go from the room. */
   readonly targets = computed<HandDrawTarget[]>(() => {
+    this.objectChange.networkVersion();
     this.objectChange.collectionOf(Card.aliasName)();
     this.objectChange.collectionOf(PeerCursor.aliasName)();
     const myUserId = this.cardGame.myUserId();
@@ -68,14 +76,18 @@ export class HandDrawPanelComponent {
 
   /**
    * The hands still held for people who have left the room, which only the game master is shown, to
-   * hand them over to somebody still here.
+   * hand them over to somebody still here; on a room server, those held for a guest too, as one is
+   * made one or comes back from being one.
    */
   readonly absentHands = computed<AbsentHand[]>(() => {
     this.objectChange.trackMyCursor();
-    if (!this.rolePermission.canEditShared) return [];
+    if (!this.rolePermission.canEditShared()) return [];
     this.objectChange.collectionOf(Card.aliasName)();
     this.objectChange.collectionOf(PeerCursor.aliasName)();
     for (const card of this.objectStore.getObjects<Card>(Card)) this.objectChange.versionOf(card.identifier)();
+    for (const cursor of this.objectStore.getObjects<PeerCursor>(PeerCursor)) {
+      this.objectChange.versionOf(cursor.identifier)();
+    }
     return this.cardGame.absentHands();
   });
 

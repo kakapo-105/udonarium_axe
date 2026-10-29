@@ -1,7 +1,9 @@
-import { xmlLoaded$ } from '@axe/core/event/domain-events';
+import { fileResourceUpdated$, xmlLoaded$ } from '@axe/core/event/domain-events';
 import { Logger } from '@axe/core/logging/logger';
 import { Network } from '@axe/core/network/network';
 import { localDispatch, networkMessage$, networkSend } from '@axe/core/network/network-messaging';
+import { AssetDownloadMiss, AssetHttpStore } from '@axe/core/storage/asset-http-store';
+import { AssetRetries } from '@axe/core/storage/asset-retries';
 import { BufferSharingTask } from '@axe/core/storage/buffer-sharing-task';
 import * as FileReaderUtil from '@axe/core/storage/file-reader-util';
 import { ImageContext, ImageFile, ImageState } from '@axe/core/storage/image-file';
@@ -28,6 +30,17 @@ export class ImageSharingSystem {
   private maxSendTask: number = 2;
   private maxReceiveTask: number = 4;
   private cleanups: (() => void)[] = [];
+  /**
+   * Images being fetched from the asset server, so a second catalogue does not fetch them again,
+   * each with the first peer whose catalogue named it meanwhile, to ask should the server fail.
+   */
+  private httpFetching: Map<string, string | null> = new Map();
+  /** Images the asset server did not have, which are asked of peers from then on. */
+  private httpMissed: Set<string> = new Set();
+  /** Images the room server's operator took down, asked of nobody: neither the store nor a peer. */
+  private httpBarred: Set<string> = new Set();
+  /** Images the room's list named that the asset server could not send just then. */
+  private httpRetries = new AssetRetries();
 
   private constructor() {}
 
@@ -52,12 +65,14 @@ export class ImageSharingSystem {
             const otherCatalog: CatalogItem[] = msg.data as CatalogItem[];
             const request: CatalogItem[] = [];
             for (const item of otherCatalog) {
+              if (ImageStorage.instance.isRemoved(item.identifier) || this.httpBarred.has(item.identifier)) continue;
               let image = ImageStorage.instance.get(item.identifier);
               if (image === null) {
                 image = ImageFile.createEmpty(item.identifier);
                 ImageStorage.instance.add(image);
               }
               if (image.state < ImageState.COMPLETE && !this.receiveTaskMap.has(item.identifier)) {
+                if (this.fetchOverHttp(item.identifier, msg.sendFrom)) continue;
                 request.push({ identifier: item.identifier, state: image.state });
               }
             }
@@ -78,7 +93,8 @@ export class ImageSharingSystem {
             const randomRequest: CatalogItem[] = [];
             for (const item of data.identifiers) {
               const image = ImageStorage.instance.get(item.identifier);
-              if (image && item.state < image.state)
+              // What this seat holds back for the room server's operator is not sent when asked for either.
+              if (image && item.state < image.state && !ImageStorage.instance.isHeldBack(item.identifier))
                 randomRequest.push({ identifier: item.identifier, state: item.state });
             }
             if (!this.isLimitSendTask() && 0 < randomRequest.length && !this.existsSendTask(data.receiver)) {
@@ -98,17 +114,23 @@ export class ImageSharingSystem {
           case 'UPDATE_FILE_RESOURE': {
             const updateImages: ImageContext[] = (msg.data as { updateImages: ImageContext[] }).updateImages;
             for (const context of updateImages) {
+              if (ImageStorage.instance.isRemoved(context.identifier)) continue;
               if (context.blob) context.blob = new Blob([context.blob], { type: context.type });
               if (context.thumbnail.blob)
                 context.thumbnail.blob = new Blob([context.thumbnail.blob], { type: context.thumbnail.type });
               ImageStorage.instance.add(context);
+              if (this.httpMissed.has(context.identifier)) ImageStorage.instance.uploadReceived(context.identifier);
             }
             break;
           }
           case 'START_FILE_TRANSMISSION': {
             const identifier = (msg.data as { taskIdentifier: string }).taskIdentifier;
             const image = ImageStorage.instance.get(identifier);
-            if (this.receiveTaskMap.has(identifier) || (image && ImageState.COMPLETE <= image.state)) {
+            if (
+              this.receiveTaskMap.has(identifier) ||
+              (image && ImageState.COMPLETE <= image.state) ||
+              ImageStorage.instance.isRemoved(identifier)
+            ) {
               Logger.warn('[ImageSync] タスクキャンセル', identifier);
               networkSend(`CANCEL_TASK_${identifier}`, null, msg.sendFrom);
             } else {
@@ -156,6 +178,110 @@ export class ImageSharingSystem {
     };
 
     task.start(updateImages);
+  }
+
+  /**
+   * Fetches from the room's asset store the pictures it holds that this seat lacks, named by the
+   * room's list rather than by a peer's catalogue: those left in a room that everybody had gone
+   * from, say. Each keeps the name it was put there with. One the store lacks waits for a catalogue
+   * to name it; one it could not send just then is tried again a few times.
+   */
+  fetchListed(assets: readonly { id: string; name: string }[]): void {
+    for (const { id, name } of assets) {
+      if (ImageStorage.instance.isRemoved(id) || this.httpBarred.has(id)) continue;
+      let image = ImageStorage.instance.get(id);
+      if (image === null) {
+        image = ImageFile.createEmpty(id, name);
+        ImageStorage.instance.add(image);
+      } else if (!image.name && name && image.state < ImageState.COMPLETE) {
+        image.context.name = name;
+      }
+      if (image.state < ImageState.COMPLETE && !this.receiveTaskMap.has(id)) this.fetchOverHttp(id, null);
+    }
+  }
+
+  /**
+   * Forgets which pictures the asset store lacked, for another room, which may hold them, and drops
+   * the tries still to come of those it could not send.
+   */
+  forgetMisses(): void {
+    this.httpMissed.clear();
+    this.httpBarred.clear();
+    this.httpRetries.clear();
+  }
+
+  private fetchListedAgain(identifier: string): void {
+    const image = ImageStorage.instance.get(identifier);
+    if (image && image.state < ImageState.COMPLETE && !this.receiveTaskMap.has(identifier))
+      this.fetchOverHttp(identifier, null);
+  }
+
+  /**
+   * Starts fetching an image from the asset server, and says whether it is on its way from there,
+   * so it need not be asked of a peer.
+   *
+   * An image the server could not send is asked of the peer whose catalogue named it, the way it
+   * would have been without the server. With no such peer, one the server lacks, or sends bytes for
+   * that do not match, is left, and one it could not send just then is tried again later. Only the
+   * server's lacking it keeps it from being fetched from there again. One the operator took down is
+   * asked of nobody.
+   */
+  private fetchOverHttp(identifier: string, catalogPeer: string | null): boolean {
+    const store = AssetHttpStore.instance;
+    if (!store.isEnabled || !AssetHttpStore.isAssetId(identifier) || this.httpMissed.has(identifier)) return false;
+    if (this.httpBarred.has(identifier)) return false;
+    if (this.httpFetching.has(identifier)) {
+      if (this.httpFetching.get(identifier) === null) this.httpFetching.set(identifier, catalogPeer);
+      return true;
+    }
+    this.httpFetching.set(identifier, catalogPeer);
+    void this.receiveOverHttp(identifier)
+      .then((received) => {
+        if (received === true) {
+          this.httpRetries.forget(identifier);
+          return;
+        }
+        if (received === 'blocked') {
+          this.letGoOfBarred(identifier);
+          return;
+        }
+        if (received === 'missing') this.httpMissed.add(identifier);
+        const image = ImageStorage.instance.get(identifier);
+        if (!image || ImageState.COMPLETE <= image.state) return;
+        const namedBy = this.httpFetching.get(identifier) ?? null;
+        if (namedBy === null) {
+          if (received === 'failed') this.httpRetries.schedule(identifier, () => this.fetchListedAgain(identifier));
+          return;
+        }
+        if (this.receiveTaskMap.has(identifier) || this.isLimitReceiveTask()) return;
+        this.request([{ identifier, state: image.state }], namedBy);
+      })
+      .finally(() => this.httpFetching.delete(identifier));
+    return true;
+  }
+
+  /** Asks nobody for one the operator barred, and drops the empty entry kept for it while it was to come. */
+  private letGoOfBarred(identifier: string): void {
+    this.httpBarred.add(identifier);
+    const image = ImageStorage.instance.get(identifier);
+    if (image && image.state < ImageState.COMPLETE && ImageStorage.instance.delete(identifier))
+      fileResourceUpdated$.emit();
+  }
+
+  private async receiveOverHttp(identifier: string): Promise<true | AssetDownloadMiss> {
+    const fetched = await AssetHttpStore.instance.download(identifier);
+    if (typeof fetched === 'string') return fetched;
+    let context: ImageContext;
+    try {
+      // The name it was put up under fills in an entry with none; one the entry has stays.
+      context = { ...(await ImageFile.contextFromBytesAsync(identifier, fetched.blob)), name: fetched.name };
+    } catch (reason) {
+      Logger.warn('[ImageSync] サーバーから受け取った画像を読めませんでした', identifier, reason);
+      return 'missing';
+    }
+    localDispatch('UPDATE_FILE_RESOURE', { identifier, updateImages: [context] });
+    ImageStorage.instance.lazySynchronize(CATALOG_BROADCAST_DELAY_MS);
+    return true;
   }
 
   private startReceiveTask(identifier: string) {
@@ -317,7 +443,7 @@ function convertUrlImage(xmlElement: Element) {
         name: url,
         blob: byName.context.blob,
         type: byName.context.type,
-        url: '', // createURLsで新しいblob:URLを生成させる
+        url: '', // left empty, so createURLs makes a blob: URL of its own
         thumbnail: {
           blob: byName.context.thumbnail.blob,
           type: byName.context.thumbnail.type,

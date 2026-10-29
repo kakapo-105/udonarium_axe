@@ -5,9 +5,10 @@ import {
   buildLockToggleAction,
   buildToggleAction,
 } from '@axe/application/ui/tabletop-context-menu-actions';
-import { Network } from '@axe/core/index';
 import { DiceSymbol } from '@axe/domain/dice/dice-symbol';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
+import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { isWithheldHere } from '@axe/domain/tabletop/withheld';
 
 export interface DiceOwnerCandidate {
   identifier: string;
@@ -73,7 +74,7 @@ export function buildDiceSymbolContextMenu(
     actions.push({
       name: t('feature.dice.contextMenu.showSelfOnly'),
       action: () => {
-        diceSymbol.owner = Network.peerContext.userId;
+        diceSymbol.owner = PeerCursor.myUserId;
         SoundEffect.play(PresetSound.lock);
       },
     });
@@ -106,6 +107,7 @@ export function buildDiceSymbolContextMenu(
   if (owner.length > 0 && callbacks.onStoreToOwner) {
     actions.push({
       name: t('feature.dice.contextMenu.storeToOwner'),
+      enabled: !isWithheldHere(diceSymbol),
       action: () => callbacks.onStoreToOwner?.(owner),
     });
   }

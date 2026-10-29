@@ -1,7 +1,7 @@
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { ChatMessageService } from '@axe/application/chat/chat-message.service';
+import { ChatClockService } from '@axe/application/chat/chat-clock.service';
 import { SPEECH_BUBBLE_WAIT_MS, SpeechBubbleService } from '@axe/application/chat/speech-bubble.service';
 import { EffectPlaybackService } from '@axe/application/effect/effect-playback.service';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
@@ -14,11 +14,12 @@ import { BillboardFacing, BillboardFrameService } from '@axe/application/ui/bill
 import { BuffViewPreferenceService } from '@axe/application/ui/buff-view-preference.service';
 import { ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { MobileLayoutService } from '@axe/application/ui/mobile-layout.service';
+import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
 import { PieceOverlayPreferenceService } from '@axe/application/ui/piece-overlay-preference.service';
 import { TabletopOverlapService } from '@axe/application/ui/tabletop-overlap.service';
 import { UiSignalService } from '@axe/application/ui/ui-signal.service';
 import { ViewModePreferenceService } from '@axe/application/ui/view-mode-preference.service';
-import { VolumeType } from '@axe/core/storage/audio-player';
+import { VolumeType } from '@axe/core/storage/audio-output';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { PERF_HEX_PEDESTAL_OUTLINE, perfCounters } from '@axe/core/util/perf-counters';
@@ -33,12 +34,13 @@ import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
 import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
-import { GameTable, GridType } from '@axe/domain/tabletop/game-table';
+import { GameTable, GridSnapStyle, GridType } from '@axe/domain/tabletop/game-table';
 import { TableAmbience } from '@axe/domain/tabletop/table-ambience';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { Terrain } from '@axe/domain/tabletop/terrain';
 import { SlopeSide } from '@axe/domain/tabletop/terrain-slope';
 import { GameCharacterComponent } from '@axe/features/character/game-character/game-character.component';
+import { GameCharacterMenuService } from '@axe/features/character/game-character/game-character-menu.service';
 import { PieceFigureHeightsService } from '@axe/features/character/game-character/piece-figure-heights.service';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 import { MovableDirective } from '@axe/ui/directives/movable.directive';
@@ -92,6 +94,57 @@ describe('GameCharacterComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  describe('the panels it fetches on first use', () => {
+    type Opener = 'showLightSettings' | 'showBattlePlacement' | 'showLineOfFire';
+
+    /** Opens a panel about the piece, and hands back what the panel would arrive as and be given. */
+    async function opened(opener: Opener, character: GameCharacter) {
+      const openLazy = vi
+        .spyOn(fixture.debugElement.injector.get(PanelService), 'openLazy')
+        .mockImplementation(() => {});
+      (TestBed.inject(GameCharacterMenuService) as unknown as Record<Opener, (piece: GameCharacter) => void>)[opener](
+        character
+      );
+      const [factory, option, setup] = openLazy.mock.calls[0] as [
+        () => Promise<unknown>,
+        PanelOption,
+        (instance: Record<string, unknown>) => void,
+      ];
+      openLazy.mockRestore();
+      return { panel: await factory(), option, setup };
+    }
+
+    it('shows the light settings of the piece with its vision', async () => {
+      const character = GameCharacter.create('灯りのコマ', 1, '');
+      const { LightSettingsComponent } = await import('@axe/features/light-settings/light-settings.component');
+
+      const { panel, option, setup } = await opened('showLightSettings', character);
+      const settings: Record<string, unknown> = {};
+      setup(settings);
+
+      expect(panel).toBe(LightSettingsComponent);
+      expect(settings).toEqual({ target: character, showVision: true });
+      expect(option.stillWanted?.()).toBe(true);
+      character.destroy();
+      expect(option.stillWanted?.()).toBe(false);
+    });
+
+    it.each([
+      ['showBattlePlacement', 'leaderIdentifier'],
+      ['showLineOfFire', 'shooterIdentifier'],
+    ] as const)('%s hands the panel the piece by its identifier', async (opener, field) => {
+      const character = GameCharacter.create('隊長', 1, '');
+
+      const { option, setup } = await opened(opener, character);
+      const given = signal('');
+      setup({ [field]: given });
+
+      expect(given()).toBe(character.identifier);
+      character.destroy();
+      expect(option.stillWanted?.()).toBe(false);
+    });
+  });
+
   it('carries its place in the pile onto the element the table stacks', async () => {
     const character = GameCharacter.create('コマ', 1, '');
     fixture.componentRef.setInput('gameCharacter', character);
@@ -103,6 +156,21 @@ describe('GameCharacterComponent', () => {
     fixture.detectChanges();
 
     expect((fixture.nativeElement as HTMLElement).style.zIndex).toBe('4');
+  });
+
+  it('marks a piece in stealth for those who still see it, and drops the mark as it comes out', async () => {
+    const lurker = GameCharacter.create('潜む者', 1, '');
+    lurker.stealth = '1';
+    fixture.componentRef.setInput('gameCharacter', lurker);
+    fixture.detectChanges();
+    const mark = () => (fixture.nativeElement as HTMLElement).querySelector('[data-testid="stealth-mark"]');
+    expect(mark()).not.toBeNull();
+
+    lurker.stealth = '';
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(mark()).toBeNull();
   });
 
   it('says by its name how many ride a mount', async () => {
@@ -641,6 +709,50 @@ describe('GameCharacterComponent', () => {
     });
   });
 
+  describe('where it is snapped to on a table counting squares of several cells', () => {
+    let table: GameTable;
+
+    beforeEach(() => {
+      table = new GameTable();
+      table.width = 12;
+      table.height = 12;
+      table.gridSize = 50;
+      table.squareSpan = 2;
+      table.initialize();
+    });
+
+    afterEach(() => {
+      table.destroy();
+    });
+
+    function letGoAt(x: number, y: number, size = 1): { x: number; y: number } {
+      fixture.componentRef.setInput('gameCharacter', GameCharacter.create('コマ', size, ''));
+      fixture.detectChanges();
+      const movable = fixture.debugElement.query(By.directive(MovableDirective)).injector.get(MovableDirective);
+      movable.posX = x;
+      movable.posY = y;
+      movable.snapToGrid();
+      return { x: movable.posX, y: movable.posY };
+    }
+
+    it('goes to the middle of the square under the cell snap', () => {
+      expect(letGoAt(60, 10)).toEqual({ x: 25, y: 25 });
+    });
+
+    it('stays on the cell of the square it is let go over under the grid snap', () => {
+      table.gridSnapStyle = GridSnapStyle.GRID;
+
+      expect(letGoAt(60, 10)).toEqual({ x: 50, y: 0 });
+      expect(letGoAt(10, 60)).toEqual({ x: 0, y: 50 });
+    });
+
+    it('keeps a piece two cells across inside the one square under its middle under the grid snap', () => {
+      table.gridSnapStyle = GridSnapStyle.GRID;
+
+      expect(letGoAt(50, 50, 2)).toEqual({ x: 100, y: 100 });
+    });
+  });
+
   describe('standing up or lying flat', () => {
     function pieceOn(surface?: string) {
       const character = GameCharacter.create('コマ', 1, '');
@@ -854,6 +966,37 @@ describe('GameCharacterComponent', () => {
         expect(openRadial).not.toHaveBeenCalled();
       } finally {
         character.destroy();
+      }
+    });
+
+    it('offers to play the battle stage from the piece to a player, not to one who only watches', () => {
+      const menus = TestBed.inject(ContextMenuService);
+      const open = vi.spyOn(menus, 'open').mockImplementation(() => undefined);
+      const names = (actions: readonly unknown[]): string[] =>
+        actions.flatMap((action) => {
+          const entry = action as { name?: unknown; subActions?: readonly unknown[] } | null;
+          return [String(entry?.name ?? ''), ...names(entry?.subActions ?? [])];
+        });
+      const offersPlay = (call: number) =>
+        names(open.mock.calls[call][1] as readonly unknown[]).some((name) => /battlePlay|このコマで攻撃/.test(name));
+      const before = PeerCursor.myCursor;
+      const cursor = before ?? PeerCursor.createMyCursor();
+      const role = cursor.role;
+
+      try {
+        cursor.role = PeerRole.Player;
+        openMenu(false, 'standard').destroy();
+        cursor.role = PeerRole.Guest;
+        openMenu(false, 'standard').destroy();
+
+        expect(offersPlay(0)).toBe(true);
+        expect(offersPlay(1)).toBe(false);
+      } finally {
+        cursor.role = role;
+        if (!before) {
+          cursor.destroy();
+          PeerCursor.myCursor = before;
+        }
       }
     });
 
@@ -1516,6 +1659,23 @@ describe('GameCharacterComponent', () => {
       const root = () => fixture.nativeElement as HTMLElement;
       const switchButton = () => root().querySelector('[data-testid="buff-view-switch"]') as HTMLButtonElement;
 
+      it('draws the icons at the size this reader chose', () => {
+        const preference = TestBed.inject(BuffViewPreferenceService);
+        const character = bearBuff();
+        const grid = () => root().querySelector('[data-testid="buff-badge-grid"]') as HTMLElement;
+
+        try {
+          expect(grid().style.fontSize).toBe('1em');
+
+          preference.setIconScale(150);
+          fixture.detectChanges();
+          expect(grid().style.fontSize).toBe('1.5em');
+        } finally {
+          preference.setIconScale(100);
+          character.destroy();
+        }
+      });
+
       it('carries the display on to the next type at every press', () => {
         const character = bearBuff();
 
@@ -1928,7 +2088,7 @@ describe('GameCharacterComponent', () => {
       tab = new ChatTab();
       tab.initialize();
       ChatTabList.instance.appendChild(tab);
-      vi.spyOn(TestBed.inject(ChatMessageService), 'getTime').mockImplementation(() => Date.now());
+      vi.spyOn(TestBed.inject(ChatClockService), 'now').mockImplementation(() => Date.now());
     });
 
     afterEach(() => {
@@ -2135,6 +2295,32 @@ describe('GameCharacterComponent', () => {
     } finally {
       char.destroy();
       ImageStorage.instance.delete('piece-height-url');
+    }
+  });
+
+  it('draws a picture given a width apart from its height at that width, and in proportion without one', () => {
+    ImageStorage.instance.add('piece-width-url');
+    const char = GameCharacter.create('width-layout-test', 1, 'piece-width-url');
+    char.specifyKomaImageFlag = true;
+    char.komaImageHeight = 240;
+    char.komaImageWidth = 400;
+    fixture.componentRef.setInput('gameCharacter', char);
+
+    try {
+      fixture.detectChanges();
+      const stretched = fixture.nativeElement.querySelector('img.image.chrome-smooth-image-trick') as HTMLImageElement;
+      expect(stretched.style.width).toBe('400px');
+      expect(stretched.style.height).toBe('240px');
+
+      char.komaImageWidth = 0;
+      TestBed.inject(ObjectChangeService).notifyChanged(char.identifier);
+      fixture.detectChanges();
+      const kept = fixture.nativeElement.querySelector('img.image.chrome-smooth-image-trick') as HTMLImageElement;
+      expect(kept.style.width).toBe('auto');
+      expect(kept.style.height).toBe('240px');
+    } finally {
+      char.destroy();
+      ImageStorage.instance.delete('piece-width-url');
     }
   });
 
@@ -2670,6 +2856,31 @@ describe('GameCharacterComponent', () => {
         expect(root.querySelectorAll('[data-testid="piece-gauge"]')).toHaveLength(2);
         expect(root.querySelector('[data-testid="buff-badge"]')).toBeTruthy();
         expect(root.querySelector('[data-testid="multi-angle-resource-buff-orbit"]')).toBeNull();
+      } finally {
+        character.destroy();
+      }
+    });
+
+    it('draws a picture chosen as the mark of a buff in the orbit, rather than writing out its name', () => {
+      const table = TestBed.inject(TabletopService).currentTable;
+      table.mode2d = true;
+      table.multiAngleEnabled = true;
+      table.multiAngleResourceBuffEnabled = true;
+      vi.spyOn(ImageStorage.instance, 'get').mockImplementation(
+        (identifier) => (identifier === '452c31a22f' ? { url: 'blob:blessing' } : null) as never
+      );
+      const character = GameCharacter.create('絵の印', 1, '');
+      const buff = DataElement.create('加護', 2, { type: DataElementType.NUMBER_RESOURCE });
+      buff.setAttribute(DataElementAttribute.BUFF_ICON, '452c31a22f');
+      character.buffDataElement!.appendChild(buff);
+      fixture.componentRef.setInput('gameCharacter', character);
+
+      try {
+        fixture.detectChanges();
+        const icon = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="multi-angle-buff-icon"]')!;
+
+        expect(icon.querySelector('img')?.getAttribute('src')).toBe('blob:blessing');
+        expect(icon.textContent).not.toContain('452c31a22f');
       } finally {
         character.destroy();
       }

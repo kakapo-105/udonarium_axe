@@ -1,7 +1,7 @@
 import { ImageStorage } from '@axe/core/storage/image-storage';
+import { createScene } from '@axe/domain/map-editor/scene';
+import { serializeScene } from '@axe/domain/map-editor/serialize';
 import { WhiteBoard } from '@axe/domain/tabletop/white-board';
-import { createScene } from '@axe/features/map-editor/model/scene';
-import { serializeScene } from '@axe/features/map-editor/model/serialize';
 import { BoardKeeper, BoardKeeperHost, SAVE_DELAY } from '@axe/features/tabletop/white-board/white-board-keeper';
 
 describe('BoardKeeper', () => {
@@ -45,6 +45,19 @@ describe('BoardKeeper', () => {
     expect(board.update).toHaveBeenCalledTimes(1);
     expect(redraw).toHaveBeenCalledTimes(1);
     expect(images.addAsync).not.toHaveBeenCalled();
+  });
+
+  it('keeps the picture as one drawn here, which the GM may put back, and sends only the drawing when it is kept out', async () => {
+    const painted = new Blob(['board'], { type: 'image/webp' });
+    host.canvas = () => ({ toBlob: (made: BlobCallback) => made(painted) }) as unknown as HTMLCanvasElement;
+    images.addAsync.mockResolvedValue(null);
+
+    keeper.keepPicture();
+    await vi.runAllTimersAsync();
+
+    expect(images.addAsync).toHaveBeenCalledWith(painted, { putBack: true });
+    expect(board.update).toHaveBeenCalledTimes(1);
+    expect(images.delete).not.toHaveBeenCalled();
   });
 
   it('writes the drawing down at once when put down within the breath', () => {

@@ -1,10 +1,16 @@
 import { inject, Injectable } from '@angular/core';
 import { TriggerFireService } from '@axe/application/tabletop/trigger-fire.service';
 import { GameCharacter } from '@axe/domain/character/game-character';
-import { cellCenterOf, CellGrid, cellGridOf, cellIndexAt, CellPoint } from '@axe/domain/tabletop/fog/cell-grid';
+import { cellCenterOf, CellGrid, cellIndexAt, CellPoint } from '@axe/domain/tabletop/fog/cell-grid';
 import { GameTable } from '@axe/domain/tabletop/game-table';
-import { hopHeightAt, hopLiftFor, landingHeightAt } from '@axe/domain/tabletop/move/landing-height';
-import { cornerShiftOf } from '@axe/domain/tabletop/move/piece-on-grid';
+import { hopHeightAt, hopLiftFor, isWalkableStep, landingHeightAt } from '@axe/domain/tabletop/move/landing-height';
+import { isSquareGrid, moveGridOf } from '@axe/domain/tabletop/move/move-grid';
+import {
+  cellsCoveredAt,
+  pieceCornerOn,
+  pieceCornersNearest,
+  pieceWidthPx,
+} from '@axe/domain/tabletop/move/piece-on-grid';
 
 /** How long the piece rests on each cell of the way it walks, once the way is settled. */
 export const MOVE_STEP_MS = 90;
@@ -32,17 +38,61 @@ interface Arrival {
 export class PieceStepService {
   private readonly triggerFire = inject(TriggerFireService);
 
+  /**
+   * Steps onto a cell of a grid. On a grid of squares keeping its pieces to their cells, the piece
+   * stands on the cells nearest the middle of the square it may stand on, and the ground is read
+   * under its own middle.
+   *
+   * Which of the table's cells it may stand on is `standsOn`'s to say, given the height the piece
+   * is at, where the move knows; otherwise it is any cell it can step onto from that height.
+   */
   async step(
     character: GameCharacter,
     table: GameTable,
     grid: CellGrid,
     cell: number,
     ending: boolean,
+    standingZ: number = character.posZ,
+    standsOn?: (tableCell: number, standingPx: number) => boolean
+  ): Promise<number> {
+    const corner = pieceCornerOn(grid, character, table.gridSize, cell);
+    if (isSquareGrid(grid) && grid.keepsToCells) {
+      const width = pieceWidthPx(character, table.gridSize);
+      const half = width / 2;
+      const steps = (tableCell: number) => {
+        if (standsOn) return standsOn(tableCell, standingZ);
+        const { x, y } = cellCenterOf(grid.fine, tableCell);
+        return isWalkableStep(
+          landingHeightAt(table.terrains, table.gridSize, x, y, table.gridType),
+          standingZ,
+          table.gridSize
+        );
+      };
+      const place = pieceCornersNearest(grid, character, cell, { x: corner.x + half, y: corner.y + half }).find(
+        (spot) => cellsCoveredAt(grid, spot, width).every(steps)
+      );
+      return this.stepOnto(character, table, grid, cell, { ...(place ?? corner), width }, ending, standingZ);
+    }
+    const centre = cellCenterOf(grid, cell);
+    return this.arrive(character, table, { centre, corner, grid, cell, ending, standingZ });
+  }
+
+  /**
+   * Steps onto a cell of a grid, standing with its corner at a place in it rather than in the
+   * middle of it: a cell of a square of several cells, on a table whose pieces keep to them. `at`
+   * is where the corner goes and how wide the piece stands there.
+   */
+  async stepOnto(
+    character: GameCharacter,
+    table: GameTable,
+    grid: CellGrid,
+    cell: number,
+    at: { readonly x: number; readonly y: number; readonly width: number },
+    ending: boolean,
     standingZ: number = character.posZ
   ): Promise<number> {
-    const centre = cellCenterOf(grid, cell);
-    const shift = cornerShiftOf(character, table.gridSize);
-    const corner = { x: centre.x - shift, y: centre.y - shift };
+    const corner = { x: at.x, y: at.y };
+    const centre = { x: at.x + at.width / 2, y: at.y + at.width / 2 };
     return this.arrive(character, table, { centre, corner, grid, cell, ending, standingZ });
   }
 
@@ -55,7 +105,7 @@ export class PieceStepService {
   ): Promise<number> {
     const half = (Math.max(1, character.size) * table.gridSize) / 2;
     const corner = { x: centre.x - half, y: centre.y - half };
-    const grid = cellGridOf(table.width, table.height, table.gridSize, table.gridType);
+    const grid = moveGridOf(table);
     const cell = cellIndexAt(grid, centre.x, centre.y);
     return this.arrive(character, table, { centre, corner, grid, cell, ending, standingZ });
   }

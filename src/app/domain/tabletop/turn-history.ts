@@ -21,7 +21,32 @@ export interface TurnStep {
   currentIdentifier: string;
   currentSide: string;
   acted: string[];
+  /** Who was waiting and whose turn was stepped into, as `TurnState.holding` held it. */
+  holding: string;
   buffs: CharacterBuffSnapshot[];
+}
+
+/** What the opening of a piece's turn counted down: every buff it counted, as it stood before. */
+export interface TurnOpening {
+  identifier: string;
+  buffs: CharacterBuffSnapshot[];
+}
+
+/** Reads what a turn's opening counted down; null for nothing written, or anything unreadable. */
+export function readTurnOpening(raw: unknown): TurnOpening | null {
+  if (typeof raw !== 'string' || raw === '') return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<TurnOpening> | null;
+    if (!parsed || typeof parsed.identifier !== 'string' || !Array.isArray(parsed.buffs)) return null;
+    return { identifier: parsed.identifier, buffs: parsed.buffs };
+  } catch {
+    return null;
+  }
+}
+
+/** Writes what a turn's opening counted down as the text `readTurnOpening` reads; empty for none. */
+export function writeTurnOpening(opening: TurnOpening | null): string {
+  return opening ? JSON.stringify(opening) : '';
 }
 
 /**
@@ -31,8 +56,13 @@ export function parseTurnHistory(json: string): TurnStep[] {
   try {
     const parsed: unknown = JSON.parse(json || '[]');
     if (!Array.isArray(parsed)) return [];
-    // A step written where the round had no sides carries none, and reads as none.
-    return (parsed as TurnStep[]).map((step) => ({ ...step, currentSide: step.currentSide ?? '' }));
+    // A step written where the round had no sides, or before pieces could wait, carries none, and
+    // reads as none.
+    return (parsed as TurnStep[]).map((step) => ({
+      ...step,
+      currentSide: step.currentSide ?? '',
+      holding: step.holding ?? '',
+    }));
   } catch {
     return [];
   }

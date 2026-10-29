@@ -123,24 +123,27 @@
         <i class="material-icons">badge</i
         ><span class="@max-[520px]:hidden">{{ 'feature.chat.palette.characterDataLabel' | transloco }}</span>
       </button>
-      <button
-        class="border-ui-border-panel text-ui-muted hover:bg-ui-hover hover:text-ui-text inline-flex h-6.5 shrink-0 cursor-pointer items-center gap-0.75 rounded-sm border border-solid bg-transparent px-1.75 text-[0.78em] leading-normal whitespace-nowrap select-none @max-[520px]:px-1 [&_.material-icons]:text-base!"
-        type="button"
-        [class.bg-ui-accent-bg!]="isEdit()"
-        [class.border-ui-accent!]="isEdit()"
-        [class.text-ui-accent!]="isEdit()"
-        [attr.aria-pressed]="isEdit()"
-        [attr.aria-label]="(isEdit() ? 'feature.chat.palette.confirm' : 'feature.chat.palette.edit') | transloco"
-        (click)="toggleEditMode()"
-      >
-        @if (!isEdit()) {
-          <i class="material-icons">edit</i
-          ><span class="@max-[520px]:hidden">{{ 'feature.chat.palette.edit' | transloco }}</span>
-        } @else {
-          <i class="material-icons">check</i
-          ><span class="@max-[520px]:hidden">{{ 'feature.chat.palette.confirm' | transloco }}</span>
-        }
-      </button>
+      @if (mayEdit()) {
+        <button
+          class="border-ui-border-panel text-ui-muted hover:bg-ui-hover hover:text-ui-text inline-flex h-6.5 shrink-0 cursor-pointer items-center gap-0.75 rounded-sm border border-solid bg-transparent px-1.75 text-[0.78em] leading-normal whitespace-nowrap select-none @max-[520px]:px-1 [&_.material-icons]:text-base!"
+          type="button"
+          data-action="edit-palette"
+          [class.bg-ui-accent-bg!]="isEdit()"
+          [class.border-ui-accent!]="isEdit()"
+          [class.text-ui-accent!]="isEdit()"
+          [attr.aria-pressed]="isEdit()"
+          [attr.aria-label]="(isEdit() ? 'feature.chat.palette.confirm' : 'feature.chat.palette.edit') | transloco"
+          (click)="toggleEditMode()"
+        >
+          @if (!isEdit()) {
+            <i class="material-icons">edit</i
+            ><span class="@max-[520px]:hidden">{{ 'feature.chat.palette.edit' | transloco }}</span>
+          } @else {
+            <i class="material-icons">check</i
+            ><span class="@max-[520px]:hidden">{{ 'feature.chat.palette.confirm' | transloco }}</span>
+          }
+        </button>
+      }
     } @else {
       <button
         class="border-ui-border-panel text-ui-muted hover:bg-ui-hover hover:text-ui-text inline-flex h-6.5 shrink-0 cursor-pointer items-center gap-0.75 rounded-sm border border-solid bg-transparent px-1.75 text-[0.78em] leading-normal whitespace-nowrap select-none @max-[520px]:px-1 [&_.material-icons]:text-base!"
@@ -187,7 +190,9 @@
             }
           </span>
           @if (result.heading) {
-            <span class="text-ui-dim max-w-[40%] shrink-0 truncate text-[0.8em]">{{ result.heading }}</span>
+            <span class="text-ui-dim max-w-[40%] shrink-0 truncate text-[0.8em]" [appTextTooltip]="result.heading">{{
+              result.heading
+            }}</span>
           }
         </div>
       } @empty {
@@ -198,12 +203,39 @@
     </div>
   }
 
+  @if (!isEdit() && viewMode() === 'palette' && paletteTabs().length > 0) {
+    <div
+      class="bg-ui-panel border-ui-border-panel flex shrink-0 gap-0.5 overflow-x-auto border-b border-solid px-1 pt-1"
+      role="tablist"
+      data-testid="palette-tabs"
+      [attr.aria-label]="'feature.chat.palette.tabsLabel' | transloco"
+    >
+      @for (tab of paletteTabs(); track $index) {
+        <button
+          type="button"
+          role="tab"
+          class="rounded-t-ui-sm cursor-pointer border border-b-0 border-solid px-2 py-0.5 text-[0.78em] whitespace-nowrap"
+          [class]="
+            activeTab() === $index
+              ? 'border-ui-border-panel bg-ui-elevated text-ui-text font-bold'
+              : 'text-ui-muted hover:text-ui-text border-transparent bg-transparent'
+          "
+          [attr.aria-selected]="activeTab() === $index"
+          data-testid="palette-tab"
+          (click)="chooseTab($index)"
+        >
+          {{ tab.name || ('feature.chat.palette.untitledTab' | transloco) }}
+        </button>
+      }
+    </div>
+  }
+
   <div
     [hidden]="isEdit() || viewMode() !== 'palette'"
     class="box-border h-0 min-h-25 w-full grow overflow-y-auto font-sans"
     #paletteList
   >
-    @for (row of paletteRows(); track row.lineIndex) {
+    @for (row of shownRows(); track row.lineIndex) {
       @if (row.kind === 'heading') {
         @if (row.headingLevel === 2) {
           <div

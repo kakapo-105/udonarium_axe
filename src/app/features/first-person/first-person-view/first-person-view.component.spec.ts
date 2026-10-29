@@ -92,6 +92,33 @@ describe('FirstPersonViewComponent', () => {
     expect(view.querySelectorAll('[data-quad="floor"]').length).toBeGreaterThan(0);
   });
 
+  it('puts up a wall of the board only where it has a picture to wear, as the table does', async () => {
+    table.wallHeight = 2;
+    table.showNorthWall = true;
+    lookOutOf(pieceAt(4, 7));
+
+    expect(element(mount()).querySelectorAll('[data-quad="wall"]')).toHaveLength(0);
+
+    ImageStorage.instance.add({
+      identifier: 'brick',
+      name: 'brick.png',
+      type: 'image/png',
+      blob: null,
+      url: 'blob:brick',
+      thumbnail: { type: '', blob: null, url: '' },
+    });
+    try {
+      table.northWallImageIdentifier = 'brick';
+      await Promise.resolve();
+      const walls = Array.from(element(mount()).querySelectorAll<HTMLElement>('[data-quad="wall"]'));
+
+      expect(walls.length).toBeGreaterThan(0);
+      expect(walls.every((wall) => wall.style.backgroundImage.includes('blob:brick'))).toBe(true);
+    } finally {
+      ImageStorage.instance.delete('brick');
+    }
+  });
+
   it('draws what stands past the clear distance blurred, and what stands near sharp', () => {
     ImageStorage.instance.add({
       identifier: 'stone',
@@ -954,6 +981,29 @@ describe('FirstPersonViewComponent', () => {
 
       expect(boxOf(fixture, tall).height).toBeCloseTo(120 * scaleOf(GRID), 1);
       expect(boxOf(fixture, tall).width).toBeCloseTo(60 * scaleOf(GRID), 1);
+    });
+
+    it('stands a picture given a width apart from its height that wide, filling its box out of proportion', () => {
+      ImageStorage.instance.add('stretched-picture');
+      const wide = GameCharacter.create('幕', 1, 'stretched-picture');
+      wide.location = { name: 'table', x: 4 * GRID, y: 3 * GRID };
+      wide.specifyKomaImageFlag = true;
+      wide.komaImageHeight = 120;
+      wide.komaImageWidth = 200;
+      lookOutOf(pieceAt(4, 8));
+
+      try {
+        const fixture = mount();
+        pictureLoaded(fixture, wide, 100, 200);
+
+        expect(boxOf(fixture, wide).width).toBeCloseTo(200 * scaleOf(GRID), 1);
+        expect(boxOf(fixture, wide).height).toBeCloseTo(120 * scaleOf(GRID), 1);
+        const picture = element(fixture).querySelector(`[data-piece="${wide.identifier}"] img`)!;
+        expect(picture.classList.contains('object-fill')).toBe(true);
+        expect(picture.classList.contains('object-contain')).toBe(false);
+      } finally {
+        ImageStorage.instance.delete('stretched-picture');
+      }
     });
 
     it('draws a piece on a hex grid while the hex under its middle is in sight', () => {

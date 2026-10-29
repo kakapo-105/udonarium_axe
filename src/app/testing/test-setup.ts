@@ -4,10 +4,12 @@ import { EnvironmentProviders, NO_ERRORS_SCHEMA, Provider } from '@angular/core'
 import { ɵresolveComponentResources as resolveComponentResources } from '@angular/core';
 import { TestBed, TestModuleMetadata } from '@angular/core/testing';
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from '@angular/platform-browser-dynamic/testing';
+import { loadConfig$ } from '@axe/core/event/domain-events';
 import { Logger, LogLevel } from '@axe/core/logging/logger';
 import { resetPeerContextProvider } from '@axe/core/network/peer-context-source';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
+import { DataSummarySetting } from '@axe/domain/data/data-summary-setting';
 import { AudioProfile } from '@axe/domain/media/audio-profile';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { readdirSync, readFileSync, statSync } from 'fs';
@@ -15,19 +17,7 @@ import { basename, join, resolve } from 'path';
 
 Logger.setLevel(LogLevel.NONE);
 
-import { CHAT_PERSONAL_BOOKMARKS_STORAGE_KEY } from '@axe/application/chat/chat-personal-bookmark.store';
-import { AUDIO_ANALYSIS_CACHE_KEY } from '@axe/application/media/audio-analysis-cache';
-import { PERSONAL_VOLUME_STORAGE_KEY } from '@axe/application/media/personal-volumes';
-import { COMPASS_FACE_STORAGE_KEY } from '@axe/application/ui/compass-face.service';
-import { FIRST_PERSON_PIECE_STORAGE_KEY } from '@axe/application/ui/first-person-preference.service';
-import { LOCAL_MODE_STORAGE_KEY } from '@axe/application/ui/local-mode-preference.service';
-import { PIECE_OVERLAY_STORAGE_KEY } from '@axe/application/ui/piece-overlay-preference.service';
-import { TABLETOP_DISPLAY_STORAGE_KEY } from '@axe/application/ui/tabletop-display-preference.service';
-import { TOOLBAR_FOLD_STORAGE_KEY } from '@axe/application/ui/toolbar-fold.service';
-import { VIEW_MODE_STORAGE_KEY } from '@axe/application/ui/view-mode-preference.service';
-import { WIDGET_VISIBILITY_STORAGE_KEY } from '@axe/application/ui/widget-visibility.service';
-import { BEAT_LIGHT_OFF_STORAGE_KEY } from '@axe/features/media/beat-light/beat-light-preference.service';
-import { DJ_DECK_OPEN_STORAGE_KEY } from '@axe/features/media/mini-jukebox/dj-deck-preference';
+import { STORAGE_KEYS } from '@axe/core/storage/storage-keys';
 
 const srcAppDir = resolve(process.cwd(), 'src/app');
 const fileMap = new Map<string, string>();
@@ -99,7 +89,7 @@ if (!navigator.mediaDevices) {
 }
 
 // happy-dom has no WebAudio API. The document gesture listeners registered by
-// AudioPlayer.resumeAudioContext() can survive into another spec, so the moment something like
+// AudioOutput.resumeOnGesture() can survive into another spec, so the moment something like
 // user-interaction-unlock.spec dispatches an event, the listener tries to construct an AudioContext
 // and dies with "is not a constructor". A minimal stub goes on globalThis and window.
 if (typeof globalThis.AudioContext === 'undefined') {
@@ -372,6 +362,9 @@ function emptyObjectStore(): void {
   // rather than entries of the store. Emptying the store alone leaves that one holding every tab
   // any spec ever added, and it hands them back the moment the next one reads it.
   ChatTabList.forget();
+  // The room's summary setting is held the same way, and a spec that sets out the default table
+  // leaves the inventory sorting by a status and then by name for every file after it.
+  DataSummarySetting.forget();
   // Readings of sounds made on this device are held by their own module beside the store.
   AudioProfile.clearLocal();
 }
@@ -390,19 +383,39 @@ function forgetMyCursor(): void {
 // from whatever is left there. A reader's own bookmarks on chat lines are kept there too, as are the
 // readings of sounds this device has made.
 function forgetSeatPreferences(): void {
-  localStorage.removeItem(TABLETOP_DISPLAY_STORAGE_KEY);
-  localStorage.removeItem(VIEW_MODE_STORAGE_KEY);
-  localStorage.removeItem(LOCAL_MODE_STORAGE_KEY);
-  localStorage.removeItem(FIRST_PERSON_PIECE_STORAGE_KEY);
-  localStorage.removeItem(WIDGET_VISIBILITY_STORAGE_KEY);
-  localStorage.removeItem(TOOLBAR_FOLD_STORAGE_KEY);
-  localStorage.removeItem(PIECE_OVERLAY_STORAGE_KEY);
-  localStorage.removeItem(COMPASS_FACE_STORAGE_KEY);
-  localStorage.removeItem(PERSONAL_VOLUME_STORAGE_KEY);
-  localStorage.removeItem(CHAT_PERSONAL_BOOKMARKS_STORAGE_KEY);
-  localStorage.removeItem(AUDIO_ANALYSIS_CACHE_KEY);
-  localStorage.removeItem(DJ_DECK_OPEN_STORAGE_KEY);
-  localStorage.removeItem(BEAT_LIGHT_OFF_STORAGE_KEY);
+  localStorage.removeItem(STORAGE_KEYS.tabletopDisplay);
+  localStorage.removeItem(STORAGE_KEYS.viewMode);
+  localStorage.removeItem(STORAGE_KEYS.localMode);
+  localStorage.removeItem(STORAGE_KEYS.firstPersonPiece);
+  localStorage.removeItem(STORAGE_KEYS.widgets);
+  localStorage.removeItem(STORAGE_KEYS.toolbars);
+  localStorage.removeItem(STORAGE_KEYS.pieceOverlay);
+  localStorage.removeItem(STORAGE_KEYS.compassFace);
+  localStorage.removeItem(STORAGE_KEYS.personalVolumes);
+  localStorage.removeItem(STORAGE_KEYS.chatPersonalBookmarks);
+  localStorage.removeItem(STORAGE_KEYS.audioAnalyses);
+  localStorage.removeItem(STORAGE_KEYS.djDeckOpen);
+  localStorage.removeItem(STORAGE_KEYS.beatLightOff);
+}
+
+/**
+ * The page's address as the setup found it. A spec that clicks a link, as saving a file does, has
+ * happy-dom set the page's address to the link's, since it cannot load another page; a blob's
+ * address left there is no base for the relative addresses later specs in the worker resolve. It
+ * can land a moment after the click, in the next spec, so the setting is turned off outright, and
+ * the address put back before each test should anything else move it.
+ */
+const PAGE_URL = location.href;
+const happyDOM = (
+  window as unknown as {
+    happyDOM?: { setURL(url: string): void; settings: { navigation: { disableFallbackToSetURL: boolean } } };
+  }
+).happyDOM;
+if (happyDOM) happyDOM.settings.navigation.disableFallbackToSetURL = true;
+
+/** Puts the page back at the address the setup found it at, if a spec moved it. */
+function returnToPageUrl(): void {
+  if (location.href !== PAGE_URL) happyDOM?.setURL(PAGE_URL);
 }
 
 beforeAll(async () => {
@@ -417,7 +430,10 @@ beforeEach(async () => {
   emptyObjectStore();
   forgetMyCursor();
   forgetSeatPreferences();
+  returnToPageUrl();
   resetPeerContextProvider();
+  // The configuration a test announced is replayed to whoever subscribes later, in other files too.
+  loadConfig$.forget();
   await resolveComponentResources(resourceResolver as Parameters<typeof resolveComponentResources>[0]);
   applyConfigureTestingModuleWrapper();
 });

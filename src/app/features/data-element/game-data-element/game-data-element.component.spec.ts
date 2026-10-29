@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ResourceSliderService } from '@axe/application/character/resource-slider.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
@@ -13,6 +14,8 @@ import {
   DataElementType,
   DataElementViewMode,
 } from '@axe/domain/data/data-element';
+import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { PeerRole } from '@axe/domain/peer/peer-role';
 import { IN_DATA_ELEMENT_SHEET } from '@axe/features/data-element/game-data-element/data-element-sheet-host';
 import {
   GameDataElementComponent,
@@ -86,6 +89,25 @@ describe('GameDataElementComponent', () => {
 
       expect(content.classList.contains('gde-editing')).toBe(true);
       expect(content.classList.contains('row-start-2')).toBe(false);
+    });
+
+    it('shows a guest the whole of it, in a block that grows with it rather than a box to scroll', () => {
+      PeerCursor.createMyCursor().role = PeerRole.Guest;
+      try {
+        const text = ['一', '二', '三', '四', '五', '六', '七', '八'].map((n) => `${n}行目`).join('\n');
+        const field = DataElement.create('効果', text, {
+          [DataElementAttribute.ROLE]: DataElementRole.FIELD,
+          [DataElementAttribute.FIELD_TYPE]: DataElementFieldType.LONG_TEXT,
+        });
+        fixture.componentRef.setInput('gameDataElement', field);
+        fixture.detectChanges();
+        const host = fixture.nativeElement as HTMLElement;
+
+        expect(host.querySelector('textarea[name="data-value"]')).toBeNull();
+        expect(host.querySelector('[data-testid="long-text-read-only"]')!.textContent).toContain('八行目');
+      } finally {
+        PeerCursor.myCursor = null!;
+      }
     });
 
     it('is drawn as before outside editing', () => {
@@ -773,7 +795,7 @@ describe('GameDataElementComponent', () => {
           columnGroup: '肉体技能',
         })
       );
-      const rankCell = DataElement.create('肉体技能習熟度', '初級', {
+      const rankCell = DataElement.create('肉体技能習熟度', '中級', {
         role: DataElementRole.FIELD,
         fieldType: DataElementFieldType.SELECT,
         choices: '初級,中級,上級',
@@ -794,7 +816,7 @@ describe('GameDataElementComponent', () => {
       expect(groupHeader?.getAttribute('colspan')).toBe('2');
       expect(rowHeader?.textContent?.trim()).toBe('技能');
       expect(fixture.nativeElement.textContent).toContain('肉体攻撃');
-      expect(select?.value).toBe('初級');
+      expect(select?.options[select.selectedIndex]?.textContent?.trim()).toBe('中級');
 
       select!.value = '上級';
       select!.dispatchEvent(new Event('change'));
@@ -932,6 +954,25 @@ describe('GameDataElementComponent', () => {
       expect(component.currentValue).toBe(100);
     });
 
+    it('sets no cap to type, step or clamp against for a resource set to go over its maximum, and slides up to it', () => {
+      const element = DataElement.create('命中V', 1, {
+        currentValue: 1,
+        fieldType: DataElementFieldType.RESOURCE,
+        type: DataElementType.NUMBER_RESOURCE,
+        [DataElementAttribute.OVER_RESOURCE]: 'true',
+      });
+      fixture.componentRef.setInput('isEdit', true);
+      fixture.componentRef.setInput('gameDataElement', element);
+      fixture.detectChanges();
+
+      expect(component.currentValueMaxAttr()).toBe('');
+      expect(component.canStepCurrentValue(1)).toBe(true);
+      component.currentValue = 3;
+      component.commitCurrentValueBounds();
+      expect(component.currentValue).toBe(3);
+      expect(component.resourceSliderSpan()).toEqual({ min: 0, max: 1 });
+    });
+
     it('keeps the original maximum apart from the current one', () => {
       const element = DataElement.create('HP', 200, {
         currentValue: 50,
@@ -992,6 +1033,25 @@ describe('GameDataElementComponent', () => {
       await new Promise((resolve) => queueMicrotask(() => resolve(null)));
 
       expect(component.value).toBe(50);
+    });
+
+    it('takes up a name and a value changed elsewhere while nothing typed here waits to be written', async () => {
+      const element = DataElement.create('HP', 10, {
+        currentValue: 10,
+        fieldType: DataElementFieldType.RESOURCE,
+        type: DataElementType.NUMBER_RESOURCE,
+      });
+      fixture.componentRef.setInput('isEdit', true);
+      fixture.componentRef.setInput('gameDataElement', element);
+      fixture.detectChanges();
+      expect([component.name, component.currentValue]).toEqual(['HP', 10]);
+
+      element.name = '体力';
+      element.currentValue = 4;
+      TestBed.inject(ObjectChangeService).notifyChanged(element.identifier);
+      fixture.detectChanges();
+
+      expect([component.name, component.currentValue]).toEqual(['体力', 4]);
     });
 
     it('clamps a value outside the bounds when the field loses focus', () => {
@@ -1317,7 +1377,39 @@ describe('GameDataElementComponent', () => {
       expect(field.getAttribute(DataElementAttribute.RESOURCE_SLIDER)).toBe('true');
 
       option.click();
-      expect(field.getAttribute(DataElementAttribute.RESOURCE_SLIDER)).toBe('');
+      expect(field.getAttribute(DataElementAttribute.RESOURCE_SLIDER)).toBe('false');
+    });
+
+    describe('where the room gives every resource one', () => {
+      beforeEach(() => TestBed.inject(ResourceSliderService).setRoomDefault(true));
+      afterEach(() => TestBed.inject(ResourceSliderService).setRoomDefault(false));
+
+      it('is drawn for a resource that says nothing of its own', () => {
+        show(resourceField());
+
+        expect(slider()).not.toBeNull();
+      });
+
+      it('is not drawn for a resource set to have none', () => {
+        show(resourceField({ [DataElementAttribute.RESOURCE_SLIDER]: 'false' }));
+
+        expect(slider()).toBeNull();
+      });
+
+      it('is taken off a resource from the field options, and stays off', () => {
+        const field = resourceField();
+        show(field, { isEdit: true });
+        component.toggleFieldOptions();
+        fixture.detectChanges();
+        const option = fixture.nativeElement.querySelector('input[name="data-resource-slider"]') as HTMLInputElement;
+        expect(option.checked).toBe(true);
+
+        option.click();
+        fixture.detectChanges();
+
+        expect(field.getAttribute(DataElementAttribute.RESOURCE_SLIDER)).toBe('false');
+        expect(slider()).toBeNull();
+      });
     });
   });
 });

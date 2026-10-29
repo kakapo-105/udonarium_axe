@@ -12,6 +12,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { BattleLaunchService } from '@axe/application/battle/battle-launch.service';
 import { CharacterMacroService } from '@axe/application/chat/character-macro.service';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { DiceBotCatalogService } from '@axe/application/dice/dice-bot-catalog.service';
@@ -19,13 +20,18 @@ import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
 import { GameObjectInventoryService } from '@axe/application/inventory/game-object-inventory.service';
 import { DisclosureService } from '@axe/application/permission/disclosure.service';
+import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
+import { closeWhenOffTheTable } from '@axe/application/ui/close-when-off-the-table';
 import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
 import { SelectionSignalService } from '@axe/application/ui/selection-signal.service';
 import { UiSignalService } from '@axe/application/ui/ui-signal.service';
 import { ViewportService } from '@axe/application/ui/viewport.service';
 import { getMyPeerId } from '@axe/core/network/peer-context-source';
-import { ObjectStore } from '@axe/core/sync/object-store';
+import { readLocal, writeLocal } from '@axe/core/storage/local-preference';
+import { STORAGE_KEYS } from '@axe/core/storage/storage-keys';
+import { isInStore, ObjectStore } from '@axe/core/sync/object-store';
+import { BattleTake } from '@axe/domain/battle/battle-take';
 import { BUFF_COLORS, resolveBuffColor } from '@axe/domain/character/buff-appearance';
 import { ControllerResourcePick, controllerShowsResource } from '@axe/domain/character/controller-resource-pick';
 import { GameCharacter } from '@axe/domain/character/game-character';
@@ -34,6 +40,7 @@ import { isChangeableElementType } from '@axe/domain/character/status-accessor';
 import { ChatPalette } from '@axe/domain/chat/chat-palette';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
+import { canRoleSpeakTab, canRoleViewTab } from '@axe/domain/chat/chat-tab-permission';
 import { PaletteRow, paletteRowsOf } from '@axe/domain/chat/palette-rows';
 import { DataElement } from '@axe/domain/data/data-element';
 import { DataSummarySetting, SortOrder } from '@axe/domain/data/data-summary-setting';
@@ -58,6 +65,7 @@ import {
   getTabTitleKey,
   getTargetCharacters,
 } from '@axe/features/controller/remote-controller/remote-controller-helpers';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
 import GameSystemClass from 'bcdice/lib/game_system';
@@ -77,7 +85,15 @@ const SLOT_LABEL_KEYS: Record<ResourceSlot, string> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'remote-controller',
   templateUrl: './remote-controller.component.html',
-  imports: [FormsModule, ControllerInputComponent, NgClass, NgTemplateOutlet, SafePipe, TranslocoModule],
+  imports: [
+    TextTooltipDirective,
+    FormsModule,
+    ControllerInputComponent,
+    NgClass,
+    NgTemplateOutlet,
+    SafePipe,
+    TranslocoModule,
+  ],
 })
 export class RemoteControllerComponent {
   protected readonly isCompact = inject(ViewportService).isCompact;
@@ -93,6 +109,36 @@ export class RemoteControllerComponent {
   private readonly objectChange = inject(ObjectChangeService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly t = inject(TRANSLATE_FN);
+  private readonly battle = inject(BattleLaunchService);
+  protected readonly rolePermission = inject(RolePermissionService);
+
+  /**
+   * Whether a change made from here is played on the battle stage too, the character the panel
+   * works for striking the targets. Remembered in this browser.
+   */
+  readonly battleOnChange = signal(readLocal(STORAGE_KEYS.battleCutInRemote) === 'on');
+
+  /** Turns playing changes on the battle stage on or off, and remembers it in this browser. */
+  setBattleOnChange(on: boolean): void {
+    this.battleOnChange.set(on);
+    writeLocal(STORAGE_KEYS.battleCutInRemote, on ? 'on' : 'off');
+  }
+
+  /**
+   * Plays the battle stage for the room with nothing changing: the character the panel works for
+   * strikes the targets, or, with none ticked, the other side of the master's lineup.
+   */
+  playBattle(): void {
+    if (!this.rolePermission.canEditTabletop()) return;
+    const attacker = this.character();
+    const defenders = this.getTargetCharacters(true).filter((target) => target !== attacker);
+    const scene = !attacker
+      ? null
+      : defenders.length > 0
+        ? this.battle.play({ attacker, defenders }, 'everywhere')
+        : this.battle.playLineupAs(attacker, 'everywhere');
+    this.errorMessageController = scene ? '' : this.t('feature.controller.remote.battleNoBout');
+  }
 
   /**
    * The translated name of a part of a resource, such as its current or maximum value, for the slot
@@ -162,6 +208,17 @@ export class RemoteControllerComponent {
     for (const tab of tabs) this.objectChange.versionOf(tab.identifier)();
     return [...tabs];
   });
+
+  /**
+   * The tabs the panel may send its word to: those this seat's role may read and speak in, which
+   * leaves out the system tab, where nobody speaks.
+   */
+  readonly sendableChatTabs = computed(() => {
+    const tabs = this.chatTabsVersion();
+    this.objectChange.trackMyCursor();
+    const role = PeerCursor.myRole;
+    return tabs.filter((tab) => canRoleViewTab(tab, role) && canRoleSpeakTab(tab, role));
+  });
   /** This user's own cursor. */
   get myPeer(): PeerCursor {
     return PeerCursor.myCursor;
@@ -172,8 +229,18 @@ export class RemoteControllerComponent {
   }
 
   constructor() {
+    // Made a guest meanwhile, the seat may no longer write what this panel writes.
+    closeWhenOffTheTable();
     queueMicrotask(() => this.updatePanelTitle());
-    this.chatTabidentifier.set(this.chatMessageService.chatTabs[0]?.identifier ?? '');
+    this.chatTabidentifier.set(this.sendableChatTabs()[0]?.identifier ?? '');
+    // A tab gone, or one this seat may no longer speak in, gives way to the first it may.
+    effect(() => {
+      const sendable = this.sendableChatTabs();
+      const current = this.chatTabidentifier();
+      if (!sendable.some((tab) => tab.identifier === current)) {
+        untracked(() => this.chatTabidentifier.set(sendable[0]?.identifier ?? ''));
+      }
+    });
     effect(() => {
       const dicebot = this.character()?.remoteController?.dicebot ?? '';
       if (0 < dicebot.length) {
@@ -187,9 +254,6 @@ export class RemoteControllerComponent {
     this.objectChange.objectDeleted$.subscribe((e) => {
       if (this.character() && this.character()!.identifier === e.identifier) {
         this.panelService.close();
-      }
-      if (this.chatTabidentifier() === e.identifier) {
-        this.chatTabidentifier.set(this.chatMessageService.chatTabs[0]?.identifier ?? '');
       }
     }, this.destroyRef);
     this.objectChange.networkOpen$.subscribe(() => {
@@ -389,7 +453,7 @@ export class RemoteControllerComponent {
   /** How the operation reads in the chat line: the item, and which part of it was moved. */
   private displayNameOf(choice: ResourceCatalogEntry, slot: ResourceSlot): string {
     if (!choice.isResource) return choice.name;
-    return `${choice.name}${this.t('feature.controller.remote.slotNameSeparator')}${this.slotLabel(slot)}`;
+    return this.t('feature.controller.remote.slotName', { name: choice.name, slot: this.slotLabel(slot) });
   }
 
   /**
@@ -527,7 +591,7 @@ export class RemoteControllerComponent {
    */
   readonly controllerResources = computed<ControllerResourcePick>(() => {
     this.objectChange.versionOf('Config')();
-    return (this.objectStore.get<Config>('Config') ?? Config.instance).controllerResources;
+    return Config.instance.controllerResources;
   });
 
   private resourceTargets(): GameCharacter[] {
@@ -579,8 +643,11 @@ export class RemoteControllerComponent {
 
   /** Everything this panel says is already worked out, so none of it is evaluated again. */
   private announce(text: string, options: { portraitIndex: number; color?: string }): void {
+    // Without a tab it may speak in, the panel says nothing rather than fall back on another.
+    const tab = this.sendableChatTabs().find((candidate) => candidate.identifier === this.chatTabidentifier());
+    if (!tab) return;
     this.characterMacro.announce(this.character(), text, {
-      tab: this.chatTab(),
+      tab,
       gameSystem: this._gameSystem,
       sendFrom: this.sendFrom,
       portraitIndex: options.portraitIndex,
@@ -669,6 +736,7 @@ export class RemoteControllerComponent {
       this.errorMessageController = this.t('feature.controller.remote.noChangeTarget');
       return;
     }
+    const take = this.takeBattle(gameCharacters);
     const parts: string[] = [];
     const name = chosen.name;
     const nowOrMax = chosen.nowOrMax;
@@ -691,10 +759,22 @@ export class RemoteControllerComponent {
         portraitIndex: this.controllerInputComponent().portraitIndex(),
         color: this.controllerInputComponent().selectChatColor,
       });
+      if (take) this.battle.finish(take);
       this.errorMessageController = '';
     } else {
       this.errorMessageController = this.t('feature.controller.remote.noTargetCharacter');
     }
+  }
+
+  /**
+   * The targets read before a change is made to them, for the battle stage, while changes are
+   * played there and there is a character to strike them. Null otherwise.
+   */
+  private takeBattle(targets: readonly GameCharacter[]): BattleTake | null {
+    const attacker = this.character();
+    if (!this.battleOnChange() || !attacker || !this.rolePermission.canEditTabletop()) return null;
+    const defenders = targets.filter((target) => target !== attacker);
+    return defenders.length > 0 ? this.battle.take({ attacker, defenders }) : null;
   }
 
   /** Opens a character's buff panel at the pointer, from the buff edit button on its row. */
@@ -712,7 +792,7 @@ export class RemoteControllerComponent {
         import('@axe/features/character/game-character-buff-view/game-character-buff-view.component').then(
           (m) => m.GameCharacterBuffViewComponent
         ),
-      option,
+      { ...option, stillWanted: () => isInStore(gameCharacter) },
       (component) => component.character.set(gameCharacter)
     );
   }

@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { decodeI18nMessage } from '@axe/application/i18n/i18n-message';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
+import { JukeboxEngineService } from '@axe/application/media/jukebox-engine.service';
 import { AudioFile } from '@axe/core/storage/audio-file';
 import { AudioPlayer } from '@axe/core/storage/audio-player';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
@@ -38,6 +39,7 @@ describe('JukeboxPlaybackService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [...TEST_PROVIDERS] });
+    TestBed.inject(JukeboxEngineService);
     jukebox = new Jukebox('Jukebox');
     jukebox.initialize();
     launcher = new CutInLauncher('CutInLauncher');
@@ -180,8 +182,8 @@ describe('JukeboxPlaybackService', () => {
 
     beforeEach(() => {
       logged = [];
-      vi.spyOn(TestBed.inject(ChatMessageService), 'sendSystemMessage').mockImplementation((text: string) => {
-        logged.push(decodeI18nMessage(text, TestBed.inject(TRANSLATE_FN)));
+      vi.spyOn(TestBed.inject(ChatMessageService), 'sendSystemNotice').mockImplementation((kind, text: string) => {
+        if (kind === 'bgm') logged.push(decodeI18nMessage(text, TestBed.inject(TRANSLATE_FN)));
         return {} as ChatMessage;
       });
     });

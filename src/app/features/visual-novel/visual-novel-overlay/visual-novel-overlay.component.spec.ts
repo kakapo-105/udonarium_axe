@@ -1,11 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { ChatLineEditService } from '@axe/application/chat/chat-line-edit.service';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
+import { ChatPaletteRegistryService } from '@axe/application/chat/chat-palette-registry.service';
 import { NO_SYSTEM_AVATAR, SystemAvatarService } from '@axe/application/chat/system-avatar.service';
 import { LanguageService } from '@axe/application/i18n/language.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { VisionService } from '@axe/application/tabletop/vision.service';
 import { PanelService } from '@axe/application/ui/panel.service';
+import { VisualNovelModeService } from '@axe/application/ui/visual-novel-mode.service';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
@@ -15,14 +18,12 @@ import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { DataElement } from '@axe/domain/data/data-element';
 import { DiceBot } from '@axe/domain/dice/dice-bot';
-import { Config } from '@axe/domain/peer/config';
 import { AudioTag } from '@axe/domain/media/audio-tag';
 import { Jukebox } from '@axe/domain/media/jukebox';
+import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
 import { leftOfSlot, VN_STAGE_SLOT_COUNT } from '@axe/domain/visual-novel/vn-stage-cast';
-import { ChatPaletteRegistryService } from '@axe/features/chat/chat-palette/chat-palette-registry.service';
-import { VisualNovelModeService } from '@axe/features/visual-novel/visual-novel-mode.service';
 import { VisualNovelOverlayComponent } from '@axe/features/visual-novel/visual-novel-overlay/visual-novel-overlay.component';
 import { VN_BACKLOG_PANEL } from '@axe/features/visual-novel/visual-novel-panels';
 import { VisualNovelPlaybackService } from '@axe/features/visual-novel/visual-novel-playback.service';
@@ -273,6 +274,20 @@ describe('VisualNovelOverlayComponent', () => {
     expect(vnMode.active()).toBe(false);
   });
 
+  it('lists its keys from the list of keys', () => {
+    createComponent();
+    component.toggleShortcutHelp();
+    fixture.detectChanges();
+
+    const rows = [...fixture.nativeElement.querySelectorAll('dt')].map((term: HTMLElement) => [
+      term.textContent?.trim(),
+      term.nextElementSibling?.textContent?.trim(),
+    ]);
+    expect(rows[0]).toEqual(['Enter / Space / → / ↓', '次へ進む / 全文表示']);
+    expect(rows.at(-1)).toEqual(['Esc', '閉じる / 終了']);
+    expect(rows).toHaveLength(8);
+  });
+
   it('does not advance the text from a key pressed in a field', () => {
     addMessage('こんにちは');
     createComponent();
@@ -495,6 +510,22 @@ describe('VisualNovelOverlayComponent', () => {
     expect(component.isBacklogOpen()).toBe(true);
   });
 
+  it('offers a guest no sound board, the jukebox and the cut-ins being for the players', () => {
+    const original = PeerCursor.myCursor;
+    PeerCursor.myCursor = { role: PeerRole.Guest } as PeerCursor;
+    try {
+      createComponent();
+      fixture.detectChanges();
+
+      expect(component.mayEditTable()).toBe(false);
+      expect(fixture.nativeElement.querySelector('button[title="SE再生"]')).toBeNull();
+      component.toggleSlotGuide();
+      expect(component.isPopover('slotGuide')).toBe(false);
+    } finally {
+      PeerCursor.myCursor = original;
+    }
+  });
+
   it('opens and closes the log from the same button', () => {
     addMessage('m1');
     createComponent();
@@ -623,6 +654,33 @@ describe('VisualNovelOverlayComponent', () => {
     expect(component.isPopover('slotGuide')).toBe(false);
     // Anything outside is pulled to the end frame.
     expect(speaker.vnPortraitPos).toBe(VN_STAGE_SLOT_COUNT - 1);
+  });
+
+  it('lets a guest neither place nor turn the speaking character', () => {
+    addMessage('こんにちは', 'アリス', addImage());
+    const speaker = charactersByName.get('アリス')!;
+    const before = speaker.vnPortraitPos;
+    PeerCursor.myCursor.role = PeerRole.Guest;
+    createComponent();
+
+    component.toggleSlotGuide();
+    component.pickSlot(3);
+
+    expect(component.isPopover('slotGuide')).toBe(false);
+    expect(speaker.vnPortraitPos).toBe(before);
+  });
+
+  it('lists the key for the stage slots to those who may place a character, and not to a guest', () => {
+    createComponent();
+    const slotKey = 'feature.visualNovel.shortcuts.slot';
+    const listed = () => component.shortcutHelpItems().map((item) => item.labelKey);
+    expect(listed()).toContain(slotKey);
+
+    PeerCursor.myCursor.role = PeerRole.Guest;
+    TestBed.inject(ObjectChangeService).notifyChanged(PeerCursor.myCursor.identifier);
+
+    expect(listed()).not.toContain(slotKey);
+    expect(listed()).toContain('feature.visualNovel.shortcuts.next');
   });
 
   it('reads what the room says of itself in words, not as the key it is kept under', () => {
@@ -1227,6 +1285,22 @@ describe('VisualNovelOverlayComponent', () => {
     character.destroy();
   });
 
+  it('makes the flip row again under a name of its own once it was deleted, as a room server keeps that one deleted', () => {
+    const character = GameCharacter.create('反転の作り直し', 1, addImage());
+    createComponent();
+    component.sendFrom = character.identifier;
+
+    component.toggleSpeakerFlip();
+    character.detailDataElement!.getFirstElementByName('FLIP')!.destroy();
+    component.toggleSpeakerFlip();
+
+    const again = character.detailDataElement!.getFirstElementByName('FLIP');
+    expect(again).toBeTruthy();
+    expect(again!.identifier).not.toBe(`FLIP_${character.identifier}`);
+    expect(Number(again!.value)).toBe(1);
+    character.destroy();
+  });
+
   it('reads the palette of the chosen character and puts a clicked row into the box', () => {
     const character = GameCharacter.create('パレットテスト', 1, addImage());
     createComponent();
@@ -1341,7 +1415,7 @@ describe('VisualNovelOverlayComponent', () => {
         sendFrom: characterFor('モンスターA').identifier,
       });
       // and the roll from before the clearing is opened, which brings it to the end of the tab
-      TestBed.inject(ChatMessageService).discloseMessage(secret);
+      TestBed.inject(ChatLineEditService).discloseMessage(secret);
       TestBed.inject(ObjectChangeService).notifyChanged(tab.identifier);
       fixture.detectChanges();
 

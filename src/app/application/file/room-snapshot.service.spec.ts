@@ -1,6 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { RoomSnapshotService } from '@axe/application/file/room-snapshot.service';
 import { SaveDataService } from '@axe/application/file/save-data.service';
+import { StartRoomService } from '@axe/application/file/start-room.service';
+import { SnackbarService } from '@axe/application/ui/snackbar.service';
+import { setNetworkIsolated } from '@axe/core/network/network-isolation';
 import { FileArchiver } from '@axe/core/storage/file-archiver';
 import {
   RoomSnapshotInput,
@@ -9,6 +12,7 @@ import {
   RoomSnapshotStore,
   sortSnapshotsByNewest,
 } from '@axe/core/storage/room-snapshot-store';
+import { ObjectStore } from '@axe/core/sync/object-store';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 
 class FakeRoomSnapshotStore extends RoomSnapshotStore {
@@ -63,7 +67,7 @@ describe('RoomSnapshotService', () => {
 
   beforeEach(() => {
     store = new FakeRoomSnapshotStore();
-    load = vi.fn().mockResolvedValue(undefined);
+    load = vi.fn().mockResolvedValue({ dataRead: true, images: [], audios: [] });
 
     TestBed.configureTestingModule({
       providers: [
@@ -85,6 +89,46 @@ describe('RoomSnapshotService', () => {
     expect(service.latest?.byteSize).toBe(3);
   });
 
+  it('takes nothing while a replay’s board is on the table, cut off from the room, however it is asked for', async () => {
+    setNetworkIsolated(true);
+    try {
+      expect(await service.capture()).toBeNull();
+      expect(await service.capture({ background: true })).toBeNull();
+    } finally {
+      setNetworkIsolated(false);
+    }
+
+    expect(store.records).toHaveLength(0);
+  });
+
+  it('tells the save whether it is taken in the background, which asks for no reload', async () => {
+    const build = vi.spyOn(TestBed.inject(SaveDataService), 'createRoomArchiveAsync');
+
+    await service.capture({ background: true });
+    await service.capture();
+
+    expect(build.mock.calls).toEqual([[{ background: true }], [{}]]);
+  });
+
+  it('lets whoever asks wait for the snapshot being taken, and answers at once when none is', async () => {
+    let finish!: (blob: Blob) => void;
+    vi.spyOn(TestBed.inject(SaveDataService), 'createRoomArchiveAsync').mockReturnValue(
+      new Promise<Blob>((resolve) => (finish = resolve))
+    );
+    await service.whenCaptured();
+    const taking = service.capture();
+    let waited = false;
+    void service.whenCaptured().then(() => (waited = true));
+    await Promise.resolve();
+    expect(waited).toBe(false);
+
+    finish(new Blob(['abc']));
+    await taking;
+    await Promise.resolve();
+
+    expect(waited).toBe(true);
+  });
+
   it('drops the oldest snapshots past the limit', async () => {
     for (let i = 0; i < 7; i++) {
       await service.capture();
@@ -101,6 +145,59 @@ describe('RoomSnapshotService', () => {
     expect(load).toHaveBeenCalledOnce();
     const files = load.mock.calls[0][0] as File[];
     expect(files[0].name).toBe('room-snapshot.zip');
+  });
+
+  it('reports failure restoring a snapshot whose room cannot be read, and says so', async () => {
+    const meta = await service.capture();
+    const shown = vi.spyOn(TestBed.inject(SnackbarService), 'show').mockImplementation(() => {});
+    load.mockResolvedValue({ dataRead: false, images: [], audios: [] });
+
+    await expect(service.restore(meta!.id)).resolves.toBe(false);
+    expect(shown).toHaveBeenCalledWith('このスナップショットの部屋は読み込めませんでした。');
+  });
+
+  it('stays quiet where the reader declined to overwrite the room with the snapshot', async () => {
+    const meta = await service.capture();
+    const shown = vi.spyOn(TestBed.inject(SnackbarService), 'show').mockImplementation(() => {});
+    const objects = TestBed.inject(ObjectStore);
+    const get = objects.get.bind(objects);
+    vi.spyOn(objects, 'get').mockImplementation(((identifier: string) =>
+      identifier === 'ReloadCheck' ? { reloadCheckStart: () => {}, isLoadOk: () => false } : get(identifier)) as never);
+    load.mockResolvedValue({ dataRead: false, images: [], audios: [] });
+
+    await expect(service.restore(meta!.id)).resolves.toBe(false);
+    expect(shown).not.toHaveBeenCalled();
+  });
+
+  it('lets a room to start on still being set out at launch finish before the snapshot goes in', async () => {
+    const meta = await service.capture();
+    let finish!: () => void;
+    vi.spyOn(TestBed.inject(StartRoomService), 'whenSettled').mockReturnValue(
+      new Promise<void>((resolve) => (finish = resolve))
+    );
+
+    const restoring = service.restore(meta!.id);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(load).not.toHaveBeenCalled();
+
+    finish();
+    await expect(restoring).resolves.toBe(true);
+    expect(load).toHaveBeenCalledOnce();
+  });
+
+  it('restores nothing while a replay’s board is shown in place of the table, and says so', async () => {
+    const meta = await service.capture();
+    const shown = vi.spyOn(TestBed.inject(SnackbarService), 'show').mockImplementation(() => {});
+    setNetworkIsolated(true);
+    try {
+      await expect(service.restore(meta!.id)).resolves.toBe(false);
+
+      expect(load).not.toHaveBeenCalled();
+      expect(shown).toHaveBeenCalledTimes(1);
+    } finally {
+      setNetworkIsolated(false);
+    }
   });
 
   it('reports failure restoring an id that is not there', async () => {

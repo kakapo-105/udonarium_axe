@@ -1,7 +1,11 @@
 import {
   clearBuffModifier,
   describeBuffModifier,
+  describeBuffModifierTarget,
+  describeStandingModifier,
+  parseBuffModifierItems,
   parseBuffModifierRequest,
+  readBuffAmount,
   readBuffModifier,
   writeBuffModifier,
 } from '@axe/domain/character/buff-modifier';
@@ -56,6 +60,125 @@ describe('buff-modifier', () => {
       expect(parseBuffModifierRequest('', '+', '2')).toBeNull();
       expect(parseBuffModifierRequest('命中', '?', '2')).toBeNull();
       expect(parseBuffModifierRequest('命中', '+', 'たくさん')).toBeNull();
+    });
+
+    it('works out an amount written as a sum', () => {
+      expect(parseBuffModifierRequest('攻撃', '+', '(3+4)÷2')?.amount).toBe(3);
+      expect(parseBuffModifierRequest('攻撃', '+', '2×3')?.amount).toBe(6);
+      expect(parseBuffModifierRequest('攻撃', '-', '2×3')?.amount).toBe(-6);
+      expect(parseBuffModifierRequest('防護点', '=', '(4+4)÷2')).toMatchObject({ operator: 'set', amount: 4 });
+    });
+
+    it('reads a sum typed in full-width characters', () => {
+      expect(parseBuffModifierRequest('攻撃', '+', '（１０＋２）／２')?.amount).toBe(6);
+      expect(parseBuffModifierRequest('攻撃', '+', '１０÷３')?.amount).toBe(3);
+      expect(parseBuffModifierRequest('攻撃', '+', '−2+5')?.amount).toBe(3);
+    });
+  });
+
+  describe('readBuffAmount()', () => {
+    it('reads a number as it always did, fraction and all', () => {
+      expect(readBuffAmount('2')).toBe(2);
+      expect(readBuffAmount('2.5')).toBe(2.5);
+      expect(readBuffAmount('-3')).toBe(-3);
+      expect(readBuffAmount('+4')).toBe(4);
+      expect(readBuffAmount('')).toBe(0);
+    });
+
+    it('rounds a division down where it falls, as the dice bot does', () => {
+      expect(readBuffAmount('7÷2')).toBe(3);
+      expect(readBuffAmount('(5÷2)×2')).toBe(4);
+      expect(readBuffAmount('-7÷2')).toBe(-4);
+      expect(readBuffAmount('+(3+4)÷2')).toBe(3);
+    });
+
+    it('leaves the rounding to floor, ceil and round when the sum asks for it', () => {
+      expect(readBuffAmount('ceil(7÷2)')).toBe(4);
+      expect(readBuffAmount('round(5÷2)')).toBe(3);
+      expect(readBuffAmount('floor(7÷2)')).toBe(3);
+      expect(readBuffAmount('max(7÷2,1)')).toBe(3);
+    });
+
+    it('gives NaN for what is not a sum, or divides by nothing', () => {
+      expect(readBuffAmount('たくさん')).toBeNaN();
+      expect(readBuffAmount('1÷0')).toBeNaN();
+      expect(readBuffAmount('(1+2')).toBeNaN();
+    });
+  });
+
+  describe('moving a status again at every count', () => {
+    it('reads how far after a tilde, either way', () => {
+      expect(parseBuffModifierRequest('器用度', '+', '5~-1')).toMatchObject({ amount: 5, step: -1 });
+      expect(parseBuffModifierRequest('命中', '+', '1～+2')).toMatchObject({ amount: 1, step: 2 });
+    });
+
+    it('reads a doubled operator as moving the amount at every count as well as at first', () => {
+      expect(parseBuffModifierRequest('命中', '++', '1')).toMatchObject({ amount: 1, step: 1 });
+      expect(parseBuffModifierRequest('回避', '--', '2')).toMatchObject({ amount: -2, step: -2 });
+      expect(parseBuffModifierRequest('命中', '＋＋', '1')).toMatchObject({ amount: 1, step: 1 });
+    });
+
+    it('moves nothing more where nothing says so, or the status is held at a value', () => {
+      expect(parseBuffModifierRequest('命中', '+', '2')).not.toHaveProperty('step');
+      expect(parseBuffModifierRequest('防護点', '=', '10~1')).not.toHaveProperty('step');
+      expect(parseBuffModifierRequest('命中', '+', '2~たくさん')).toBeNull();
+    });
+
+    it('says so on the badge, and keeps it with how far the status stands moved', () => {
+      expect(describeBuffModifier(parseBuffModifierRequest('器用度', '+', '5~-1')!)).toBe('器用度+5~-1');
+      const buff = makeBuff();
+      writeBuffModifier(buff, { target: '器用度', slot: 'now', operator: 'add', applied: 4, step: -1 });
+
+      expect(readBuffModifier(buff)).toEqual({ target: '器用度', slot: 'now', operator: 'add', applied: 4, step: -1 });
+      expect(describeStandingModifier(readBuffModifier(buff)!)).toBe('器用度+4~-1');
+      writeBuffModifier(buff, { target: '器用度', slot: 'now', operator: 'add', applied: 4 });
+      expect(buff.getAttribute('cs-buff-mod-step')).toBeFalsy();
+    });
+
+    it('reads a buff written before it could move at every count as moving nothing more', () => {
+      const buff = makeBuff();
+      writeBuffModifier(buff, { target: '命中', slot: 'now', operator: 'add', applied: 2 });
+      buff.setAttribute('cs-buff-mod-step', '');
+
+      expect(readBuffModifier(buff)).not.toHaveProperty('step');
+    });
+  });
+
+  describe('several statuses written together', () => {
+    it('reads each with its own operator and amount, parted by commas of either width', () => {
+      const requests = parseBuffModifierItems('追D+4,回避-2、器用度+5~-1，HP^-20,命中++1')!;
+
+      expect(requests.map((request) => [request.target, request.slot, request.amount, request.step ?? 0])).toEqual([
+        ['追D', 'now', 4, 0],
+        ['回避', 'now', -2, 0],
+        ['器用度', 'now', 5, -1],
+        ['HP', 'max', -20, 0],
+        ['命中', 'now', 1, 1],
+      ]);
+    });
+
+    it('keeps a comma inside brackets with the amount it belongs to', () => {
+      const requests = parseBuffModifierItems('攻撃+max(1,3),回避-1')!;
+
+      expect(requests.map((request) => [request.target, request.amount])).toEqual([
+        ['攻撃', 3],
+        ['回避', -1],
+      ]);
+    });
+
+    it('reads one written that way as well', () => {
+      expect(parseBuffModifierItems('筋力+2')).toEqual([parseBuffModifierRequest('筋力', '+', '2')]);
+    });
+
+    it('reads none where any cannot be read, or nothing is written', () => {
+      expect(parseBuffModifierItems('追D+4,回避')).toBeNull();
+      expect(parseBuffModifierItems('追D+たくさん')).toBeNull();
+      expect(parseBuffModifierItems('')).toBeNull();
+    });
+
+    it('names the status a badge would', () => {
+      expect(describeBuffModifierTarget(parseBuffModifierRequest('HP^', '-', '20')!)).toBe('最大HP');
+      expect(describeBuffModifierTarget(parseBuffModifierRequest('回避', '-', '2')!)).toBe('回避');
     });
   });
 

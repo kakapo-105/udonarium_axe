@@ -13,7 +13,7 @@ import { Party } from '@axe/domain/party/party';
 import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
-import { TurnState } from '@axe/domain/tabletop/turn-state';
+import { readTurnStart, turnStartMark, TurnState } from '@axe/domain/tabletop/turn-state';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 
 describe('TurnOrderService', () => {
@@ -48,15 +48,15 @@ describe('TurnOrderService', () => {
     turnState.buffDecay = true;
     turnState.actedIdentifiers = [];
     turnState.history = '[]';
+    turnState.holding = '';
+    turnState.turnOpening = '';
 
     chars = [new GameCharacter(), new GameCharacter(), new GameCharacter()];
     chars.forEach((c) => c.initialize());
 
     service = TestBed.inject(TurnOrderService);
     orderedSpy = vi.spyOn(service, 'orderedCharacters').mockReturnValue(chars);
-    sendSpy = vi
-      .spyOn(TestBed.inject(ChatMessageService), 'sendSystemMessageToMainTab')
-      .mockReturnValue(undefined as never);
+    sendSpy = vi.spyOn(TestBed.inject(ChatMessageService), 'sendSystemNotice').mockReturnValue(undefined as never);
   });
 
   describe('a seat that is only watching', () => {
@@ -83,6 +83,23 @@ describe('TurnOrderService', () => {
       expect(turnState.currentIdentifier).toBe(standing.current);
       expect(turnState.history).toBe(standing.history);
       expect(turnState.buffDecay).toBe(true);
+    });
+
+    it('neither holds a piece back nor steps one in', () => {
+      beSeat(PeerRole.Player);
+      service.next();
+      service.next();
+      service.hold(chars[1].identifier);
+      const standing = { current: turnState.currentIdentifier, holding: turnState.holding };
+
+      beSeat(PeerRole.Guest);
+      service.hold(chars[0].identifier);
+      service.interrupt(chars[1].identifier);
+
+      expect(service.mayHold(chars[2].identifier)).toBe(false);
+      expect(service.mayInterrupt(chars[1].identifier)).toBe(false);
+      expect(turnState.currentIdentifier).toBe(standing.current);
+      expect(turnState.holding).toBe(standing.holding);
     });
 
     it('is not asked what to do about the pieces still waiting', async () => {
@@ -195,6 +212,7 @@ describe('TurnOrderService', () => {
     expect(turnState.phase).toBe('roundStart');
     expect(turnState.currentIdentifier).toBe('');
     expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy.mock.calls[0][0]).toBe('round');
   });
 
   it('next walks round start, each character, round end, then the next round', () => {
@@ -231,6 +249,20 @@ describe('TurnOrderService', () => {
     service.prev(); // round 1 start -> idle
     expect(turnState.phase).toBe('idle');
     expect(turnState.round).toBe(0);
+  });
+
+  it('marks whose turn has begun and when, whether handed on or jumped to, and not when put back', () => {
+    service.next(); // round begins
+    service.next(); // first turn opens
+    expect(readTurnStart(turnState.turnStart)?.identifier).toBe(chars[0].identifier);
+
+    service.setCurrent(chars[2].identifier);
+    const jumped = readTurnStart(turnState.turnStart);
+    expect(jumped?.identifier).toBe(chars[2].identifier);
+    expect(Date.now() - jumped!.at).toBeLessThan(5000);
+
+    service.prev();
+    expect(turnState.turnStart).toBe(turnStartMark(jumped!.identifier, jumped!.at));
   });
 
   it('tells whatever waits on the turn whose turn has begun', () => {
@@ -284,7 +316,7 @@ describe('TurnOrderService', () => {
       expect(buffsOf(buffed[0]).map((buff: DataElement) => buff.name)).toEqual(['加速']);
       expect(buffsOf(buffed[0])[0].value).toBe(2);
       expect(buffsOf(buffed[1])).toHaveLength(0);
-      const announced = sendSpy.mock.calls.map((call: unknown[]) => String(call[0]));
+      const announced = sendSpy.mock.calls.map((call: unknown[]) => String(call[1]));
       expect(announced.some((text: string) => text.includes('feature.turnOrder.buffExpired'))).toBe(true);
     });
 
@@ -351,6 +383,89 @@ describe('TurnOrderService', () => {
       expect(buffsOf(target).map((buff: DataElement) => buff.name)).toContain('猛攻撃');
     });
 
+    describe('a piece that waits once its turn has begun', () => {
+      const namesOf = (character: GameCharacter) => buffsOf(character).map((buff: DataElement) => buff.name);
+      const roundsOf = (character: GameCharacter, name: string) =>
+        buffsOf(character).find((buff: DataElement) => buff.name === name)?.value;
+
+      it('has its opening countdown given back, and counted down again as its turn comes back', () => {
+        const [first] = buffed;
+        first.buffs.addRound('加護', '', 2, { timing: 'turnStart' });
+
+        service.next(); // round 1 begins
+        service.next(); // the first piece's turn opens
+        expect(roundsOf(first, '加護')).toBe(1);
+
+        sendSpy.mockClear();
+        service.hold(first.identifier);
+        expect(roundsOf(first, '加護')).toBe(2);
+        const said = sendSpy.mock.calls.map((call: unknown[]) => String(call[1]));
+        expect(said.some((text: string) => text.includes('feature.turnOrder.buffsGivenBack'))).toBe(true);
+
+        service.next(); // the second piece is done, and the first comes back
+        expect(turnState.currentIdentifier).toBe(first.identifier);
+        expect(roundsOf(first, '加護')).toBe(1);
+      });
+
+      it('has a buff that ran out at the opening brought back, with what it moved on the sheet', () => {
+        const [first] = buffed;
+        first.detailDataElement!.appendChild(DataElement.create('命中', 5, {}));
+        first.buffs.addRound('集中', '命中+2', 1, { timing: 'turnStart' });
+        first.buffs.applyModifier(first.buffs.find('集中')!, {
+          target: '命中',
+          slot: 'now',
+          operator: 'add',
+          amount: 2,
+        });
+        const hit = () => first.detailDataElement!.getFirstElementByName('命中')!.value;
+        expect(hit()).toBe(7);
+
+        service.next(); // round 1 begins
+        service.next(); // the first piece's turn opens, and 集中 runs out
+        expect(namesOf(first)).not.toContain('集中');
+        expect(hit()).toBe(5);
+
+        service.hold(first.identifier);
+        expect(namesOf(first)).toContain('集中');
+        expect(roundsOf(first, '集中')).toBe(1);
+        expect(hit()).toBe(7);
+      });
+
+      it('leaves the countdown be while a seat at the table runs a version that would not count it again', () => {
+        const [first] = buffed;
+        first.buffs.addRound('加護', '', 2, { timing: 'turnStart' });
+        const older = new PeerCursor('older-cursor');
+        older.initialize();
+        older.peerId = 'older-peer';
+        older.role = 'pl';
+
+        try {
+          service.next(); // round 1 begins
+          service.next(); // the first piece's turn opens
+          service.hold(first.identifier);
+
+          expect(roundsOf(first, '加護')).toBe(1);
+          service.next(); // the first comes back, and its opening is not counted a second time
+          expect(roundsOf(first, '加護')).toBe(1);
+        } finally {
+          older.destroy();
+        }
+      });
+
+      it('goes back to before it waited in one step back', () => {
+        const [first] = buffed;
+        first.buffs.addRound('加護', '', 2, { timing: 'turnStart' });
+
+        service.next(); // round 1 begins
+        service.next(); // the first piece's turn opens
+        service.hold(first.identifier);
+        service.prev();
+
+        expect(turnState.currentIdentifier).toBe(first.identifier);
+        expect(roundsOf(first, '加護')).toBe(1);
+      });
+    });
+
     it('waits for the bearer where the buff names no trigger', () => {
       const second = buffed[1];
       second.buffs.addRound('集中', '', 1, { timing: 'turnStart' });
@@ -395,7 +510,7 @@ describe('TurnOrderService', () => {
 
       advanceToRoundEnd();
 
-      const announced = sendSpy.mock.calls.map((call: unknown[]) => String(call[0]));
+      const announced = sendSpy.mock.calls.map((call: unknown[]) => String(call[1]));
       expect(announced.some((text: string) => text.includes('feature.turnOrder.buffExpired'))).toBe(false);
       expect(buffsOf(buffed[0])[0].value).toBe(4);
     });
@@ -457,6 +572,25 @@ describe('TurnOrderService', () => {
     expect(service.orderedCharacters()).toEqual([acting]);
   });
 
+  describe('where the round stands, read in one go', () => {
+    it('follows the round as it is written, once the change has been told', async () => {
+      expect(service.progress()).toMatchObject({ round: 0, currentIdentifier: '', canUndo: false, buffDecay: true });
+
+      service.next();
+      service.next();
+      service.next();
+      service.hold(chars[1].identifier);
+      await Promise.resolve();
+
+      const progress = service.progress();
+      expect(progress.round).toBe(1);
+      expect(progress.currentIdentifier).toBe(chars[2].identifier);
+      expect([...progress.acted]).toEqual([chars[0].identifier]);
+      expect([...progress.held]).toEqual([chars[1].identifier]);
+      expect(progress.canUndo).toBe(true);
+    });
+  });
+
   describe('saying whose turn it is', () => {
     it('names the piece the players can see, and leaves one they cannot unnamed', () => {
       const seen = vi
@@ -468,7 +602,7 @@ describe('TurnOrderService', () => {
       service.next(); // chars[0] is up
       service.next(); // chars[1] is up
 
-      const announced = sendSpy.mock.calls.map((call: unknown[]) => String(call[0]));
+      const announced = sendSpy.mock.calls.map((call: unknown[]) => String(call[1]));
       expect(announced).toEqual(['feature.turnOrder.announce', 'feature.turnOrder.announceUnseen']);
       seen.mockRestore();
     });
@@ -484,7 +618,7 @@ describe('TurnOrderService', () => {
       expect(turnState.round).toBe(2);
       expect(turnState.phase).toBe('roundStart');
       expect(turnState.currentIdentifier).toBe('');
-      const announced = sendSpy.mock.calls.map((call: unknown[]) => String(call[0]));
+      const announced = sendSpy.mock.calls.map((call: unknown[]) => String(call[1]));
       expect(announced).toContain('feature.turnOrder.roundEnd');
       expect(announced).toContain('feature.turnOrder.roundStart');
     });
@@ -505,7 +639,7 @@ describe('TurnOrderService', () => {
 
       expect(turnState.round).toBe(1);
       expect(turnState.phase).toBe('roundStart');
-      expect(sendSpy.mock.calls.map((call: unknown[]) => String(call[0]))).not.toContain('feature.turnOrder.roundEnd');
+      expect(sendSpy.mock.calls.map((call: unknown[]) => String(call[1]))).not.toContain('feature.turnOrder.roundEnd');
     });
   });
 
@@ -531,6 +665,20 @@ describe('TurnOrderService', () => {
       service.next();
 
       expect(sprang.mock.calls.map((call: unknown[]) => call[1])).toEqual(['turnEnd', 'turnStart']);
+    });
+
+    it('keeps a turn the ground closes in passing as a piece leaves its own, and passes that piece over', () => {
+      service.next();
+      service.next();
+      sprang.mockImplementation((piece: GameCharacter, moment: string) => {
+        if (piece === chars[0] && moment === 'turnEnd') service.closeTurnsInPassing([chars[1].identifier]);
+        return [];
+      });
+
+      service.next();
+
+      expect(turnState.actedIdentifiers).toEqual([chars[1].identifier, chars[0].identifier]);
+      expect(turnState.currentIdentifier).toBe(chars[2].identifier);
     });
 
     it('keeps turning where the ground will not go off', () => {
@@ -592,6 +740,175 @@ describe('TurnOrderService', () => {
     expect(turnState.round).toBe(0);
     expect(turnState.phase).toBe('idle');
     expect(sendSpy).toHaveBeenCalledTimes(1);
+  });
+
+  describe('waiting to step in', () => {
+    const [a, b, c] = [0, 1, 2];
+    const id = (index: number) => chars[index].identifier;
+    const said = () => sendSpy.mock.calls.map((call: unknown[]) => call[1] as string);
+
+    beforeEach(() => {
+      service.next(); // round 1 begins
+      service.next(); // A is up
+    });
+
+    it('has the piece whose turn it is wait, handing the turn on without counting it as had', () => {
+      service.hold(id(a));
+
+      expect(service.currentIdentifier).toBe(id(b));
+      expect(service.isHeld(id(a))).toBe(true);
+      expect(service.isActed(id(a))).toBe(false);
+      expect(said()).toContain('feature.turnOrder.holdAnnounce');
+    });
+
+    it('passes a waiting piece over, and gives it its turn once nobody else is waiting', () => {
+      service.hold(id(a));
+      service.next();
+      expect(service.currentIdentifier).toBe(id(c));
+
+      service.next();
+      expect(service.currentIdentifier).toBe(id(a));
+      expect(service.isHeld(id(a))).toBe(false);
+
+      service.next();
+      expect(turnState.phase).toBe('roundEnd');
+    });
+
+    it('does not open the turn of a waiting piece a second time when it comes back', () => {
+      const started = vi.fn();
+      TestBed.inject(TurnHooksService).onTurnStart(started);
+      service.hold(id(a));
+      service.next();
+      service.next();
+
+      expect(service.currentIdentifier).toBe(id(a));
+      expect(started.mock.calls.filter(([piece]) => piece === id(a))).toHaveLength(0);
+      expect(started).toHaveBeenCalledWith(id(c));
+    });
+
+    it('steps a waiting piece in at once, and goes back to the turn it stepped into', () => {
+      service.hold(id(a));
+      expect(service.mayInterrupt(id(a))).toBe(true);
+
+      service.interrupt(id(a));
+      expect(service.currentIdentifier).toBe(id(a));
+      expect(service.isHeld(id(a))).toBe(false);
+      expect(service.isActed(id(b))).toBe(false);
+      expect(said()).toContain('feature.turnOrder.interruptAnnounce');
+
+      service.next();
+      expect(service.currentIdentifier).toBe(id(b));
+      expect(service.isActed(id(a))).toBe(true);
+      expect(said()).toContain('feature.turnOrder.resumeAnnounce');
+
+      service.next();
+      expect(service.currentIdentifier).toBe(id(c));
+      service.next();
+      expect(turnState.phase).toBe('roundEnd');
+    });
+
+    it('ends the turn stepped into for whatever waits on a turn, and opens the one stepping in', () => {
+      const ended = vi.fn();
+      const started = vi.fn();
+      const hooks = TestBed.inject(TurnHooksService);
+      hooks.onTurnEnd(ended);
+      service.hold(id(c));
+      hooks.onTurnStart(started);
+
+      service.interrupt(id(c));
+
+      expect(ended).toHaveBeenCalledTimes(1);
+      expect(started).toHaveBeenCalledWith(id(c));
+    });
+
+    it('holds a piece back before its turn comes, which the round then passes over', () => {
+      service.hold(id(b));
+      expect(service.currentIdentifier).toBe(id(a));
+
+      service.next();
+      expect(service.currentIdentifier).toBe(id(c));
+      service.next();
+      expect(service.currentIdentifier).toBe(id(b));
+    });
+
+    it('lets nobody wait who has had a turn or is already waiting, nor anybody outside a round', () => {
+      service.next();
+      expect(service.mayHold(id(a))).toBe(false);
+      service.hold(id(c));
+      expect(service.mayHold(id(c))).toBe(false);
+      expect(service.mayInterrupt(id(b))).toBe(false);
+
+      service.reset();
+      expect(service.mayHold(id(b))).toBe(false);
+    });
+
+    it('names a waiting piece among those left behind when the round is pressed on', async () => {
+      service.next();
+      service.hold(id(c));
+      expect(service.unactedCharacters()).toEqual([chars[b], chars[c]]);
+
+      await service.advanceRound();
+
+      expect(askedToLeaveBehind).toHaveBeenCalledTimes(1);
+      expect(service.isHeld(id(c))).toBe(false);
+      expect(turnState.holding).toBe('');
+    });
+
+    it('puts the waiting back as it was with a step back', () => {
+      service.hold(id(a));
+
+      service.prev();
+
+      expect(service.currentIdentifier).toBe(id(a));
+      expect(service.isHeld(id(a))).toBe(false);
+    });
+
+    it('goes back to the turn stepped into after a step back over the one that stepped in', () => {
+      service.hold(id(a));
+      service.interrupt(id(a));
+      service.next();
+      service.prev();
+
+      expect(service.currentIdentifier).toBe(id(a));
+      service.next();
+      expect(service.currentIdentifier).toBe(id(b));
+    });
+
+    it('lets nobody wait whose turn was stepped into, and gives a piece no second turn in the round', () => {
+      service.hold(id(c));
+      service.interrupt(id(c));
+      expect(service.mayHold(id(a))).toBe(false);
+      service.hold(id(a));
+      expect(service.isHeld(id(a))).toBe(false);
+
+      service.next();
+      expect(service.currentIdentifier).toBe(id(a));
+      service.next();
+      expect(service.currentIdentifier).toBe(id(b));
+
+      expect(service.mayInterrupt(id(a))).toBe(false);
+      expect(service.mayInterrupt(id(c))).toBe(false);
+      service.next();
+      expect(turnState.phase).toBe('roundEnd');
+    });
+
+    it('takes a waiting piece out of waiting once its turn ends in passing', () => {
+      service.hold(id(b));
+
+      service.closeTurnsInPassing([id(b)]);
+
+      expect(service.isActed(id(b))).toBe(true);
+      expect(service.isHeld(id(b))).toBe(false);
+      expect(service.mayInterrupt(id(b))).toBe(false);
+    });
+
+    it('reads a turn sent by a peer that has never heard of waiting as holding nobody back', () => {
+      (turnState as unknown as { holding: string | undefined }).holding = undefined;
+
+      expect(service.heldIdentifiers).toEqual([]);
+      service.next();
+      expect(service.currentIdentifier).toBe(id(b));
+    });
   });
 
   describe('pressing the round on over pieces that have not moved', () => {
@@ -677,7 +994,7 @@ describe('TurnOrderService', () => {
     let bystander: GameCharacter;
 
     function saidTo(): string[] {
-      return sendSpy.mock.calls.map((call: unknown[]) => call[0] as string);
+      return sendSpy.mock.calls.map((call: unknown[]) => call[1] as string);
     }
 
     function pressUntil(reached: () => boolean, limit = 30): void {
@@ -869,6 +1186,41 @@ describe('TurnOrderService', () => {
       heroes.destroy();
 
       expect(service.currentSide).toBe(monsters.identifier);
+    });
+
+    it('passes a waiting piece over within its side, and gives it its turn once every side has had its phase', () => {
+      service.next();
+      service.next();
+      service.next();
+      expect(service.currentIdentifier).toBe(hero.identifier);
+
+      service.hold(hero.identifier);
+      expect(service.currentIdentifier).toBe(squire.identifier);
+
+      pressUntil(() => service.currentIdentifier === hero.identifier);
+
+      expect(service.isActed(monster.identifier)).toBe(true);
+      expect(service.isActed(bystander.identifier)).toBe(true);
+      expect(service.currentSide).toBe(heroes.identifier);
+      service.next();
+      expect(turnState.phase).toBe('roundEnd');
+    });
+
+    it("steps in within another side's phase without opening its own, and goes back to the turn it stepped into", () => {
+      service.next();
+      service.next();
+      service.next();
+      service.hold(hero.identifier);
+      pressUntil(() => service.currentIdentifier === monster.identifier);
+
+      service.interrupt(hero.identifier);
+      expect(service.currentIdentifier).toBe(hero.identifier);
+      expect(service.currentSide).toBe(monsters.identifier);
+
+      service.next();
+      expect(service.currentIdentifier).toBe(monster.identifier);
+      expect(service.isActed(hero.identifier)).toBe(true);
+      expect(service.isActed(monster.identifier)).toBe(false);
     });
 
     it('puts the round back a step, side and all', () => {

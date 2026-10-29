@@ -8,6 +8,7 @@ import { TableBgmService } from '@axe/application/media/table-bgm.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ImageService } from '@axe/application/storage/image.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
+import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { GUEST_PERSONA, VisionService } from '@axe/application/tabletop/vision.service';
 import { ModalService } from '@axe/application/ui/modal.service';
 import { PanelService } from '@axe/application/ui/panel.service';
@@ -26,8 +27,9 @@ import {
   DEFAULT_AMBIENCE_DENSITY,
   SKY_AMBIENCE_KINDS,
 } from '@axe/domain/effect/ambience/ambience-kind';
-import { AudioTag } from '@axe/domain/media/audio-tag';
 import { CutIn } from '@axe/domain/media/cut-in';
+import { soundFileName } from '@axe/domain/media/preset-sound-labels';
+import { tableBgmModeOf } from '@axe/domain/media/table-bgm';
 import { encodeCutInIdentifiers, parseCutInIdentifiers } from '@axe/domain/media/table-cut-in';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import {
@@ -38,6 +40,8 @@ import {
 import { ensureFogMemoryOn } from '@axe/domain/tabletop/fog/fog-memory';
 import { asFogMode, DEFAULT_FOG_COLOR, FOG_MODES, FogMode } from '@axe/domain/tabletop/fog/fog-mode';
 import { FilterType, GameTable, GridSnapStyle, GridType } from '@axe/domain/tabletop/game-table';
+import { MAX_SQUARE_SPAN, squareSpanOf } from '@axe/domain/tabletop/move/move-grid';
+import { MAX_CELL_PX, MIN_CELL_PX } from '@axe/domain/tabletop/rescale-table-contents';
 import {
   asTableLayerPlacement,
   MAX_TABLE_BACKGROUND_LAYERS,
@@ -46,7 +50,6 @@ import {
   TableBackgroundLayer,
   TableLayerPlacement,
 } from '@axe/domain/tabletop/table-background-layer';
-import { TABLE_BGM_STOP } from '@axe/domain/tabletop/table-bgm';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { RoomPanelService } from '@axe/features/panels/room-panel.service';
 import {
@@ -55,6 +58,7 @@ import {
 } from '@axe/features/tabletop/map-image-grid-adjuster/map-image-grid-adjuster.component';
 import { FileSelecterComponent } from '@axe/ui/components/file-selecter/file-selecter.component';
 import { NgSelectWindowDirective } from '@axe/ui/directives/ng-select-window.directive';
+import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
 import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
@@ -65,6 +69,7 @@ import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
   templateUrl: './game-table-setting.component.html',
   host: { class: 'block', '[attr.inert]': "isReadOnly() ? '' : null" },
   imports: [
+    TextTooltipDirective,
     NgClass,
     FormsModule,
     NgSelectComponent,
@@ -79,13 +84,11 @@ export class GameTableSettingComponent {
   private readonly rolePermission = inject(RolePermissionService);
   private readonly t = inject(TRANSLATE_FN);
 
-  readonly isReadOnly = computed(() => {
-    this.objectChange.trackMyCursor();
-    return !this.rolePermission.canEditTabletop;
-  });
+  readonly isReadOnly = computed(() => !this.rolePermission.canEditTabletop());
   private readonly saveDataService = inject(SaveDataService);
   private readonly imageService = inject(ImageService);
   private readonly panelService = inject(PanelService);
+  private readonly tabletopService = inject(TabletopService);
   private readonly objectStore = inject(ObjectStore);
   private readonly objectSerializer = inject(ObjectSerializer);
   private readonly tableSelecter = inject(TableSelecter);
@@ -93,7 +96,8 @@ export class GameTableSettingComponent {
   private readonly objectChange = inject(ObjectChangeService);
   private readonly visionService = inject(VisionService);
   private readonly cutInService = inject(CutInService);
-  private readonly tableBgmService = inject(TableBgmService);
+  private readonly tableBgm = inject(TableBgmService);
+  private readonly audioStorage = inject(AudioStorage);
   private readonly destroyRef = inject(DestroyRef);
   private readonly roomPanels = inject(RoomPanelService);
 
@@ -104,6 +108,8 @@ export class GameTableSettingComponent {
 
   minSize: number = 1;
   maxSize: number = 100;
+  readonly minCellSize = MIN_CELL_PX;
+  readonly maxCellSize = MAX_CELL_PX;
 
   /** The picked table's floor image, or the empty image when it has none. */
   get tableBackgroundImage(): ImageFile {
@@ -133,6 +139,24 @@ export class GameTableSettingComponent {
   }
   set tableWidth(tableWidth: number) {
     if (this.isEditable && this.selectedTable) this.selectedTable.width = tableWidth;
+  }
+
+  /** The size of a cell of the picked table, in px; the default cell when no table is picked. */
+  get tableCellSize(): number {
+    return Number(this.selectedTable?.gridSize ?? 50);
+  }
+
+  /**
+   * Gives the picked table the cell size a field was left at, moving what is on it to keep to its
+   * cells. Taken once the slider is let go or the number is entered rather than at every step, as
+   * each change scales the pieces by the change. The field is then shown the size the table took.
+   */
+  commitTableCellSize(event: Event): void {
+    const field = event.target as HTMLInputElement;
+    if (this.isEditable && this.selectedTable) {
+      this.tabletopService.changeCellSize(this.selectedTable, field.valueAsNumber);
+    }
+    field.value = String(this.tableCellSize);
   }
 
   /** The picked table's height in grid cells; 10 when no table is picked. */
@@ -178,7 +202,7 @@ export class GameTableSettingComponent {
     if (!this.selectedTable) return;
     this.selectedTable.gridShow = tableGridShow;
     if (tableGridShow) this.selectedTable.gridClipRect = null;
-    triggerUpdateGameObject(this.selectedTable.toContext()); // 自分にだけイベントを発行してグリッド更新を誘発
+    triggerUpdateGameObject(this.selectedTable.toContext()); // an event for this peer alone, so the grid redraws
   }
 
   /** Whether pieces snap to the picked table's grid; true when no table is picked. */
@@ -496,17 +520,19 @@ export class GameTableSettingComponent {
 
   /**
    * The snap dropdown's value, combining whether snapping is on with the points it snaps to: off,
-   * center, vertex, both or all.
+   * center, vertex, both, all or grid.
    */
   get tableSnapMode(): string {
     if (!this.tableGridSnap) return 'off';
-    switch (this.tableGridSnapStyle) {
+    switch (Number(this.tableGridSnapStyle)) {
       case GridSnapStyle.VERTEX:
         return 'vertex';
       case GridSnapStyle.BOTH:
         return 'both';
       case GridSnapStyle.ALL:
         return 'all';
+      case GridSnapStyle.GRID:
+        return 'grid';
       default:
         return 'center';
     }
@@ -524,7 +550,9 @@ export class GameTableSettingComponent {
             ? GridSnapStyle.BOTH
             : mode === 'all'
               ? GridSnapStyle.ALL
-              : GridSnapStyle.CENTER;
+              : mode === 'grid'
+                ? GridSnapStyle.GRID
+                : GridSnapStyle.CENTER;
     }
   }
 
@@ -534,6 +562,22 @@ export class GameTableSettingComponent {
   }
   set tableGridType(gridType: GridType) {
     if (this.isEditable && this.selectedTable) this.selectedTable.gridType = Number(gridType);
+  }
+
+  /** How many cells across a square may be made of, for the picked table's moves and ranges. */
+  readonly squareSpans = Array.from({ length: MAX_SQUARE_SPAN }, (_, index) => index + 1);
+
+  /** Whether the picked table has a square grid, the one grid whose cells can be put into squares. */
+  get isSquareGridTable(): boolean {
+    return Number(this.tableGridType) === GridType.SQUARE;
+  }
+
+  /** How many cells across one square of the picked table is; writes are ignored while it cannot be edited. */
+  get tableSquareSpan(): number {
+    return this.selectedTable ? squareSpanOf(this.selectedTable) : 1;
+  }
+  set tableSquareSpan(span: number) {
+    if (this.isEditable && this.selectedTable) this.selectedTable.squareSpan = Number(span);
   }
 
   /** The filter drawn over the picked table's distant-view background. */
@@ -596,7 +640,8 @@ export class GameTableSettingComponent {
 
     const table = this.objectStore.get<GameTable>(identifier);
     if (!table) return;
-    this.tableBgmService.applyFor(table);
+    // The table's music first, so a cut-in that brings its own music still wins.
+    this.tableBgm.playFor(table);
     this.cutInService.launchForTable(table);
   }
 
@@ -642,34 +687,47 @@ export class GameTableSettingComponent {
     this.selectedTable.cutInIdentifiers = encodeCutInIdentifiers(identifiers ?? []);
   }
 
-  /** What the picked table plays when chosen; see `GameTable.bgm`. */
-  get tableBgm(): string {
-    return this.selectedTable?.bgm ?? '';
-  }
-  set tableBgm(value: string) {
-    if (!this.isEditable || !this.selectedTable) return;
-    this.selectedTable.bgm = value ?? '';
+  /**
+   * The music the room has, offered as what the picked table puts on when it is switched to. The
+   * sounds that come with the tool are left out, as the jukebox leaves them out of its list.
+   */
+  tableBgmTracks(): { value: string; name: string }[] {
+    this.objectChange.fileVersion();
+    return this.audioStorage.audios
+      .filter((audio) => !audio.isHidden)
+      .map((audio) => ({ value: audio.identifier, name: soundFileName(audio.name) }))
+      .sort((left, right) => left.name.localeCompare(right.name, 'ja'));
   }
 
   /**
-   * Leave the music alone, stop it, and then each track in the room that is not a sound effect.
-   *
-   * Computed rather than worked out on every check, so the select is handed the same list until the
-   * room's tracks change. Handed a new one each time, it rebuilds its options while a click is still
-   * held down, and the click lands on an option that is no longer there.
+   * What the picked table does with the music on being switched to: `''` to leave it, `'stop'`,
+   * or the identifier of the track it puts on. Writes are ignored while it cannot be edited.
    */
-  readonly bgmChoices = computed<{ value: string; label: string }[]>(() => {
-    this.objectChange.fileVersion();
-    this.objectChange.collectionOf('audio-tag')();
-    const tracks = AudioStorage.instance.audios
-      .filter((audio) => !audio.isHidden && AudioTag.get(audio.identifier)?.tag !== 'SE')
-      .map((audio) => ({ value: audio.identifier, label: audio.name }));
-    return [
-      { value: '', label: this.t('feature.tabletop.tableSetting.bgmKeep') },
-      { value: TABLE_BGM_STOP, label: this.t('feature.tabletop.tableSetting.bgmStop') },
-      ...tracks,
-    ];
-  });
+  get tableBgmChoice(): string {
+    const table = this.selectedTable;
+    if (!table) return '';
+    const mode = tableBgmModeOf(table);
+    return mode === 'play' ? table.tableBgmIdentifier : mode;
+  }
+  set tableBgmChoice(choice: string) {
+    const table = this.selectedTable;
+    if (!this.isEditable || !table) return;
+    if (choice === '' || choice === 'stop') {
+      table.tableBgm = choice;
+      table.tableBgmIdentifier = '';
+      return;
+    }
+    table.tableBgm = 'play';
+    table.tableBgmIdentifier = choice;
+  }
+
+  /** The track the picked table names that the room does not have, which is still shown as chosen. */
+  missingTableBgm(): string | null {
+    const table = this.selectedTable;
+    if (!table || tableBgmModeOf(table) !== 'play') return null;
+    const identifier = table.tableBgmIdentifier;
+    return this.tableBgmTracks().some((track) => track.value === identifier) ? null : identifier;
+  }
 
   /** Every table in the room, for the table list. */
   getGameTables(): GameTable[] {
@@ -681,7 +739,7 @@ export class GameTableSettingComponent {
    * nothing for a reader who may not edit the table.
    */
   createGameTable() {
-    if (!this.rolePermission.canEditTabletop) return;
+    if (!this.rolePermission.canEditTabletop()) return;
     const gameTable = new GameTable();
     gameTable.name = this.t('feature.tabletop.tableSetting.defaultName');
     gameTable.imageIdentifier = ImageFile.Empty.identifier;
@@ -715,7 +773,7 @@ export class GameTableSettingComponent {
    * for a reader who may not edit the table.
    */
   delete() {
-    if (!this.rolePermission.canEditTabletop) return;
+    if (!this.rolePermission.canEditTabletop()) return;
     if (!this.isEmpty && this.selectedTable) {
       this.selectedTableXml = this.selectedTable.toXml();
       this.selectedTable.destroy();
@@ -727,7 +785,7 @@ export class GameTableSettingComponent {
    * not edit the table or when nothing is kept.
    */
   restore() {
-    if (!this.rolePermission.canEditTabletop) return;
+    if (!this.rolePermission.canEditTabletop()) return;
     if (this.selectedTable && this.selectedTableXml) {
       const restoreTable = this.objectSerializer.parseXml(this.selectedTableXml)!;
       this.selectGameTable(restoreTable.identifier);

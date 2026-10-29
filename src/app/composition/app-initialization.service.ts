@@ -1,11 +1,13 @@
-import { inject, Injectable } from '@angular/core';
+import { DestroyRef, inject, Injectable } from '@angular/core';
 import { PointerDeviceService } from '@axe/application/input/pointer-device.service';
+import { JukeboxEngineService } from '@axe/application/media/jukebox-engine.service';
 import { PersonalVolumeService } from '@axe/application/media/personal-volume.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
+import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { KeyboardInsetService } from '@axe/application/ui/keyboard-inset.service';
 import { AppConfigService } from '@axe/composition/app-config.service';
 import { initializeNetworkMessaging } from '@axe/core/network/network-messaging';
-import { AudioPlayer } from '@axe/core/storage/audio-player';
+import { AudioOutput } from '@axe/core/storage/audio-output';
 import { AudioSharingSystem } from '@axe/core/storage/audio-sharing-system';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
 import { FileArchiver } from '@axe/core/storage/file-archiver';
@@ -33,14 +35,13 @@ import { Jukebox } from '@axe/domain/media/jukebox';
 import { Playlist } from '@axe/domain/media/playlist';
 import { PresetSound, SoundEffect } from '@axe/domain/media/sound-effect';
 import { Config } from '@axe/domain/peer/config';
-import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { DEFAULT_CURSOR_IMAGE_IDENTIFIER, DEFAULT_CURSOR_NAME, PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { normalizePeerRole } from '@axe/domain/peer/peer-role';
 import { ReloadCheck } from '@axe/domain/peer/reload-check';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { TurnState } from '@axe/domain/tabletop/turn-state';
 import { VnStage } from '@axe/domain/visual-novel/vn-stage';
 import { Vote } from '@axe/domain/vote/vote';
-import { NgSelectConfig } from '@ng-select/ng-select';
 
 const PREFETCH_IDLE_TIMEOUT_MS = 5000;
 const PREFETCH_FALLBACK_DELAY_MS = 1500;
@@ -59,9 +60,12 @@ export class AppInitializationService {
   private readonly config = inject(Config);
   private readonly dataSummarySetting = inject(DataSummarySetting);
   private readonly statusAilmentCatalog = inject(StatusAilmentCatalog);
-  private readonly ngSelectConfig = inject(NgSelectConfig);
   private readonly keyboardInset = inject(KeyboardInsetService);
   private readonly personalVolumes = inject(PersonalVolumeService);
+  /** Made before the room's jukebox, so the jukebox is heard on this peer from the moment it is. */
+  private readonly jukeboxEngine = inject(JukeboxEngineService);
+  private readonly objectChange = inject(ObjectChangeService);
+  private readonly destroyRef = inject(DestroyRef);
 
   /**
    * Starts the app once at launch, before any room is used.
@@ -73,7 +77,7 @@ export class AppInitializationService {
   initialize(): void {
     initializeNetworkMessaging();
     this.fileArchiver.initialize();
-    this.fileArchiver.mayLoadDrops = () => this.rolePermission.canEditTabletop;
+    this.fileArchiver.mayLoadDrops = () => this.rolePermission.canEditTabletop();
     ImageSharingSystem.instance.initialize();
     AudioSharingSystem.instance.initialize();
     ObjectSynchronizer.instance.initialize();
@@ -81,7 +85,6 @@ export class AppInitializationService {
     this.pointerDeviceService.initialize();
     this.keyboardInset.initialize();
     keepFocusFromZoomingOnAppleTouch(document, navigator);
-    this.ngSelectConfig.appendTo = 'body';
 
     this.tableSelecter.initialize();
     this.turnState.initialize();
@@ -124,11 +127,17 @@ export class AppInitializationService {
 
     const jukebox = new Jukebox('Jukebox');
     jukebox.initialize();
-    this.personalVolumes.restore();
+    this.personalVolumes.applyToChannels();
     AudioSharingSystem.instance.preferredIdentifiers = () => [
       ...(jukebox.audioIdentifier.length > 0 ? [jukebox.audioIdentifier] : []),
       ...BackgroundSound.playing().map((sound) => sound.audioIdentifier),
     ];
+    // Music started after the room's sounds were lined up goes ahead of them too.
+    this.objectChange.onObjectChangedForAlias(
+      ['jukebox', 'background-sound'],
+      () => AudioSharingSystem.instance.preferWaiting(),
+      this.destroyRef
+    );
 
     const playlist = new Playlist('Playlist');
     playlist.initialize();
@@ -163,7 +172,7 @@ export class AppInitializationService {
   }
 
   private initializeAudioPresets(): void {
-    AudioPlayer.resumeAudioContext();
+    AudioOutput.resumeOnGesture();
 
     const addHidden = (path: string): string => {
       const file = this.audioStorage.add(path);
@@ -286,12 +295,12 @@ export class AppInitializationService {
   }
 
   private initializePeerCursor(): void {
-    const fileContext = ImageFile.createEmpty('none_icon').toContext();
+    const fileContext = ImageFile.createEmpty(DEFAULT_CURSOR_IMAGE_IDENTIFIER).toContext();
     fileContext.url = './assets/images/avatar_default.png';
     const noneIconImage = this.imageStorage.add(fileContext);
 
     PeerCursor.createMyCursor();
-    PeerCursor.myCursor.name = 'プレイヤー';
+    PeerCursor.myCursor.name = DEFAULT_CURSOR_NAME;
     PeerCursor.myCursor.imageIdentifier = noneIconImage.identifier;
 
     const storedIdentity = loadIdentity();

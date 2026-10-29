@@ -4,6 +4,12 @@ import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
 import { panelLabelKey, RoomPanelName, STATUS_AILMENT_PANEL } from '@axe/domain/ui/room-panel';
 import { PanelWindowService } from '@axe/features/panels/panel-window.service';
 
+/**
+ * How far down the first panel without a place of its own opens: clear of the toolbars along the
+ * top of the screen, which stand over panels and would hide the buttons at the right of a title bar.
+ */
+const FIRST_PANEL_TOP = 64;
+
 interface RoomPanel {
   load: () => Promise<Type<unknown>>;
   option: PanelOption;
@@ -31,22 +37,54 @@ export class RoomPanelService {
     setup?: (instance: T) => void,
     host?: ViewContainerRef
   ): void {
+    this.openFrom(name, this.panelOf(name).load, extra, setup, host);
+  }
+
+  /**
+   * Opens several of the room's panels together, each standing over those before it in the list.
+   *
+   * A panel stands over every panel opened before it, and the code of each arrives when it will.
+   * All of it is fetched at once, but no panel opens before those ahead of it have opened or failed
+   * to arrive.
+   */
+  openInTurn(requests: readonly (readonly [RoomPanelName, PanelOption?])[]): void {
+    let ahead: Promise<unknown> = Promise.resolve();
+    for (const [name, extra] of requests) {
+      const fetched = this.panelOf(name).load();
+      fetched.catch(() => undefined);
+      const inTurn = ahead.then(() => fetched);
+      this.openFrom(name, () => inTurn, extra);
+      // Settles after `openLazy` has opened this one, as it took hold of `inTurn` first.
+      ahead = inTurn.then(
+        () => undefined,
+        () => undefined
+      );
+    }
+  }
+
+  private openFrom<T>(
+    name: RoomPanelName,
+    load: () => Promise<Type<unknown>>,
+    extra: PanelOption = {},
+    setup?: (instance: T) => void,
+    host?: ViewContainerRef
+  ): void {
     const panel = this.panelOf(name);
     const option: PanelOption = {
       title: this.t(panelLabelKey(name)),
       windowed: host !== undefined,
       controls: host ? [] : this.popOutControl(name, extra, setup),
       ...panel.option,
-      top: ((this.opened % 10) + 1) * 20,
+      top: FIRST_PANEL_TOP + (this.opened % 10) * 20,
       left: 100 + ((this.opened % 20) + 1) * 5,
       ...extra,
     };
     this.opened += 1;
     // Passed on exactly as far as there is something to pass: a trailing `undefined` is a
     // different call to anything watching, and nothing here needs to make one.
-    if (host) this.panelService.openLazy(panel.load, option, setup as (instance: unknown) => void, host);
-    else if (setup) this.panelService.openLazy(panel.load, option, setup as (instance: unknown) => void);
-    else this.panelService.openLazy(panel.load, option);
+    if (host) this.panelService.openLazy(load, option, setup as (instance: unknown) => void, host);
+    else if (setup) this.panelService.openLazy(load, option, setup as (instance: unknown) => void);
+    else this.panelService.openLazy(load, option);
   }
 
   /**
@@ -61,11 +99,11 @@ export class RoomPanelService {
     setup?: (instance: T) => void
   ): PanelOption['controls'] {
     const windows = this.injector.get(PanelWindowService);
-    if (!windows.isSupported) return [];
     return [
       {
         icon: 'open_in_new',
         label: this.t('common.panel.popOut'),
+        shown: () => windows.isSupported,
         press: (owner) => {
           if (owner.windowed()) return;
           const frame = owner.standingFrame;
@@ -212,6 +250,14 @@ export class RoomPanelService {
             ),
           option: { width: 360, height: 480 },
         };
+      case 'battleCutIn':
+        return {
+          load: () =>
+            import('@axe/features/battle-cut-in/battle-cut-in-panel/battle-cut-in-panel.component').then(
+              (m) => m.BattleCutInPanelComponent
+            ),
+          option: { width: 420, height: 620, minWidth: 340, minHeight: 360, single: 'battle-cut-in' },
+        };
       case 'mapEditor':
         return {
           load: () =>
@@ -221,7 +267,7 @@ export class RoomPanelService {
       case 'dungeonGenerator':
         return {
           load: () =>
-            import('@axe/features/tabletop/dungeon-generator/dungeon-generator.component').then(
+            import('@axe/features/dungeon-generator/dungeon-generator.component').then(
               (m) => m.DungeonGeneratorComponent
             ),
           option: { width: 460, height: 660, minWidth: 400, minHeight: 520 },

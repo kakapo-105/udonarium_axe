@@ -31,8 +31,8 @@ export function searchPaletteRows(rows: readonly PaletteRow[], query: string): P
   const found: { result: PaletteSearchResult; position: number }[] = [];
   let heading = '';
   for (const row of rows) {
-    if (row.kind === 'heading') {
-      heading = paletteHeadingLabel(row);
+    if (row.kind === 'heading' || row.kind === 'tab') {
+      heading = row.kind === 'tab' ? (row.tabName ?? '').trim() : paletteHeadingLabel(row);
       continue;
     }
     if (row.kind !== 'command') continue;

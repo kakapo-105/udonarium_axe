@@ -8,6 +8,7 @@ import {
   xmlLoaded$,
 } from '@axe/core/event/domain-events';
 import { Network } from '@axe/core/index';
+import { setNetworkIsolated } from '@axe/core/network/network-isolation';
 import { AudioFile } from '@axe/core/storage/audio-file';
 import { AudioStorage } from '@axe/core/storage/audio-storage';
 import {
@@ -19,6 +20,7 @@ import {
 import { calcSHA256Async } from '@axe/core/storage/file-reader-util';
 import { ImageFile } from '@axe/core/storage/image-file';
 import { ImageStorage } from '@axe/core/storage/image-storage';
+import { useFflateLoader } from '@axe/core/storage/zip-archive';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { zipSync } from 'fflate';
 import { strToU8, zip } from 'fflate';
@@ -59,6 +61,8 @@ describe('FileArchiver', () => {
     vi.spyOn(ObjectStore.instance, 'get').mockReturnValue({
       isLoadOk: () => true,
       reloadCheckStart: vi.fn(),
+      answerWithheldCheck: () => true,
+      answerCheck: () => true,
     } as unknown as ReturnType<typeof ObjectStore.instance.get>);
     Object.defineProperty(Network, 'peerContext', {
       get: () => ({ roomName: '' }),
@@ -161,6 +165,7 @@ describe('FileArchiver', () => {
       drop(['Files'], [new File([new Uint8Array([1])], 'a.png', { type: 'image/png' })]);
 
       await vi.waitFor(() => expect(addAsync).toHaveBeenCalled());
+      expect(addAsync.mock.calls[0][1]).toEqual({ putBack: true });
     });
   });
 
@@ -175,6 +180,92 @@ describe('FileArchiver', () => {
         [Symbol.iterator]: function* () {},
       } as unknown as FileList;
       await FileArchiver.instance.load(fileList);
+    });
+  });
+
+  describe('what a load found out', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it('says whether the data of a save was read, which a broken archive never is', async () => {
+      const off = xmlLoaded$.subscribe(() => undefined);
+      const saved = new File([zipSync({ 'data.xml': strToU8('<room></room>') }).slice()], 'room.zip', {
+        type: 'application/zip',
+      });
+      const broken = new File([new Uint8Array([0, 1, 2, 3])], 'broken.zip', { type: 'application/zip' });
+      try {
+        expect(await FileArchiver.instance.load([saved])).toMatchObject({ dataRead: true });
+        expect(await FileArchiver.instance.load([broken])).toMatchObject({ dataRead: false });
+      } finally {
+        off();
+      }
+    });
+
+    it('counts the data read once it is handed on, though taking it in then fails partway', async () => {
+      const off = xmlLoaded$.subscribe(() => {
+        throw new Error('a piece that will not go in');
+      });
+      const saved = new File([zipSync({ 'data.xml': strToU8('<room></room>') }).slice()], 'room.zip', {
+        type: 'application/zip',
+      });
+      try {
+        expect(await FileArchiver.instance.load([saved])).toMatchObject({ dataRead: true });
+      } finally {
+        off();
+      }
+    });
+
+    it('names the pictures and sounds it took in', async () => {
+      vi.spyOn(ImageStorage.instance, 'addAsync').mockResolvedValue({ identifier: 'taken-picture' } as ImageFile);
+      vi.spyOn(AudioStorage.instance, 'addAsync').mockResolvedValue({ identifier: 'taken-sound' } as AudioFile);
+
+      const result = await FileArchiver.instance.load([
+        new File([new Uint8Array([137, 80, 78, 71])], 'face.png', { type: 'image/png' }),
+        new File([new Uint8Array([1, 2, 3])], 'theme.mp3', { type: 'audio/mpeg' }),
+      ]);
+
+      expect(result.images).toEqual(['taken-picture']);
+      expect(result.audios).toEqual(['taken-sound']);
+    });
+
+    it('leaves the rest of an archive once it is no longer wanted', async () => {
+      const read: string[] = [];
+      const off = xmlLoaded$.subscribe((event) => read.push(event.xmlElement.tagName));
+      const saved = new File(
+        [zipSync({ 'data.xml': strToU8('<room></room>'), 'config.xml': strToU8('<config></config>') }).slice()],
+        'room.zip',
+        { type: 'application/zip' }
+      );
+
+      try {
+        const result = await FileArchiver.instance.load([saved], undefined, { stillWanted: () => false });
+
+        expect(result).toMatchObject({ dataRead: false });
+        expect(read).toEqual([]);
+      } finally {
+        off();
+      }
+    });
+  });
+
+  describe('a zip whose code could not be fetched', () => {
+    afterEach(() => useFflateLoader(null));
+
+    it('asks for a reload, saving or loading, and not for an archive that is merely broken', async () => {
+      const told = vi.fn();
+      FileArchiver.instance.onCodeUnavailable = told;
+      const zipFile = new File([zipSync({ 'data.xml': new Uint8Array([60]) }).slice()], 'room.zip', {
+        type: 'application/zip',
+      });
+      await FileArchiver.instance.load([
+        new File([new Uint8Array([0, 1, 2, 3])], 'broken.zip', { type: 'application/zip' }),
+      ]);
+      expect(told).not.toHaveBeenCalled();
+
+      useFflateLoader(() => Promise.reject(new TypeError('Failed to fetch dynamically imported module')));
+      await FileArchiver.instance.load([zipFile]);
+      await expect(FileArchiver.instance.saveAsync([zipFile], 'room')).rejects.toBeDefined();
+
+      expect(told).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -198,6 +289,20 @@ describe('FileArchiver', () => {
 
       expect(dropped).toHaveLength(1);
       expect(dropped[0]).toMatchObject({ fileName: 'a.png', dropPoint: { x: 10, y: 20 } });
+    });
+
+    it('places nothing for a picture the room removed and this seat could not put back', async () => {
+      const dropped: ImageDroppedEvent[] = [];
+      const off = imageDropped$.subscribe((event) => dropped.push(event));
+      vi.mocked(ImageStorage.instance.addAsync).mockImplementationOnce(() => Promise.resolve(null));
+
+      try {
+        await FileArchiver.instance.load([imageFile('a.png'), imageFile('b.png')], { x: 10, y: 20 });
+      } finally {
+        off();
+      }
+
+      expect(dropped.map((event) => event.fileName)).toEqual(['b.png']);
     });
 
     it('offsets several images dropped together so they do not stack', async () => {
@@ -239,6 +344,60 @@ describe('FileArchiver', () => {
     });
   });
 
+  describe('a room archive whose load is declined', () => {
+    const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
+
+    /** Answers no to a room's data withheld in part, and notes what goes in and what is asked. */
+    function declineWithheld(): { asked: string[]; added: string[]; read: string[]; off: () => void } {
+      let ok = true;
+      const asked: string[] = [];
+      vi.spyOn(ObjectStore.instance, 'get').mockReturnValue({
+        isLoadOk: () => ok,
+        reloadCheckStart: vi.fn(),
+        answerWithheldCheck: () => {
+          asked.push('withheld');
+          ok = false;
+          return false;
+        },
+        answerCheck: () => {
+          asked.push('overwrite');
+          return ok;
+        },
+      } as unknown as ReturnType<typeof ObjectStore.instance.get>);
+      const added: string[] = [];
+      vi.spyOn(ImageStorage.instance, 'addAsync').mockImplementation(async (file) => {
+        added.push((file as File).name);
+        return ImageFile.createEmpty('x');
+      });
+      const read: string[] = [];
+      const off = xmlLoaded$.subscribe((event) => read.push(event.xmlElement.tagName));
+      return { asked, added, read, off };
+    }
+
+    it.each([
+      ['as saved', ''],
+      ['packed again inside a folder', 'save/'],
+    ])(
+      'takes none of its pictures or settings in once the room data it carries is declined, %s',
+      async (_name, folder) => {
+        const { asked, added, read, off } = declineWithheld();
+        const zipped = zipSync({
+          [`${folder}data.xml`]: strToU8('<room withheld="true"></room>'),
+          [`${folder}face.png`]: PNG,
+          [`${folder}${'a'.repeat(64)}.png`]: PNG,
+          [`${folder}config.xml`]: strToU8('<config></config>'),
+        });
+
+        await FileArchiver.instance.load([new File([zipped.slice()], 'room.zip', { type: 'application/zip' })]);
+        off();
+
+        expect(added).toEqual([]);
+        expect(read).not.toContain('config');
+        expect(asked).toEqual(['withheld']);
+      }
+    );
+  });
+
   describe('an archive made elsewhere, naming its pictures by the bytes they came as', () => {
     const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
     const STORED = 'b'.repeat(64);
@@ -268,6 +427,49 @@ describe('FileArchiver', () => {
       expect(xml).toHaveLength(1);
       expect(xml[0]).toContain(STORED);
       expect(xml[0]).not.toContain(original);
+    });
+
+    it.each([
+      ['as saved', ''],
+      ['packed again inside a folder', 'save/'],
+    ])('hands a picture saved under its own id to the store under that name alone, %s', async (_name, folder) => {
+      const saved = 'a'.repeat(64);
+      const { added } = await loaded({ [`${folder}${saved}.png`]: PNG });
+
+      expect(added).toEqual([`${saved}.png`]);
+    });
+
+    it('hands a sound and a picture packed again inside a folder to the stores under their own names', async () => {
+      const sounds: string[] = [];
+      vi.spyOn(AudioStorage.instance, 'addAsync').mockImplementation(async (file) => {
+        sounds.push((file as File).name);
+        return null as never;
+      });
+      const { added } = await loaded({
+        'save/BGM.mp3': new Uint8Array([0x49, 0x44, 0x33, 1, 2, 3]),
+        'save/maps/face.png': PNG,
+      });
+
+      expect(sounds).toEqual(['BGM.mp3']);
+      expect(added).toEqual(['face.png']);
+    });
+
+    it('reads none of the room data once a recording’s board was shown or put away while the pictures came in', async () => {
+      const xml: string[] = [];
+      const off = xmlLoaded$.subscribe((event) => xml.push(event.xmlElement.tagName));
+      vi.spyOn(ImageStorage.instance, 'addAsync').mockImplementation(async () => {
+        setNetworkIsolated(true);
+        return ImageFile.createEmpty(STORED);
+      });
+      const zipped = zipSync({ 'data.xml': strToU8('<room></room>'), 'face.png': PNG });
+      try {
+        await FileArchiver.instance.load([new File([zipped.slice()], 'room.zip', { type: 'application/zip' })]);
+      } finally {
+        setNetworkIsolated(false);
+        off();
+      }
+
+      expect(xml).toEqual([]);
     });
 
     it('leaves alone room data that names a picture saved under its own id, and a longer run of hex digits', async () => {
@@ -301,6 +503,15 @@ describe('FileArchiver', () => {
       const result = await FileArchiver.instance.loadImages([imageFile('a.png'), imageFile('b.png')]);
 
       expect(result.images.map((image) => image.identifier)).toEqual(['image-a.png', 'image-b.png']);
+      expect(result.oversized).toEqual([]);
+    });
+
+    it('hands back no picture the room removed that this seat could not put back, nor names it too large', async () => {
+      addAsync.mockImplementationOnce(() => Promise.resolve(null));
+
+      const result = await FileArchiver.instance.loadImages([imageFile('a.png'), imageFile('b.png')]);
+
+      expect(result.images.map((image) => image.identifier)).toEqual(['image-b.png']);
       expect(result.oversized).toEqual([]);
     });
 
@@ -481,7 +692,7 @@ describe('FileArchiver', () => {
 
     it('skips a broken archive without throwing', async () => {
       const badFile = new File([new Uint8Array([0, 1, 2, 3])], 'broken.zip', { type: 'application/zip' });
-      await expect(FileArchiver.instance.load([badFile])).resolves.toBeUndefined();
+      await expect(FileArchiver.instance.load([badFile])).resolves.toMatchObject({ dataRead: false });
     });
 
     it('takes a picture inside it by its bytes where its name does not say what it is', async () => {
@@ -524,6 +735,27 @@ describe('FileArchiver', () => {
 
       expect(dropped).toHaveLength(1);
       expect(Object.keys(dropped[0].entries)).toContain('__data.json');
+      expect(addAsync).not.toHaveBeenCalled();
+    });
+
+    it('hands over a room archive from the other tool packed again inside a folder, as it was saved', async () => {
+      const addAsync = vi
+        .spyOn(ImageStorage.instance, 'addAsync')
+        .mockImplementation(() => Promise.resolve(ImageFile.createEmpty('image')));
+      const zipped = zipSync({
+        'room/__data.json': strToU8('{"meta":{"version":"1.1.0"},"entities":{}}'),
+        'room/aaaa.png': new Uint8Array([1, 2, 3]),
+        '__MACOSX/room/._aaaa.png': new Uint8Array([0]),
+      });
+      const zipFile = new File([zipped.slice()], 'room.zip', { type: 'application/zip' });
+
+      const dropped: CcfoliaRoomDroppedEvent[] = [];
+      const off = ccfoliaRoomDropped$.subscribe((event) => dropped.push(event));
+      await FileArchiver.instance.load([zipFile]);
+      off();
+
+      expect(dropped).toHaveLength(1);
+      expect(Object.keys(dropped[0].entries).sort()).toEqual(['__data.json', 'aaaa.png']);
       expect(addAsync).not.toHaveBeenCalled();
     });
   });

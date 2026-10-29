@@ -1,6 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CharacterMacroService } from '@axe/application/chat/character-macro.service';
-import { ChatTickerSelectionService } from '@axe/application/chat/chat-ticker-selection.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { ContextMenuAction, ContextMenuService } from '@axe/application/ui/context-menu.service';
@@ -15,6 +14,7 @@ import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
 import { ChatPaletteComponent } from '@axe/features/chat/chat-palette/chat-palette.component';
+import { ChatTickerSelectionService } from '@axe/features/chat/chat-ticker-selection.service';
 import { expectPanelDragRecovery, PanelDragTestHostComponent } from '@axe/testing/panel-drag-recovery';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 import GameSystemClass from 'bcdice/lib/game_system';
@@ -232,13 +232,144 @@ describe('ChatPaletteComponent', () => {
     });
 
     it('leaves the browser its own menu for a guest, who is offered nothing', () => {
-      vi.spyOn(TestBed.inject(RolePermissionService), 'canEditTabletop', 'get').mockReturnValue(false);
+      vi.spyOn(TestBed.inject(RolePermissionService), 'canEditTabletop').mockReturnValue(false);
       const open = vi.spyOn(TestBed.inject(ContextMenuService), 'open').mockImplementation(() => undefined);
 
       const event = press('command');
 
       expect(open).not.toHaveBeenCalled();
       expect(event.preventDefault).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('rewriting the palette', () => {
+    let char: GameCharacter;
+
+    beforeEach(() => {
+      char = createChar('術者');
+      char.chatPalette!.setPalette('2d6 攻撃');
+      char.chatPalette!.dicebot = 'DiceBot';
+      component.character.set(char);
+    });
+
+    function editButton(): HTMLButtonElement | null {
+      return (fixture.nativeElement as HTMLElement).querySelector('[data-action="edit-palette"]');
+    }
+
+    function beGuest(): void {
+      PeerCursor.myCursor.role = PeerRole.Guest;
+      TestBed.inject(ObjectChangeService).notifyChanged(PeerCursor.myCursor.identifier);
+    }
+
+    it('is offered to a player', () => {
+      fixture.detectChanges();
+
+      expect(editButton()).not.toBeNull();
+    });
+
+    it('is not offered to a guest, nor opened by asking', () => {
+      beGuest();
+      fixture.detectChanges();
+      component.toggleEditMode();
+
+      expect(editButton()).toBeNull();
+      expect(component.isEdit()).toBe(false);
+    });
+
+    it('leaves a guest choosing a dice bot to roll with without writing it to the character', () => {
+      beGuest();
+
+      component.gameType = 'Cthulhu7th';
+
+      expect(component.gameType).toBe('Cthulhu7th');
+      expect(char.chatPalette!.dicebot).toBe('DiceBot');
+    });
+
+    it('closes an edit a player made a guest had open, writing none of it back', () => {
+      fixture.detectChanges();
+      component.toggleEditMode();
+      component.editPalette.set('1d100 書き換え');
+
+      beGuest();
+      TestBed.tick();
+
+      expect(component.isEdit()).toBe(false);
+      expect(char.chatPalette!.value).toBe('2d6 攻撃');
+    });
+  });
+
+  describe('a palette parted into tabs', () => {
+    function speakerWithTabs(name = '術者'): GameCharacter {
+      const speaker = createChar(name);
+      speaker.chatPalette!.setPalette('1d100 目星\n◆◆戦闘\n◆攻撃\n2d6+3 攻撃\n◆◆探索\nCC<=50');
+      component.character.set(speaker);
+      return speaker;
+    }
+
+    const root = () => fixture.nativeElement as HTMLElement;
+    const tabs = () => [...root().querySelectorAll<HTMLElement>('[data-testid="palette-tab"]')];
+    const drawnLines = () =>
+      [...root().querySelectorAll<HTMLElement>('[data-line]')].map((line) => line.textContent?.trim() ?? '');
+
+    it('shows the tabs, the lines before the first under their own, and only the open tab’s lines', () => {
+      speakerWithTabs();
+      fixture.detectChanges();
+
+      expect(tabs().map((tab) => tab.textContent?.trim())).toEqual(['メイン', '戦闘', '探索']);
+      expect(tabs()[0].getAttribute('aria-selected')).toBe('true');
+      expect(drawnLines()).toEqual(['1d100 目星']);
+
+      tabs()[1].click();
+      fixture.detectChanges();
+
+      expect(tabs()[1].getAttribute('aria-selected')).toBe('true');
+      expect(drawnLines().join('|')).toContain('2d6+3 攻撃');
+      expect(drawnLines().join('|')).not.toContain('CC<=50');
+      expect(component.paletteHeadings().map((row) => row.label)).toEqual(['攻撃']);
+    });
+
+    it('opens the tab it was left on when the character comes back to the panel', () => {
+      const speaker = speakerWithTabs();
+      fixture.detectChanges();
+      tabs()[2].click();
+
+      component.character.set(createChar('別人'));
+      fixture.detectChanges();
+      component.character.set(speaker);
+      fixture.detectChanges();
+
+      expect(drawnLines()).toEqual(['CC<=50']);
+    });
+
+    it('finds lines in every tab when searched', () => {
+      speakerWithTabs();
+      component.searchQuery.set('50');
+
+      expect(component.searchResults().map((result) => [result.heading, result.row.text])).toEqual([
+        ['探索', 'CC<=50'],
+      ]);
+    });
+
+    it('opens the tab a search result stands in when it is picked', () => {
+      speakerWithTabs();
+      fixture.detectChanges();
+      component.searchQuery.set('50');
+
+      component.pickSearchResult(component.searchResults()[0]);
+      fixture.detectChanges();
+
+      expect(tabs()[2].getAttribute('aria-selected')).toBe('true');
+      expect(drawnLines()).toEqual(['CC<=50']);
+      expect(component.selectedLine()).toBe(5);
+    });
+
+    it('shows no tabs on a palette without any', () => {
+      const speaker = createChar('術者');
+      speaker.chatPalette!.setPalette('◆戦闘\n2d6');
+      component.character.set(speaker);
+      fixture.detectChanges();
+
+      expect(tabs()).toHaveLength(0);
     });
   });
 
@@ -348,6 +479,14 @@ describe('ChatPaletteComponent', () => {
     });
 
     it('starts on the first tab', () => {
+      expect(component.chatTabidentifier()).toBe(tabs[0].identifier);
+    });
+
+    it('moves to the first tab left where the one chosen goes', async () => {
+      component.chatTabidentifier.set(tabs[1].identifier);
+      tabs[1].destroy();
+      await fixture.whenStable();
+
       expect(component.chatTabidentifier()).toBe(tabs[0].identifier);
     });
 

@@ -1,8 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ChatBookmarkService } from '@axe/application/chat/chat-bookmark.service';
+import { ChatLineEditService } from '@axe/application/chat/chat-line-edit.service';
 import { ChatPreferencesService } from '@axe/application/chat/chat-preferences.service';
 import { ChatReactionService } from '@axe/application/chat/chat-reaction.service';
-import { ChatTickerSelectionService } from '@axe/application/chat/chat-ticker-selection.service';
 import {
   DEFAULT_SYSTEM_AVATAR_URL,
   DEFAULT_SYSTEM_DICE_AVATAR_URL,
@@ -22,6 +21,8 @@ import { UiSignalService } from '@axe/application/ui/ui-signal.service';
 import { ViewModePreferenceService } from '@axe/application/ui/view-mode-preference.service';
 import { ViewportService } from '@axe/application/ui/viewport.service';
 import { emitFileLoaded } from '@axe/core/event/domain-events';
+import { Network } from '@axe/core/network/network';
+import { Transport } from '@axe/core/network/transport';
 import { ImageStorage } from '@axe/core/storage/image-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { ChatMessage } from '@axe/domain/chat/chat-message';
@@ -33,10 +34,13 @@ import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
 import { TextNote } from '@axe/domain/tabletop/text-note';
+import { ChatBookmarkService } from '@axe/features/chat/chat-bookmark.service';
 import { ChatMessageComponent } from '@axe/features/chat/chat-message/chat-message.component';
+import { ChatTickerSelectionService } from '@axe/features/chat/chat-ticker-selection.service';
 import { StampPickerService } from '@axe/features/chat/stamp/stamp-picker.service';
 import { beMyself } from '@axe/testing/peer-context-stub';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
+import { loadLinkify } from '@axe/ui/text-decoration/linkify-loader';
 import type { MockInstance } from 'vitest';
 
 describe('ChatMessageComponent', () => {
@@ -174,7 +178,7 @@ describe('ChatMessageComponent', () => {
     });
 
     it('shows a reader kept from the roll what stands in for it when replied to', () => {
-      vi.spyOn(TestBed.inject(RolePermissionService), 'canSeeHidden', 'get').mockReturnValue(false);
+      vi.spyOn(TestBed.inject(RolePermissionService), 'canSeeHidden').mockReturnValue(false);
       answering('replyTo', secretRoll());
 
       expect(component.replyPreview()?.text).toBe(TestBed.inject(TRANSLATE_FN)('feature.chat.message.secretDice'));
@@ -182,7 +186,7 @@ describe('ChatMessageComponent', () => {
     });
 
     it('shows a reader kept from the roll what stands in for it when quoted', () => {
-      vi.spyOn(TestBed.inject(RolePermissionService), 'canSeeHidden', 'get').mockReturnValue(false);
+      vi.spyOn(TestBed.inject(RolePermissionService), 'canSeeHidden').mockReturnValue(false);
       answering('quoteOf', secretRoll());
 
       expect(component.quotePreview()?.text).toBe(TestBed.inject(TRANSLATE_FN)('feature.chat.message.secretDice'));
@@ -190,7 +194,7 @@ describe('ChatMessageComponent', () => {
     });
 
     it('shows the roll to a reader who may see what is hidden', () => {
-      vi.spyOn(TestBed.inject(RolePermissionService), 'canSeeHidden', 'get').mockReturnValue(true);
+      vi.spyOn(TestBed.inject(RolePermissionService), 'canSeeHidden').mockReturnValue(true);
       answering('replyTo', secretRoll());
 
       expect(component.replyPreview()?.text).toBe('DiceBot : (1d100) → 3');
@@ -198,7 +202,7 @@ describe('ChatMessageComponent', () => {
   });
 
   it('keeps a secret line sent with a stamp covered, stamp and all, from all but whoever may see it', () => {
-    vi.spyOn(TestBed.inject(RolePermissionService), 'canSeeHidden', 'get').mockReturnValue(false);
+    vi.spyOn(TestBed.inject(RolePermissionService), 'canSeeHidden').mockReturnValue(false);
     const message = new ChatMessage();
     message.initialize();
     message.from = 'someone-else';
@@ -228,7 +232,7 @@ describe('ChatMessageComponent', () => {
     // The reveal changes only the tag. Nothing else drawn while the line is hidden depends on
     // that message, so without a version to watch the cover would stay on until something
     // else draws.
-    vi.spyOn(TestBed.inject(RolePermissionService), 'canSeeHidden', 'get').mockReturnValue(false);
+    vi.spyOn(TestBed.inject(RolePermissionService), 'canSeeHidden').mockReturnValue(false);
 
     const message = new ChatMessage();
     message.initialize();
@@ -709,7 +713,7 @@ describe('ChatMessageComponent', () => {
       message.name = '勇者';
       message.text = '世界を救うのだ';
       fixture.componentRef.setInput('chatMessage', message);
-      vi.spyOn(TestBed.inject(RolePermissionService), 'canEditTabletop', 'get').mockReturnValue(false);
+      vi.spyOn(TestBed.inject(RolePermissionService), 'canEditTabletop').mockReturnValue(false);
       fixture.detectChanges();
 
       const before = ObjectStore.instance.getObjects(TextNote).length;
@@ -803,6 +807,8 @@ describe('ChatMessageComponent', () => {
   });
 
   describe('the menu of what can be done with a line', () => {
+    beforeAll(() => loadLinkify());
+
     let open: MockInstance<ContextMenuService['open']>;
     const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
     const strays: Element[] = [];
@@ -1437,6 +1443,89 @@ describe('ChatMessageComponent', () => {
     });
   });
 
+  describe('a line the room server rolled', () => {
+    let tab: ChatTab;
+    let transport: MockInstance<() => Transport>;
+    const mark = () => (fixture.nativeElement as HTMLElement).querySelector('[data-testid="chat-message-server-roll"]');
+
+    beforeEach(() => {
+      beMyself('me');
+      tab = ChatTabList.instance.addChatTab('メイン');
+      transport = vi.spyOn(Network, 'transport', 'get').mockReturnValue('server');
+    });
+
+    afterEach(() => {
+      tab.destroy();
+      transport.mockRestore();
+    });
+
+    it('wears a mark saying the server rolled it, as read back from a saved room too', () => {
+      const answer = tab.addMessage({
+        from: 'System-BCDice',
+        originFrom: 'someone',
+        name: '<BCDice：ノア>',
+        text: 'DiceBot : (2D6) → 7',
+        tag: 'system',
+        timestamp: 1000,
+      });
+      answer.serverRoll = 'true';
+      fixture.componentRef.setInput('chatMessage', answer);
+      fixture.detectChanges();
+
+      expect(mark()).not.toBeNull();
+    });
+
+    it('keeps the name and the colon together in the simple layout', () => {
+      const answer = tab.addMessage({ from: 'someone', name: 'ノア', text: 'こんにちは', timestamp: 1000 });
+      fixture.componentRef.setInput('chatMessage', answer);
+      fixture.componentRef.setInput('chatSimpleDispFlag', true);
+      fixture.detectChanges();
+
+      expect((fixture.nativeElement as HTMLElement).textContent).toContain('ノア：');
+    });
+
+    it('wears none with SkyWay, where any device could put it on', () => {
+      transport.mockReturnValue('skyway');
+      const answer = tab.addMessage({
+        from: 'System-BCDice',
+        originFrom: 'someone',
+        name: '<BCDice：ノア>',
+        text: 'DiceBot : (2D6) → 7',
+        tag: 'system',
+        timestamp: 1000,
+      });
+      answer.serverRoll = true;
+      fixture.componentRef.setInput('chatMessage', answer);
+      fixture.detectChanges();
+
+      expect(mark()).toBeNull();
+    });
+
+    it('wears none on a line that is not the dice bot’s, whatever it carries', () => {
+      const answer = tab.addMessage({ from: 'someone', name: 'ノア', text: '6 だった', timestamp: 1000 });
+      answer.serverRoll = true;
+      fixture.componentRef.setInput('chatMessage', answer);
+      fixture.detectChanges();
+
+      expect(mark()).toBeNull();
+    });
+
+    it('wears none on a roll made by a player’s own device', () => {
+      const answer = tab.addMessage({
+        from: 'System-BCDice',
+        originFrom: 'someone',
+        name: '<BCDice：ノア>',
+        text: 'DiceBot : (2D6) → 7',
+        tag: 'system',
+        timestamp: 1000,
+      });
+      fixture.componentRef.setInput('chatMessage', answer);
+      fixture.detectChanges();
+
+      expect(mark()).toBeNull();
+    });
+  });
+
   describe('following a line back to the one it answers', () => {
     let tab: ChatTab;
 
@@ -1813,7 +1902,7 @@ describe('ChatMessageComponent', () => {
     });
 
     it('keeps every wording of a secret line from a reader kept from its words', async () => {
-      vi.spyOn(TestBed.inject(RolePermissionService), 'canSeeHidden', 'get').mockReturnValue(false);
+      vi.spyOn(TestBed.inject(RolePermissionService), 'canSeeHidden').mockReturnValue(false);
       const message = shown('someone', 'S1d100 黒幕を疑う');
       message.tag = 'secret';
       message.edit('S1d100 犯人を疑う', '', 2000);
@@ -1873,48 +1962,23 @@ describe('ChatMessageComponent', () => {
     });
   });
 
-  describe('consuming a jump to the original message', () => {
-    /**
-     * A jump is always cleared once it is consumed.
-     * Left there, every message component mounted afterwards would read the same request on
-     * its first pass and scroll again.
-     */
-    function setupMessage(identifier: string) {
-      const message = new ChatMessage(identifier);
-      message.initialize();
-      message.from = 'tester';
-      message.text = 'hello';
-      fixture.componentRef.setInput('chatMessage', message);
-      fixture.detectChanges();
-      // Scrolling into view need do nothing here, but without a stub happy-dom throws.
-      const host = fixture.nativeElement as HTMLElement;
-      host.scrollIntoView = vi.fn();
-      return host;
-    }
+  it('scrolls into the middle of the log and lights up when it is brought into view', () => {
+    const message = new ChatMessage('jump-target-msg');
+    message.initialize();
+    message.from = 'tester';
+    message.text = 'hello';
+    fixture.componentRef.setInput('chatMessage', message);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    host.scrollIntoView = vi.fn();
 
-    it('clears the request as soon as it consumes one meant for it', async () => {
-      setupMessage('jump-target-msg');
-      const ui = TestBed.inject(UiSignalService);
+    component.bringIntoView();
 
-      ui.requestChatJump('jump-target-msg');
-      fixture.detectChanges();
-      // the clearing and the scrolling both happen on a microtask
-      await Promise.resolve();
-
-      expect(ui.chatJumpRequest()).toBeNull();
-    });
-
-    it('leaves a request meant for another alone, for that one to consume', () => {
-      setupMessage('msg-A');
-      const ui = TestBed.inject(UiSignalService);
-
-      ui.requestChatJump('msg-B');
-      fixture.detectChanges();
-
-      const req = ui.chatJumpRequest();
-      expect(req?.messageIdentifier).toBe('msg-B');
-    });
+    expect(host.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
+    expect(component.isHighlighted()).toBe(true);
+    message.destroy();
   });
+
   describe('the novel-mode staging', () => {
     const spoken = (text: string, vnEmote = '') => {
       const message = new ChatMessage();
@@ -2000,6 +2064,19 @@ describe('ChatMessageComponent', () => {
 
       expect(message.text).toBe('こんにちは');
       expect(message.vnEmote).toBe('');
+    });
+
+    it('throws the draft away when the seat may no longer edit the line by the time it is saved', () => {
+      const message = spoken('こんばんは');
+      fixture.componentRef.setInput('chatMessage', message);
+      component.startEdit();
+      component.editDraft.set('こんにちは');
+      vi.spyOn(TestBed.inject(ChatLineEditService), 'canEditMessage').mockReturnValue(false);
+
+      component.saveEdit();
+
+      expect(message.text).toBe('こんばんは');
+      expect(component.editDraft()).toBeNull();
     });
   });
 

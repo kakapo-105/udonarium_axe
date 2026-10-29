@@ -1,18 +1,15 @@
 import { DestroyRef, inject, Injectable, signal } from '@angular/core';
 import { ObjectInventory } from '@axe/application/inventory/object-inventory';
-import {
-  personalFolderStorage,
-  readPersonalFolders,
-  writePersonalFolders,
-} from '@axe/application/inventory/personal-folders';
+import { readPersonalFolders, writePersonalFolders } from '@axe/application/inventory/personal-folders';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { Network } from '@axe/core/index';
+import { browserLocalStorage } from '@axe/core/storage/local-preference';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { isHandLocation } from '@axe/domain/card/hand-location';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { isResourceElement } from '@axe/domain/character/resource-catalog';
 import { DataElement } from '@axe/domain/data/data-element';
-import { DataSummarySetting, SortOrder } from '@axe/domain/data/data-summary-setting';
+import { DataSummarySetting, type SortKey, SortOrder } from '@axe/domain/data/data-summary-setting';
 import { tagLeafNames } from '@axe/domain/data/summary-tag-list';
 import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 
@@ -68,6 +65,14 @@ export class GameObjectInventoryService {
     this.summarySetting.sortOrder2nd = sortOrder;
   }
 
+  /** The steps of the order after the second, each read where the ones before leave ties. Shared with the room. */
+  get extraSortKeys(): readonly SortKey[] {
+    return this.summarySetting.extraSortKeys;
+  }
+  set extraSortKeys(keys: readonly SortKey[]) {
+    this.summarySetting.extraSortKeys = keys;
+  }
+
   /**
    * The columns the room has named for its inventories, written as one line of item names. Shared
    * with the room; empty until the room names any.
@@ -111,7 +116,7 @@ export class GameObjectInventoryService {
    * The personal tab's folders belong to this device rather than the room, but every inventory
    * panel has to see the same ones, so they are held here rather than in a component.
    */
-  private readonly personalStorage = personalFolderStorage();
+  private readonly personalStorage = browserLocalStorage();
   private personalRoomId = '';
   private readonly _personalFolderPaths = signal<string[]>([]);
   readonly personalFolderPaths = this._personalFolderPaths.asReadonly();
@@ -157,9 +162,15 @@ export class GameObjectInventoryService {
   }
 
   private currentSummarySnapshot(): string {
-    return [this.sortTag, this.sortOrder, this.sortTag2nd, this.sortOrder2nd, this.dataTag, this.tableDataTag].join(
-      '\n'
-    );
+    return [
+      this.sortTag,
+      this.sortOrder,
+      this.sortTag2nd,
+      this.sortOrder2nd,
+      this.summarySetting.sortMore,
+      this.dataTag,
+      this.tableDataTag,
+    ].join('\n');
   }
 
   private initialize() {
@@ -204,7 +215,7 @@ export class GameObjectInventoryService {
           this.tagNameMap.set(object.identifier, object.name);
           this.refreshDataElements();
         }
-        if (this.sortTag === object.name || this.sortTag2nd === object.name) {
+        if (this.summarySetting.sortKeys.some((key) => key.tag === object.name)) {
           this.refreshSort();
         }
         if (object.children.length > 0) {

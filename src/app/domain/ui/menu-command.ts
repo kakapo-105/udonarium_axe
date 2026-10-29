@@ -49,7 +49,15 @@ export const MENU_TOGGLES = [
 export type MenuToggleName = (typeof MENU_TOGGLES)[number];
 
 /** The settings that move on to their next choice when pressed, rather than having an off. */
-export const MENU_CYCLES = ['viewMode', 'theme', 'motion', 'renderLite', 'language', 'buffView'] as const;
+export const MENU_CYCLES = [
+  'viewMode',
+  'theme',
+  'motion',
+  'renderLite',
+  'language',
+  'buffView',
+  'buffIconSize',
+] as const;
 
 export type MenuCycleName = (typeof MENU_CYCLES)[number];
 
@@ -58,6 +66,8 @@ export const MENU_ACTS = [
   'save',
   'zipLoad',
   'importCharacter',
+  'startRoomKeep',
+  'startRoomForget',
   'useMobileLayout',
   'turnNext',
   'turnPrev',
@@ -208,6 +218,7 @@ export const MENU_COMMANDS: readonly MenuCommand[] = [
   panel('jukebox', 'queue_music', 'jukebox', 'app.fab.jukebox'),
   panel('cutIn', 'slideshow', 'cutInList', 'app.fab.cutIn'),
   panel('effectLibrary', 'auto_awesome', 'effectLibrary', 'feature.effect.title', { audience: 'playing' }),
+  panel('battleCutIn', 'sports_martial_arts', 'battleCutIn', 'feature.battleCutIn.title'),
   panel('skin', 'palette', 'skin', 'app.fab.skin', { testId: 'seat-skin' }),
   panel('soundSettings', 'volume_up', 'soundSettings', 'app.fab.soundSettings', { testId: 'seat-sound-settings' }),
   panel('objectList', 'category', 'objectList', 'app.fab.objectList', { audience: 'gameMaster' }),
@@ -258,12 +269,20 @@ export const MENU_COMMANDS: readonly MenuCommand[] = [
     audience: 'playing',
     testId: 'buff-view-cycle',
   }),
+  cycle('buffIconSize', 'photo_size_select_large', 'feature.plTools.buffIconSize', {
+    audience: 'playing',
+    testId: 'buff-icon-size-cycle',
+  }),
 
   act('save', 'save', 'app.fab.save', { testId: 'save-load-save' }),
   act('zipLoad', 'open_in_browser', 'app.fab.zipLoad', { audience: 'playing', testId: 'save-load-load' }),
   act('importCharacter', 'person_add', 'app.fab.importCharacter', {
     audience: 'playing',
     testId: 'save-load-import-character',
+  }),
+  act('startRoomKeep', 'home', 'app.fab.startRoomKeep', { testId: 'save-load-start-room-keep' }),
+  act('startRoomForget', 'settings_backup_restore', 'app.fab.startRoomForget', {
+    testId: 'save-load-start-room-forget',
   }),
   act('useMobileLayout', 'smartphone', 'feature.mobile.useMobile', { testId: 'seat-use-mobile' }),
   act('turnNext', 'chevron_right', 'feature.turnOrder.next', { audience: 'gameMaster' }),
@@ -305,7 +324,12 @@ export function menuCommandOf(key: string): MenuCommand | null {
 
 /** Whether a role is offered this command at all. What it is not offered never draws and never runs. */
 export function isMenuCommandOffered(command: MenuCommand, role: PeerRole): boolean {
-  switch (command.audience) {
+  return isAudienceOffered(command.audience, role);
+}
+
+/** Whether a role is among those an audience names. */
+export function isAudienceOffered(audience: MenuAudience, role: PeerRole): boolean {
+  switch (audience) {
     case 'anyone':
       return true;
     case 'playing':

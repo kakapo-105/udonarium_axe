@@ -49,7 +49,7 @@
           />
           <span class="text-ui-dim">{{ group.layers.length }}</span>
         } @else {
-          <span class="flex-1 truncate">{{ groupLabel(group) }}</span>
+          <span class="flex-1 truncate" [appTextTooltip]="groupLabel(group)">{{ groupLabel(group) }}</span>
         }
       </div>
 
@@ -64,6 +64,7 @@
           <button
             class="cursor-pointer border-0 bg-transparent p-0 leading-none"
             type="button"
+            [title]="'feature.whiteBoard.editor.visible' | transloco"
             (click)="emit({ kind: 'toggleLayer', layer }); $event.stopPropagation()"
           >
             <i class="material-icons text-[15px]!">{{ layer.visible ? 'visibility' : 'visibility_off' }}</i>
@@ -121,13 +122,12 @@
             />
             <select
               class="bg-ui-input rounded-ui-sm min-w-0 flex-1 px-0.5 text-[10px]"
-              [value]="layer.group ?? ''"
               [title]="'feature.whiteBoard.editor.addGroup' | transloco"
               (change)="emit({ kind: 'fileLayer', layer, group: $any($event.target).value })"
             >
-              <option value="">{{ 'feature.whiteBoard.editor.noGroup' | transloco }}</option>
+              <option value="" [selected]="!layer.group">{{ 'feature.whiteBoard.editor.noGroup' | transloco }}</option>
               @for (name of groupNames(); track name) {
-                <option [value]="name">{{ name }}</option>
+                <option [value]="name" [selected]="name === layer.group">{{ name }}</option>
               }
             </select>
             <button
@@ -158,7 +158,7 @@
     </div>
     @for (object of standing(); track object.identifier) {
       <div class="flex items-center justify-between gap-2 px-1 py-0.5">
-        <span class="truncate">{{ nameOf(object) }}</span>
+        <span class="truncate" [appTextTooltip]="nameOf(object)">{{ nameOf(object) }}</span>
         <button
           class="text-ui-accent shrink-0 cursor-pointer border-0 bg-transparent p-0"
           type="button"
