@@ -19,14 +19,16 @@
 
 ## 上流の取り込み（リリースタグ単位）
 
-```sh
-git fetch upstream --tags
-git merge v1.52.0        # 新しいタグが出たとき
-# コンフリクトを解決してコミット
-git push                 # → 自動でビルド＆公開
-```
+取り込みは手元で行う。独自機能が多く、競合なしで済むことがほとんどないため、マージは自動にしていない。
+
+1. [.github/workflows/upstream-sync.yml](.github/workflows/upstream-sync.yml) が毎日 03:00 JST に上流の最新リリースを調べる（Actions から手動でも実行できる）
+2. 新しいリリースがあれば、[scripts/upstream-check.sh](scripts/upstream-check.sh) が試しマージをして、競合の一覧とリリースノートを Issue「上流 vX.Y.Z の取り込み」にする。マージも push もしない
+3. 手元の Claude Code で `/axe-upstream-merge vX.Y.Z` を実行する（手順は [.claude/skills/axe-upstream-merge/SKILL.md](.claude/skills/axe-upstream-merge/SKILL.md)）
+4. main へ push すると、自動でビルドして公開される。公開版で `/sw25-test` を回してから Issue を閉じる
 
 `upstream` remote: `https://github.com/Xelltis/udonarium_axe.git`
+
+GitHub は、リポジトリに 60 日間動きがないと定期実行を止める。止まったら Actions の画面から有効に戻す。
 
 ## 独自機能
 
