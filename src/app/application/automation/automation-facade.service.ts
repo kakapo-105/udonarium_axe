@@ -39,13 +39,13 @@ import { RoomTemplateCommandService } from '@axe/application/automation/room-tem
 import { SessionCommandService } from '@axe/application/automation/session-command.service';
 import { SwitchCommandService, SwitchRequest } from '@axe/application/automation/switch-command.service';
 import { VnStageCommandService } from '@axe/application/automation/vn-stage-command.service';
-import { parsePortraitCommand } from '@axe/application/chat/chat-message-helpers';
 import { EffectLibraryService } from '@axe/application/effect/effect-library.service';
 import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
 import { TurnOrderService } from '@axe/application/turn/turn-order.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { BuffRemovalRule } from '@axe/domain/character/buff-bulk-removal';
 import { GameCharacter } from '@axe/domain/character/game-character';
+import { parsePortraitCommand } from '@axe/domain/chat/chat-portrait-command';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { canRoleSpeakTab, canRoleViewTab } from '@axe/domain/chat/chat-tab-permission';

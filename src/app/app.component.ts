@@ -16,6 +16,7 @@ import { DiceThrowService } from '@axe/application/dice/dice-throw.service';
 import { LanguageService } from '@axe/application/i18n/language.service';
 import { AudioAnalysisService } from '@axe/application/media/audio-analysis.service';
 import { CutInService } from '@axe/application/media/cut-in.service';
+import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { FirstPersonService } from '@axe/application/tabletop/first-person.service';
 import { GravityService } from '@axe/application/tabletop/gravity.service';
@@ -41,6 +42,8 @@ import { voiceEndpoint } from '@axe/application/voice/voice-request';
 import { automationRequested } from '@axe/composition/automation/automation-request';
 import { FileArchiver } from '@axe/core/storage/file-archiver';
 import { ObjectStore } from '@axe/core/sync/object-store';
+import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { PeerRole } from '@axe/domain/peer/peer-role';
 import { RoomPanelName } from '@axe/domain/ui/room-panel';
 import type { Vote } from '@axe/domain/vote/vote';
 import { AlarmEventHandlerService } from '@axe/features/alarm/alarm-event-handler.service';
@@ -103,12 +106,12 @@ import { VoteWidgetComponent } from '@axe/features/vote/vote-widget/vote-widget.
 import { CompassComponent } from '@axe/features/widgets/compass/compass.component';
 import { ConnectionQualityComponent } from '@axe/features/widgets/connection-quality/connection-quality.component';
 import { DigitalClockComponent } from '@axe/features/widgets/digital-clock/digital-clock.component';
+import { GameClockWidgetComponent } from '@axe/features/widgets/game-clock/game-clock-widget.component';
 import { RenderStatsComponent } from '@axe/features/widgets/render-stats/render-stats.component';
 import { PieceDragGhostComponent } from '@axe/ui/components/piece-drag-ghost/piece-drag-ghost.component';
 import { SnackbarComponent } from '@axe/ui/components/snackbar/snackbar.component';
 import { ReloadNoticeDirective } from '@axe/ui/directives/reload-notice.directive';
 import { version as APP_VERSION } from '@pkg';
-
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-root',
@@ -127,6 +130,7 @@ import { version as APP_VERSION } from '@pkg';
     ConnectionQualityComponent,
     RenderStatsComponent,
     DigitalClockComponent,
+    GameClockWidgetComponent,
     CompassComponent,
     VoteWidgetComponent,
     HotbarBarComponent,
@@ -164,6 +168,17 @@ export class AppComponent {
   protected readonly battleCutIn = inject(BattleCutInStateService);
   private readonly handRail = inject(HandRailService);
   readonly widgets = inject(WidgetVisibilityService);
+  private readonly rolePermission = inject(RolePermissionService);
+  /**
+   * Whether this seat draws the game master's bar, which only the game master does while it is not
+   * hidden; its code is fetched the first time it is wanted.
+   */
+  protected readonly gmToolbarWanted = computed(() => this.rolePermission.isGameMaster() && this.widgets.gmToolbar());
+  /** The same for a player's bar. */
+  protected readonly plToolbarWanted = computed(() => {
+    this.objectChange.trackMyCursor();
+    return PeerCursor.myRole === PeerRole.Player && this.widgets.plToolbar();
+  });
   readonly viewport = inject(ViewportService);
   readonly mobile = inject(MobileLayoutService);
   readonly overlayMode = inject(OverlayModeService);

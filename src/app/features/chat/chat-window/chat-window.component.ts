@@ -28,19 +28,20 @@ import { sheetPanelBox } from '@axe/application/ui/sheet-panel';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { delay } from '@axe/core/util/delay';
 import { GameCharacter } from '@axe/domain/character/game-character';
+import { aimLine } from '@axe/domain/chat/character-macro';
 import { ChatMessage, ChatMessageTargetContext } from '@axe/domain/chat/chat-message';
 import { ChatOutgoing } from '@axe/domain/chat/chat-outgoing';
-import { evaluateCharacterReferences, textTargetsCharacter } from '@axe/domain/chat/chat-palette';
+import { evaluateCharacterReferences } from '@axe/domain/chat/chat-palette';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { canRoleSpeakTab, canRoleViewTab } from '@axe/domain/chat/chat-tab-permission';
-import { DiceBot } from '@axe/domain/dice/dice-bot';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { ChatBookmarkService } from '@axe/features/chat/chat-bookmark.service';
 import { ChatBookmarkListComponent } from '@axe/features/chat/chat-bookmark/chat-bookmark-list.component';
 import { ChatComposeService } from '@axe/features/chat/chat-compose.service';
 import { ChatInputComponent } from '@axe/features/chat/chat-input/chat-input.component';
 import { editsTextInPlace } from '@axe/features/chat/chat-input/chat-input-helpers';
+import { CHAT_INPUT_ATTR } from '@axe/features/chat/chat-input/chat-text-field';
 import { ChatMessageSettingComponent } from '@axe/features/chat/chat-message-setting/chat-message-setting.component';
 import { ChatPortraitComponent } from '@axe/features/chat/chat-portrait/chat-portrait.component';
 import { isChatSearchShortcut } from '@axe/features/chat/chat-search/chat-search';
@@ -65,6 +66,9 @@ const WRITING_STRIP_PX = 32;
 
 const NEAR_BOTTOM_THRESHOLD_PX = 350;
 const AT_BOTTOM_THRESHOLD_PX = 8;
+import { ScenarioTextService } from '@axe/application/chat/scenario-text.service';
+import { withoutChatDecoration } from '@axe/domain/chat/chat-decoration';
+import { ScenarioText, scenarioTextsMatching } from '@axe/domain/scenario-text/scenario-text';
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'chat-window',
@@ -154,6 +158,65 @@ export class ChatWindowComponent {
   }
 
   private readonly logScroll = viewChild.required<ElementRef<HTMLDivElement>>('logScroll');
+  private readonly chatInput = viewChild(ChatInputComponent);
+  private readonly suggestionList = viewChild<ElementRef<HTMLSelectElement>>('suggestionBox');
+  private readonly scenarioTexts = inject(ScenarioTextService);
+
+  /** What is being typed into the chat, followed for the scenario texts it brings up. */
+  protected readonly typed = signal('');
+  /** The words of scenario texts with their decoration taken off, kept so that each key does not strip them all again. */
+  private readonly plainWords = new Map<string, string>();
+
+  /**
+   * The game master's scenario texts that what is being typed matches, offered over the input as
+   * the palette offers its lines; picking one puts its words in the input, to be said as whoever
+   * is speaking. Nobody else is offered any.
+   */
+  protected readonly textSuggestions = computed(() => {
+    if (!this.scenarioTexts.canUse()) return [];
+    this.objectChange.collectionOf(ScenarioText.aliasName)();
+    const texts = ScenarioText.all();
+    for (const text of texts) this.objectChange.versionOf(text.identifier)();
+    if (this.plainWords.size > texts.length * 2 + 16) this.plainWords.clear();
+    const plainOf = (words: string) => {
+      let plain = this.plainWords.get(words);
+      if (plain === undefined) this.plainWords.set(words, (plain = withoutChatDecoration(words)));
+      return plain;
+    };
+    return scenarioTextsMatching(texts, this.typed(), plainOf).map((text) => {
+      const plain = plainOf(`${text.text ?? ''}`)
+        .replace(/\s+/g, ' ')
+        .trim();
+      return {
+        identifier: text.identifier,
+        label: `${text.title.trim() || this.t('feature.scenarioText.untitled')}: ${plain.slice(0, 40)}`,
+        words: `${text.text ?? ''}`,
+      };
+    });
+  });
+
+  /** The suggestion highlighted, or -1 while none is or the list is closed. */
+  protected suggestionIndex(): number {
+    return this.suggestionList()?.nativeElement.selectedIndex ?? -1;
+  }
+
+  /** Moves the highlight among the suggestions, as the chat input asks with the arrow keys. */
+  protected stepSuggestion(direction: number): void {
+    const list = this.suggestionList()?.nativeElement;
+    if (!list) return;
+    const next = list.selectedIndex + direction;
+    if (next < 0) return;
+    list.selectedIndex = Math.min(next, list.length - 1);
+  }
+
+  /** Puts the words of the suggestion at an index in the input, in place of what was typed. */
+  protected takeSuggestion(index: number): void {
+    const picked = this.textSuggestions()[index];
+    const input = this.chatInput();
+    if (!picked || !input) return;
+    input.text = picked.words;
+    this.typed.set('');
+  }
   readonly chatTabRef = viewChild(ChatTabComponent);
   private readonly searchBar = viewChild(ChatSearchBarComponent);
   private readonly bookmarkList = viewChild(ChatBookmarkListComponent);
@@ -197,7 +260,7 @@ export class ChatWindowComponent {
   closeSearch(): void {
     this.searchOpen.set(false);
     const host = this.hostElement.nativeElement;
-    (host.querySelector<HTMLElement>('textarea.chat-input') ?? host).focus();
+    (host.querySelector<HTMLElement>(`[${CHAT_INPUT_ATTR}]`) ?? host).focus();
   }
 
   /** Opens the search from its button, or closes it when it is open. */
@@ -221,7 +284,7 @@ export class ChatWindowComponent {
   closeBookmarks(): void {
     this.bookmarksOpen.set(false);
     const host = this.hostElement.nativeElement;
-    (host.querySelector<HTMLElement>('textarea.chat-input') ?? host).focus();
+    (host.querySelector<HTMLElement>(`[${CHAT_INPUT_ATTR}]`) ?? host).focus();
   }
 
   /**
@@ -651,8 +714,9 @@ export class ChatWindowComponent {
   /**
    * Sends a line from the chat input to the current tab.
    *
-   * Character references in the text are filled in from the speaker. A line that targets characters
-   * is sent once for each targeted piece on the table, filled in against that piece and tagged with
+   * Character references in the text are filled in from the speaker. A line that targets characters,
+   * as typed or once the speaker's references in it are filled in (see `aimLine`), is sent once for
+   * each targeted piece on the table, filled in against that piece and tagged with
    * its name, with the parts that change the speaker's own resources or buffs taken out after the
    * first copy so they apply once; with nothing targeted, the line says so. Nothing is sent when
    * the reader may not speak in the tab. A line marked for the ticker is also shown there. A stamp
@@ -677,26 +741,23 @@ export class ChatWindowComponent {
       };
       const fillIn = (text: string, target?: GameCharacter, targetCount?: number): string => {
         if (!speaker && !target) return text;
-        const evaluated = evaluateCharacterReferences(text, speaker, target, targetCount);
+        const evaluated = evaluateCharacterReferences(text, speaker, target, true, targetCount);
         appendAttachmentImages(evaluated.attachmentImageIdentifiers);
         return evaluated.text;
       };
 
-      if (textTargetsCharacter(value.text)) {
+      const aimed = aimLine(value.text, speaker);
+      if (aimed.targeted) {
         objects = this.targetedGameCharacterList();
         let first = true;
         if (objects.length == 0) {
           outtext += this.t('feature.chat.window.noTarget');
+        } else {
+          appendAttachmentImages(aimed.attachmentImageIdentifiers);
         }
         for (const object of objects) {
           outtext += first ? '' : '\n';
-          const str = value.text;
-          let str2: string;
-          if (first) {
-            str2 = str;
-          } else {
-            str2 = DiceBot.deleteMyselfResourceBuff(str);
-          }
+          const str2 = first ? aimed.filled : aimed.repeated;
 
           const filled = fillIn(str2, object, objects.length);
           outtext += filled;

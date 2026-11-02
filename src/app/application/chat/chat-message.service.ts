@@ -3,15 +3,10 @@ import { ChatClockService } from '@axe/application/chat/chat-clock.service';
 import {
   calcChatTimestamp,
   emitChatMessageEvents,
-  findImageIdentifierByName,
-  type ImageIdentifierResult,
-  type ImageNameEntry,
-  parsePortraitCommand,
   resolveChatMessageTag,
   resolveImagePos,
   resolveMessageColor,
   resolvePortraitIndex,
-  stripPortraitCommand,
 } from '@axe/application/chat/chat-message-helpers';
 import { StampRulesService } from '@axe/application/chat/stamp-rules.service';
 import { MyDiceService } from '@axe/application/dice/my-dice.service';
@@ -23,17 +18,27 @@ import { ImageStorage } from '@axe/core/storage/image-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { portraitNameOf } from '@axe/domain/character/character-portrait';
 import { GameCharacter } from '@axe/domain/character/game-character';
+import { chatBubbleOf, chatColorOf } from '@axe/domain/chat/chat-color';
+import { keptFromDecoration } from '@axe/domain/chat/chat-decoration';
 import { liftImageReferences } from '@axe/domain/chat/chat-image-references';
 import { ChatMessage, ChatMessageContext, ChatMessageTargetContext } from '@axe/domain/chat/chat-message';
 import { copiedMessageContext } from '@axe/domain/chat/chat-message-copy';
 import { ChatOutgoing, OutgoingStamp } from '@axe/domain/chat/chat-outgoing';
+import {
+  findImageIdentifierByName,
+  type ImageIdentifierResult,
+  type ImageNameEntry,
+  parsePortraitCommand,
+  stripPortraitCommand,
+} from '@axe/domain/chat/chat-portrait-command';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { canRoleSpeakTab } from '@axe/domain/chat/chat-tab-permission';
 import { OUT_OF_STORY_TAG } from '@axe/domain/chat/constants';
 import { dieRollTag } from '@axe/domain/chat/die-roll-tag';
+import { inlineStampSites } from '@axe/domain/chat/inline-stamp';
 import { stampOf } from '@axe/domain/chat/stamp-catalog';
-import { joinStampLine } from '@axe/domain/chat/stamp-line';
+import { joinStampLine, standInForStamp } from '@axe/domain/chat/stamp-line';
 import { DEFAULT_NOTICE_PLACE, NOTICE_OFF, noticeRouteOf, SystemNoticeKind } from '@axe/domain/chat/system-notices';
 import { DataElement } from '@axe/domain/data/data-element';
 import { encodeDiceLook } from '@axe/domain/dice/dice-3d/dice-look';
@@ -41,6 +46,12 @@ import { DiceBot } from '@axe/domain/dice/dice-bot';
 import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import GameSystemClass from 'bcdice/lib/game_system';
+
+/** Who prepared words are said as: a name of their own, a piece, or the room itself. */
+export type VerbatimSpeaker =
+  | { readonly kind: 'named'; readonly name: string }
+  | { readonly kind: 'character'; readonly character: GameCharacter }
+  | { readonly kind: 'system' };
 
 @Injectable({ providedIn: 'root' })
 export class ChatMessageService {
@@ -315,7 +326,12 @@ export class ChatMessageService {
       speaker instanceof GameCharacter ? speaker.rootDataElement : null,
       attachmentImageIdentifiers ?? []
     );
-    text = resolvedMessage.text;
+    const stamped = this.inlineStampsGoingOut(resolvedMessage.text);
+    text = stamped.text;
+    const attachments = [
+      ...resolvedMessage.attachmentImageIdentifiers,
+      ...stamped.pictures.filter((picture) => !resolvedMessage.attachmentImageIdentifiers.includes(picture)),
+    ];
 
     const imgIndex = resolvePortraitIndex(portraitIndex);
     const messageColor = resolveMessageColor(color, '#000000');
@@ -337,8 +353,12 @@ export class ChatMessageService {
       sendFrom: sendFrom,
       senderRole: PeerCursor.myRole,
     };
-    if (resolvedMessage.attachmentImageIdentifiers.length > 0) {
-      chatMessage.attachmentImageIdentifiers = JSON.stringify(resolvedMessage.attachmentImageIdentifiers);
+    if (attachments.length > 0) {
+      chatMessage.attachmentImageIdentifiers = JSON.stringify(attachments);
+    }
+    if (stamped.pictures.length > 0) {
+      const byHand = resolvedMessage.attachmentImageIdentifiers;
+      chatMessage.stampAttachments = JSON.stringify(stamped.pictures.filter((picture) => !byHand.includes(picture)));
     }
     if (replyTo) {
       chatMessage.replyTo = replyTo;
@@ -387,7 +407,7 @@ export class ChatMessageService {
    * This is how something on the table talks: a door or a chest saying what it is. Dice in the line
    * are rolled for it, and the result comes back under the same name. It leaves alone who this
    * reader last spoke as, since the reader did not say it, and nothing in the line reaches a
-   * piece's resources, since no piece is speaking.
+   * piece's resources, since no piece is speaking. Its stamps go out as those of a line said anew.
    */
   sendAsNamed(
     chatTab: ChatTab,
@@ -396,6 +416,8 @@ export class ChatMessageService {
     name: string,
     color?: string
   ): ChatMessage {
+    const stamped = this.inlineStampsGoingOut(text);
+    text = stamped.text;
     const dicebot = this.objectStore.get<DiceBot>('DiceBot')!;
     const chatMessage: ChatMessageContext = {
       from: Network.peerContext.userId,
@@ -409,6 +431,10 @@ export class ChatMessageService {
       sendFrom: '',
       senderRole: PeerCursor.myRole,
     };
+    if (stamped.pictures.length > 0) {
+      chatMessage.attachmentImageIdentifiers = JSON.stringify(stamped.pictures);
+      chatMessage.stampAttachments = JSON.stringify(stamped.pictures);
+    }
     const chat = chatTab.addMessage(chatMessage);
     emitSendMessage({ messageIdentifier: chat.identifier, messageTarget: null });
     emitDiceTableMessage({ messageIdentifier: chat.identifier });
@@ -437,6 +463,119 @@ export class ChatMessageService {
       senderRole: PeerCursor.myRole,
     };
     return chatTab.addMessage(chatMessage);
+  }
+
+  /**
+   * Says prepared words into a tab as they were written: under a name of their own, as a piece, or as
+   * the room itself. Nothing in them is rolled or read as a command, so a passage opening with
+   * `1d100` goes out as written however long it is, its last word plays a cut-in as any line's
+   * does, and no piece's resources or portrait change. The stamps put in it go out as those of a
+   * line said anew. Whispered to the players named, only they and the sender read it. None but the
+   * system speaks where the reader may not speak, nor anyone in the system tab. Said as a piece with
+   * no colour given, it goes out in the piece's first colour and bubbles, as a line typed as it does.
+   */
+  sendVerbatim(
+    chatTab: ChatTab,
+    text: string,
+    as: VerbatimSpeaker,
+    options: { to?: readonly string[]; color?: string } = {}
+  ): ChatMessage | null {
+    if (as.kind !== 'system' && !canRoleSpeakTab(chatTab, PeerCursor.myRole)) return null;
+    const stamped = this.inlineStampsGoingOut(text);
+    const to = (options.to ?? []).filter((identifier) => identifier.length > 0);
+    const toNames = to.map((identifier) => this.findObjectName(identifier)).join(', ');
+    const named = (name: string) => (toNames ? `${name} > ${toNames}` : name);
+    const chatMessage: ChatMessageContext = {
+      from: Network.peerContext.userId,
+      name: '',
+      imageIdentifier: '',
+      timestamp: this.calcTimeStamp(chatTab),
+      tag: as.kind === 'system' ? 'system-message' : '',
+      text: stamped.text,
+      imagePos: -1,
+      messColor: resolveMessageColor(options.color, as.kind === 'system' ? '#006633' : '#000000'),
+      senderRole: PeerCursor.myRole,
+    };
+    if (as.kind === 'system') {
+      chatMessage.name = encodeI18nMessage('common.chat.systemName');
+    } else if (as.kind === 'named') {
+      chatMessage.name = named(as.name);
+      chatMessage.sendFrom = '';
+    } else {
+      const speaker = as.character.identifier;
+      const portrait = resolvePortraitIndex(undefined);
+      chatMessage.name = named(this.findObjectName(speaker));
+      chatMessage.imageIdentifier = this.findImageIdentifier(speaker, portrait);
+      chatMessage.imagePos = PeerCursor.isMyselfKeptOffTable ? undefined : this.findImagePos(speaker);
+      chatMessage.sendFrom = speaker;
+      if (!options.color) {
+        chatMessage.messColor = resolveMessageColor(chatColorOf(as.character, 0), '#000000');
+        const bubbles = chatBubbleOf(as.character, 0);
+        if (bubbles.light) chatMessage.messBubbleLight = bubbles.light;
+        if (bubbles.dark) chatMessage.messBubbleDark = bubbles.dark;
+      }
+    }
+    if (to.length > 0) chatMessage.to = to.map((identifier) => this.whisperTo(identifier)).join(' ');
+    if (stamped.pictures.length > 0) {
+      chatMessage.attachmentImageIdentifiers = JSON.stringify(stamped.pictures);
+      chatMessage.stampAttachments = JSON.stringify(stamped.pictures);
+    }
+    return chatTab.addMessage(chatMessage);
+  }
+
+  /**
+   * Rewrites a line already sent, as a line said anew goes out: a stamp put inside it that this
+   * version does not know, or the room does not let be sent, is written as its name, and the
+   * pictures from the room's sets among its attachments follow the stamps it now holds, those it
+   * no longer holds going with them, those the room has stopped since among them. A picture
+   * attached by hand stays, a stamp in the line showing it too or not, and so does that of a stamp
+   * under the line; for a line said by a version that kept no record of which were attached by
+   * hand, those its stamps showed are taken to have come with them. For a line with a stamp
+   * under it, the text is what was said with the stamp, the words standing in for it kept as the
+   * last line.
+   */
+  editMessage(message: ChatMessage, text: string, staging: string, at: number): void {
+    if (message.sentStamp) text = joinStampLine(text, standInForStamp(message.text ?? ''));
+    const stamped = this.inlineStampsGoingOut(text);
+    const under = stampOf(message.stamp ?? '');
+    const kept = under?.kind === 'image' ? under.imageIdentifier : null;
+    const recorded = message.stampAttachmentList;
+    const before = recorded ?? stampPicturesIn(message.text ?? '').filter((picture) => picture !== kept);
+    const attached = message.attachmentImageIdentifierList.filter((picture) => !before.includes(picture));
+    const attachments = [...attached, ...stamped.pictures.filter((picture) => !attached.includes(picture))];
+    message.edit(stamped.text, staging, at);
+    const written = attachments.length > 0 ? JSON.stringify(attachments) : '';
+    if ((message.attachmentImageIdentifiers ?? '') !== written) message.attachmentImageIdentifiers = written;
+    if (stamped.pictures.length > 0 || recorded !== null) {
+      const onlyForStamps = JSON.stringify(stamped.pictures.filter((picture) => !attached.includes(picture)));
+      if ((message.stampAttachments ?? '') !== onlyForStamps) message.stampAttachments = onlyForStamps;
+    }
+  }
+
+  /**
+   * The stamps put inside a line as it goes out. One this version does not know, or one the room
+   * does not let be sent, is written as its name instead, with a space between it and any word it
+   * touches, as a stamp ends a word for the commands in a line; a picture from the room's sets goes
+   * among the attachments as well, for the room saved to carry it.
+   */
+  private inlineStampsGoingOut(text: string): { text: string; pictures: string[] } {
+    const pictures: string[] = [];
+    let out = '';
+    let at = 0;
+    for (const site of inlineStampSites(text)) {
+      const ref = stampOf(site.id);
+      out += text.slice(at, site.from);
+      if (!ref || !this.stampRules.allows('line', site.id)) {
+        const before = out.at(-1) ?? ' ';
+        const after = text[site.to] ?? ' ';
+        out += `${/\s/.test(before) ? '' : ' '}${keptFromDecoration(`［${site.label}］`)}${/\s/.test(after) ? '' : ' '}`;
+      } else {
+        out += text.slice(site.from, site.to);
+        if (ref.kind === 'image' && !pictures.includes(ref.imageIdentifier)) pictures.push(ref.imageIdentifier);
+      }
+      at = site.to;
+    }
+    return { text: out + text.slice(at), pictures };
   }
 
   /**
@@ -609,4 +748,14 @@ export class ChatMessageService {
     const latest = chatTab.latestTimeStamp;
     return calcChatTimestamp(now, latest);
   }
+}
+
+/** The pictures from the room's sets that the stamps put inside a line show, whatever the room lets be sent now. */
+function stampPicturesIn(text: string): string[] {
+  const pictures: string[] = [];
+  for (const site of inlineStampSites(text)) {
+    const ref = stampOf(site.id);
+    if (ref?.kind === 'image' && !pictures.includes(ref.imageIdentifier)) pictures.push(ref.imageIdentifier);
+  }
+  return pictures;
 }

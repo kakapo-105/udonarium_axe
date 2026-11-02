@@ -7,6 +7,7 @@ describe('parseWidgetVisibility', () => {
   it('shows only the mini player with nothing saved', () => {
     expect(parseWidgetVisibility(null)).toEqual({
       clock: false,
+      gameClock: false,
       compass: false,
       miniPlayer: true,
       connectionQuality: false,
@@ -24,6 +25,7 @@ describe('parseWidgetVisibility', () => {
       parseWidgetVisibility('{"clock":true,"miniPlayer":false,"connectionQuality":true,"recording":false}')
     ).toEqual({
       clock: true,
+      gameClock: false,
       compass: false,
       miniPlayer: false,
       connectionQuality: true,
@@ -39,6 +41,7 @@ describe('parseWidgetVisibility', () => {
   it('falls back to the defaults for a broken value', () => {
     expect(parseWidgetVisibility('{')).toEqual({
       clock: false,
+      gameClock: false,
       compass: false,
       miniPlayer: true,
       connectionQuality: false,
@@ -51,6 +54,7 @@ describe('parseWidgetVisibility', () => {
     });
     expect(parseWidgetVisibility('null')).toEqual({
       clock: false,
+      gameClock: false,
       compass: false,
       miniPlayer: true,
       connectionQuality: false,
@@ -81,6 +85,7 @@ describe('parseWidgetVisibility', () => {
   it('fills in only the missing entries', () => {
     expect(parseWidgetVisibility('{"clock":true}')).toEqual({
       clock: true,
+      gameClock: false,
       compass: false,
       miniPlayer: true,
       connectionQuality: false,

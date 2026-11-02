@@ -49,6 +49,28 @@ describe('reading a fighter', () => {
     ]);
   });
 
+  it('reads the picture the piece shows on the table, as the ICON of the sheet picks it', () => {
+    const hero = piece();
+    hero.imageDataElement!.appendChild(make('imageIdentifier', 'image-hero-angry'));
+    const icon = make('ICON', 1, { type: DataElementType.NUMBER_RESOURCE, currentValue: 1 });
+    hero.detailDataElement!.appendChild(icon);
+
+    expect(readFighter(hero).image).toBe('image-hero-angry');
+
+    icon.currentValue = 0;
+    expect(readFighter(hero).image).toBe('image-hero');
+  });
+
+  it('carries the way the picture faces onto the stage', () => {
+    const hero = { ...piece(), battleFacing: 'left' };
+
+    const reading = readFighter(hero);
+
+    expect(reading.facing).toBe('left');
+    expect(fighterBetween(reading, reading, { enabled: false, resource: '' }).facing).toBe('left');
+    expect(readFighter(piece()).facing).toBeNull();
+  });
+
   it('carries the bars, then whatever else moved, and brings down one that fell to nothing', () => {
     const hp = resource('HP', 12, 20, true);
     const mp = resource('MP', 5, 10, true);
@@ -64,9 +86,9 @@ describe('reading a fighter', () => {
 
     expect(readingsDiffer(before, after)).toBe(true);
     expect(fighter.gauges).toEqual([
-      { name: 'HP', before: 12, after: 0, max: 20, inverted: false },
-      { name: 'MP', before: 5, after: 5, max: 10, inverted: false },
-      { name: '弾', before: 6, after: 5, max: 6, inverted: false },
+      { name: 'HP', before: 12, after: 0, max: 20, inverted: false, color: '' },
+      { name: 'MP', before: 5, after: 5, max: 10, inverted: false, color: '' },
+      { name: '弾', before: 6, after: 5, max: 6, inverted: false, color: '' },
     ]);
     expect(fighter.defeated).toBe(true);
   });

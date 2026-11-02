@@ -1,6 +1,7 @@
 import { Network } from '@axe/core/index';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
+import { CHAT_INPUT_ATTR } from '@axe/features/chat/chat-input/chat-text-field';
 
 /**
  * Whether a character may be picked as the speaker in this seat's chat input.
@@ -39,8 +40,9 @@ export function allowsChat(gameCharacter: GameCharacter, myPeerId: string, ignor
  */
 export function editsTextInPlace(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
+  if (target.closest(`[${CHAT_INPUT_ATTR}]`)) return false;
   if (target.isContentEditable) return true;
-  if (target instanceof HTMLTextAreaElement) return !target.classList.contains('chat-input');
+  if (target instanceof HTMLTextAreaElement) return true;
   if (!(target instanceof HTMLInputElement)) return false;
   return !NON_TEXT_INPUT_TYPES.has(target.type);
 }
@@ -56,3 +58,8 @@ const NON_TEXT_INPUT_TYPES: ReadonlySet<string> = new Set([
   'reset',
   'submit',
 ]);
+
+/** Where the line holding a place in a text starts: right after the line break before it, or at the start. */
+export function lineStartOf(text: string, at: number): number {
+  return at > 0 ? text.lastIndexOf('\n', at - 1) + 1 : 0;
+}

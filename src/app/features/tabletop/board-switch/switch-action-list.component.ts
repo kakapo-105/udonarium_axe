@@ -9,6 +9,8 @@ import { ObjectStore } from '@axe/core/sync/object-store';
 import { GameCharacter } from '@axe/domain/character/game-character';
 import { CutIn } from '@axe/domain/media/cut-in';
 import { presetSoundLabelKey, soundFileName } from '@axe/domain/media/preset-sound-labels';
+import { isAccountAvatar } from '@axe/domain/peer/account-avatar';
+import { BoardScene } from '@axe/domain/scene/board-scene';
 import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 import {
   clampSwitchDelay,
@@ -139,7 +141,7 @@ export class SwitchActionListComponent {
   protected readonly images = computed<NameChoice[]>(() => {
     this.objectChange.fileVersion();
     return this.imageStorage.images
-      .filter((image) => image.name.trim().length > 0)
+      .filter((image) => image.name.trim().length > 0 && !isAccountAvatar(image.identifier))
       .map((image) => ({ value: image.identifier, name: image.name }));
   });
 
@@ -150,6 +152,25 @@ export class SwitchActionListComponent {
       .map((audio) => ({ value: audio.identifier, name: soundFileName(audio.name) }))
       .sort((left, right) => left.name.localeCompare(right.name, 'ja'));
   });
+
+  /** The room's scenes, which a switch can put on. */
+  protected readonly scenes = computed<NameChoice[]>(() => {
+    this.objectChange.collectionOf(BoardScene.aliasName)();
+    return BoardScene.all().map((scene) => ({ value: scene.identifier, name: scene.name }));
+  });
+
+  /** Points a scene action at a scene, by what it is called too. */
+  protected setScene(index: number, identifier: string): void {
+    const held = this.actions()[index];
+    if (held?.kind !== 'scene') return;
+    const name = this.scenes().find((choice) => choice.value === identifier)?.name ?? '';
+    this.replace(index, { ...held, scene: { identifier, name: identifier.length > 0 ? name : '' } });
+  }
+
+  protected setKeepBgm(index: number, keepBgm: boolean): void {
+    const held = this.actions()[index];
+    if (held?.kind === 'scene') this.replace(index, { ...held, keepBgm });
+  }
 
   /** Points a table, a picture or a track an action names at another, by what it is called too. */
   protected setRef(index: number, key: 'table' | 'image' | 'bgm', identifier: string, choices: NameChoice[]): void {

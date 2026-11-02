@@ -27,12 +27,34 @@ export async function avoidWebKitBackdropStall(page: Page): Promise<void> {
   });
 }
 
+/**
+ * The box chat lines are typed into: a plain one, or the editor that draws a line as it will look.
+ * `fill`, `press` and focus work on either; read what it holds with {@link chatInputText}.
+ */
+export function chatInput(scope: Page | Locator): Locator {
+  return scope.locator('[data-chat-input]');
+}
+
+/** What the chat input holds, read the same way whether it is a plain box or the editor. */
+export function chatInputText(input: Locator): Promise<string> {
+  return input.evaluate((element) => {
+    if (element instanceof HTMLTextAreaElement) return element.value;
+    const read = (element as HTMLElement & { chatText?: () => string }).chatText;
+    return read ? read() : (element.textContent ?? '');
+  });
+}
+
+/** Waits for the chat input to hold the text. */
+export async function expectChatText(input: Locator, text: string): Promise<void> {
+  await expect.poll(() => chatInputText(input)).toBe(text);
+}
+
 export async function waitAppReady(page: Page) {
   await avoidWebKitBackdropStall(page);
   // A load off the build takes well under a second, but with three browsers running the suite at
   // once a load was seen to take past the default fifteen seconds in Firefox.
   await page.goto('/', { timeout: 45_000 });
-  await expect(page.locator('textarea.chat-input')).toBeVisible({ timeout: 20000 });
+  await expect(chatInput(page)).toBeVisible({ timeout: 20000 });
 }
 
 /**
@@ -105,9 +127,9 @@ export async function openPanel(page: Page, dataLabel: string) {
  * has the window opened before it is pressed.
  */
 const SUBMENU_LABELS: Readonly<Record<string, readonly string[]>> = {
-  table: ['テーブル設定', 'マップエディター', 'マップ生成', '卓上ディスプレイ', 'ノベルモード'],
+  table: ['テーブル設定', 'シーン', 'マップエディター', 'マップ生成', '卓上ディスプレイ', 'ノベルモード'],
   gameResources: ['インベントリ', 'バフマネージャー', '状態異常', 'ダイス表設定', '手札'],
-  media: ['画像', 'ジュークボックス', 'カットイン', 'エフェクト', '戦闘カットイン'],
+  media: ['画像', 'ジュークボックス', 'カットイン', 'エフェクト', '戦闘カットイン', 'シナリオテキスト'],
 };
 
 /**

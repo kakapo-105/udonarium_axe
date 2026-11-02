@@ -1,7 +1,7 @@
 import { inject, TestBed } from '@angular/core/testing';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { MyDiceService } from '@axe/application/dice/my-dice.service';
-import { resourceEditMessage$ } from '@axe/core/event/domain-events';
+import { diceTableMessage$, resourceEditMessage$, sendMessage$ } from '@axe/core/event/domain-events';
 import { Network } from '@axe/core/network/network';
 import { IPeerContext } from '@axe/core/network/peer-context';
 import { ImageStorage } from '@axe/core/storage/image-storage';
@@ -321,6 +321,148 @@ describe('ChatMessageService', () => {
     });
   });
 
+  describe('sending stamps put inside a line', () => {
+    function said(text: string, attached?: string[]): ChatMessage {
+      const service = TestBed.inject(ChatMessageService);
+      PeerCursor.createMyCursor();
+      const tab = new ChatTab();
+      tab.initialize();
+      ObjectStore.instance.add(tab);
+      const none = undefined;
+      return service.sendMessage(tab, text, null, PeerCursor.myCursor.identifier, none, none, none, none, attached);
+    }
+
+    it('sends them as they were written, a picture from the room going among the attachments once', () => {
+      const message = said('了解［了解:seal:ok］［絵:image:stamp-picture］［絵:image:stamp-picture］');
+
+      expect(message.text).toBe('了解［了解:seal:ok］［絵:image:stamp-picture］［絵:image:stamp-picture］');
+      expect(message.attachmentImageIdentifierList).toEqual(['stamp-picture']);
+    });
+
+    it('writes as its name a stamp the room does not let be sent, or one this version does not know', () => {
+      Config.instance.stampRules = withStampsAllowed(OPEN_STAMP_RULES, 'line', ['seal:ok'], false);
+      try {
+        const message = said('［了解:seal:ok］と［新顔:sfx:fromthefuture］と［ドッ:sfx:boom］');
+
+        expect(message.text).toBe('［了解］ と ［新顔］ と［ドッ:sfx:boom］');
+      } finally {
+        Config.instance.stampRules = OPEN_STAMP_RULES;
+      }
+    });
+
+    it('keeps the name a stamp the room does not let be sent is written as apart from the words round it', () => {
+      Config.instance.stampRules = withStampsAllowed(OPEN_STAMP_RULES, 'line', ['seal:ok'], false);
+      try {
+        expect(said('2d6［了解:seal:ok］').text).toBe('2d6 ［了解］');
+        expect(said('a ［了解:seal:ok］ b').text).toBe('a ［了解］ b');
+      } finally {
+        Config.instance.stampRules = OPEN_STAMP_RULES;
+      }
+    });
+
+    it('keeps the name a stamp the room does not let be sent is written as from being read as a tag', () => {
+      Config.instance.stampRules = withStampsAllowed(OPEN_STAMP_RULES, 'line', ['image:a', 'image:b'], false);
+      try {
+        const message = said('［赤:image:a］ 文 ［/:image:b］');
+
+        expect(message.text).toBe('\\［赤］ 文 \\［/］');
+      } finally {
+        Config.instance.stampRules = OPEN_STAMP_RULES;
+      }
+    });
+
+    describe('in a line rewritten after it was said', () => {
+      it('writes a stamp the room does not let be sent as its name, as a line said anew', () => {
+        const message = said('まずは');
+        Config.instance.stampRules = withStampsAllowed(OPEN_STAMP_RULES, 'line', ['sfx:boom'], false);
+        try {
+          TestBed.inject(ChatMessageService).editMessage(message, 'まずは［ドッ:sfx:boom］', '', 2000);
+
+          expect(message.text).toBe('まずは ［ドッ］');
+        } finally {
+          Config.instance.stampRules = OPEN_STAMP_RULES;
+        }
+      });
+
+      it('carries the pictures of the stamps it now holds, and lets go those it holds no more', () => {
+        const service = TestBed.inject(ChatMessageService);
+        const message = said('これ［絵:image:stamp-picture］');
+        message.attachmentImageIdentifiers = JSON.stringify(['stamp-picture', 'attached-by-hand']);
+
+        service.editMessage(message, 'これ［別:image:other-picture］', '', 2000);
+
+        expect(message.attachmentImageIdentifierList).toEqual(['attached-by-hand', 'other-picture']);
+        service.editMessage(message, 'これ', '', 3000);
+        expect(message.attachmentImageIdentifierList).toEqual(['attached-by-hand']);
+      });
+
+      it('keeps a picture attached by hand that a stamp in the line shows too, once the stamp is taken out', () => {
+        const service = TestBed.inject(ChatMessageService);
+        const message = said('見て［絵:image:stamp-picture］', ['stamp-picture']);
+
+        service.editMessage(message, '見て', '', 2000);
+
+        expect(message.attachmentImageIdentifierList).toEqual(['stamp-picture']);
+      });
+
+      it('reads a line from a version that kept no record of its stamps’ pictures by the stamps in its text', () => {
+        const service = TestBed.inject(ChatMessageService);
+        const message = said('これ［絵:image:stamp-picture］');
+        message.attachmentImageIdentifiers = JSON.stringify(['stamp-picture', 'attached-by-hand']);
+        message.removeAttribute('stampAttachments');
+
+        service.editMessage(message, 'これ', '', 2000);
+
+        expect(message.attachmentImageIdentifierList).toEqual(['attached-by-hand']);
+      });
+
+      it('trusts the record of its stamps’ pictures only for those still attached, as an older version edits a line', () => {
+        const service = TestBed.inject(ChatMessageService);
+        const message = said('これ［絵:image:stamp-picture］');
+        message.attachmentImageIdentifiers = JSON.stringify(['picture-an-older-version-put-in']);
+
+        service.editMessage(message, 'これ', '', 2000);
+
+        expect(message.attachmentImageIdentifierList).toEqual(['picture-an-older-version-put-in']);
+      });
+
+      it('keeps the picture of the stamp under the line, used inside it too, when it is taken out of the line', () => {
+        const service = TestBed.inject(ChatMessageService);
+        const message = said('これ［絵:image:stamp-picture］');
+        message.stamp = 'image:stamp-picture';
+
+        service.editMessage(message, 'これ', '', 2000);
+
+        expect(message.attachmentImageIdentifierList).toEqual(['stamp-picture']);
+      });
+
+      it('rewrites what was said with a stamp under the line, keeping the words standing in for the stamp', () => {
+        const message = said('hello');
+        message.text = 'hello\n［了解］';
+        message.stamp = 'seal:ok';
+
+        TestBed.inject(ChatMessageService).editMessage(message, 'hello world', '', 2000);
+
+        expect(message.text).toBe('hello world\n［了解］');
+        expect(message.saidWithStamp).toBe('hello world');
+      });
+
+      it('lets go the picture of a stamp the room has stopped since, which goes out as its name', () => {
+        const service = TestBed.inject(ChatMessageService);
+        const message = said('これ［絵:image:stamp-picture］');
+        Config.instance.stampRules = withStampsAllowed(OPEN_STAMP_RULES, 'line', ['image:stamp-picture'], false);
+        try {
+          service.editMessage(message, 'これだ［絵:image:stamp-picture］', '', 2000);
+
+          expect(message.text).toBe('これだ ［絵］');
+          expect(message.attachmentImageIdentifierList).toEqual([]);
+        } finally {
+          Config.instance.stampRules = OPEN_STAMP_RULES;
+        }
+      });
+    });
+  });
+
   describe('what a line records about who spoke it', () => {
     it('writes down the role the speaker was wearing at the time', () => {
       const service = TestBed.inject(ChatMessageService);
@@ -447,6 +589,120 @@ describe('ChatMessageService', () => {
       expect(message.from).toBe('door-opener');
       expect(message.isSystem).toBe(false);
       expect(PeerCursor.myCursor.lastControlCharacterName).toBe('勇者');
+    });
+
+    it('sends the stamps of a line under a name of its own as a line said anew goes out', () => {
+      const service = TestBed.inject(ChatMessageService);
+      const chatTab = new ChatTab();
+      chatTab.initialize();
+      ObjectStore.instance.add(chatTab);
+      Config.instance.stampRules = withStampsAllowed(OPEN_STAMP_RULES, 'line', ['seal:ok'], false);
+      try {
+        const message = service.sendAsNamed(chatTab, '開いた［了解:seal:ok］［絵:image:door-picture］', null, '扉');
+
+        expect(message.text).toBe('開いた ［了解］ ［絵:image:door-picture］');
+        expect(message.attachmentImageIdentifierList).toEqual(['door-picture']);
+      } finally {
+        Config.instance.stampRules = OPEN_STAMP_RULES;
+      }
+    });
+  });
+
+  describe('prepared words said as they were written', () => {
+    let service: ChatMessageService;
+    let chatTab: ChatTab;
+
+    beforeEach(() => {
+      service = TestBed.inject(ChatMessageService);
+      PeerCursor.createMyCursor();
+      PeerCursor.myCursor.role = PeerRole.GameMaster;
+      chatTab = new ChatTab();
+      chatTab.initialize();
+      ObjectStore.instance.add(chatTab);
+    });
+
+    afterEach(() => {
+      PeerCursor.myCursor = null!;
+    });
+
+    it('rolls nothing in them and reads no command out of them, however long they are', () => {
+      const rolled: string[] = [];
+      const offRoll = diceTableMessage$.subscribe((event) => rolled.push(event.messageIdentifier));
+      const offSend = sendMessage$.subscribe((event) => rolled.push(event.messageIdentifier));
+      const long = `S1d100 ${'あ'.repeat(5000)}`;
+
+      const message = service.sendVerbatim(chatTab, long, { kind: 'named', name: '語り手' })!;
+      offRoll();
+      offSend();
+
+      expect(message.text).toBe(long);
+      expect(message.name).toBe('語り手');
+      expect(message.tag ?? '').toBe('');
+      expect(rolled).toEqual([]);
+    });
+
+    it('says them as a piece, with its portrait, or as the room', () => {
+      const hero = GameCharacter.create('ヒロ', 1, '');
+
+      const asHero = service.sendVerbatim(chatTab, '行くぞ', { kind: 'character', character: hero })!;
+      const asRoom = service.sendVerbatim(chatTab, '夜が来た', { kind: 'system' })!;
+
+      expect([asHero.name, asHero.sendFrom]).toEqual(['ヒロ', hero.identifier]);
+      expect(asRoom.isSystemMessage).toBe(true);
+    });
+
+    it('says them as a piece in its first colour and bubbles, unless given a colour', () => {
+      const hero = GameCharacter.create('ヒロ', 1, '');
+      hero.chatColorCode = ['#aa0000', '#00aa00', '#0000aa'];
+      hero.chatBubbleLight = ['#ffeeee', '', ''];
+      hero.chatBubbleDark = ['#330000', '', ''];
+
+      const own = service.sendVerbatim(chatTab, '行くぞ', { kind: 'character', character: hero })!;
+      const given = service.sendVerbatim(
+        chatTab,
+        '行くぞ',
+        { kind: 'character', character: hero },
+        { color: '#123456' }
+      )!;
+
+      expect([own.messColor, own.messBubbleLight, own.messBubbleDark]).toEqual(['#aa0000', '#ffeeee', '#330000']);
+      expect(given.messColor).toBe('#123456');
+    });
+
+    it('whispers them to the players named, by their cursors', () => {
+      const other = new PeerCursor();
+      other.userId = 'pl-user';
+      other.name = 'ミナ';
+      other.initialize();
+
+      const message = service.sendVerbatim(
+        chatTab,
+        '秘密の手紙',
+        { kind: 'named', name: '手紙' },
+        { to: [other.identifier] }
+      )!;
+
+      expect(message.to).toBe('pl-user');
+      expect(message.name).toBe('手紙 > ミナ');
+    });
+
+    it('says nothing where the reader may not speak, unless as the room', () => {
+      PeerCursor.myCursor.role = PeerRole.Player;
+      chatTab.plCanSpeak = false;
+
+      expect(service.sendVerbatim(chatTab, '…', { kind: 'named', name: '語り手' })).toBeNull();
+      expect(service.sendVerbatim(chatTab, '…', { kind: 'system' })).not.toBeNull();
+    });
+
+    it('sends the stamps in them as a line said anew goes out', () => {
+      Config.instance.stampRules = withStampsAllowed(OPEN_STAMP_RULES, 'line', ['seal:ok'], false);
+      try {
+        const message = service.sendVerbatim(chatTab, '［絵:image:handout］', { kind: 'named', name: '資料' })!;
+
+        expect(message.attachmentImageIdentifierList).toEqual(['handout']);
+      } finally {
+        Config.instance.stampRules = OPEN_STAMP_RULES;
+      }
     });
   });
 

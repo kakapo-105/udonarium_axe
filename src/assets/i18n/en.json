@@ -155,6 +155,15 @@
     "sound": {
       "mute": "Turn {{name}} off",
       "unmute": "Turn {{name}} on"
+    },
+    "folder": {
+      "newFolder": "New folder",
+      "newSubfolder": "New folder inside",
+      "rename": "Rename folder",
+      "delete": "Delete this folder",
+      "none": "No folder",
+      "defaultName": "Folder {{index}}",
+      "confirmDelete": "Delete \"{{name}}\"? (The {{count}} inside go back to no folder.)"
     }
   },
   "feature": {
@@ -423,7 +432,9 @@
         "gather": "Gather a party on this spot",
         "gatherOnTable": "{{name}} (the {{count}} on the table)",
         "gatherWithAway": "{{name}} (bring in {{count}} more)",
-        "allies": "Stands with:"
+        "allies": "Stands with:",
+        "players": "Players:",
+        "playersHint": "The players ticked share the sight of every piece of the party and may look out of any of them in first person. For a table that moves one piece together, put the piece in a party and tick its players."
       }
     },
     "hotbar": {
@@ -485,6 +496,7 @@
         "fromPalette": "From the palette",
         "fromPaletteHint": "(pick a line from the chat palette)",
         "paletteLoose": "Under no heading",
+        "paletteNotFound": "No line matches",
         "rangeName": "Range name",
         "rangeSize": "Size",
         "rangeLength": "Length",
@@ -509,7 +521,8 @@
         "appearanceSize": "Size",
         "appearanceKeep": "Leave",
         "appearanceHint": "A box left empty is left alone. The picture and the portrait are numbered from one, in the order the character carries them. The size is in cells. The portrait reaches this screen alone.",
-        "menuCommand": "Entry"
+        "menuCommand": "Entry",
+        "scene": "Scene"
       },
       "kind": {
         "chat": "Chat / dice",
@@ -526,7 +539,8 @@
         "prefill": "Draft into the chat box",
         "turn": "Turn order",
         "group": "Multi-action",
-        "appearance": "Change how it looks"
+        "appearance": "Change how it looks",
+        "scene": "Scene"
       },
       "mode": {
         "cast": "Cast",
@@ -560,7 +574,8 @@
         "prefill": "Puts the text in the chat box without sending it, for a long line you want to finish by hand.",
         "turn": "Moves the turn order on or back.",
         "group": "Choose other slots and this one fires them in turn. A multi-action cannot hold another.",
-        "appearance": "Swaps the piece's picture, the portrait it speaks with, and its size. Put beside an effect in a multi-action, it is a transformation."
+        "appearance": "Swaps the piece's picture, the portrait it speaks with, and its size. Put beside an effect in a multi-action, it is a transformation.",
+        "scene": "Applies the scene chosen. Only the GM can use it."
       },
       "lock": "Hold it where it stands",
       "pageTitle": "Page {{page}}",
@@ -1264,7 +1279,9 @@
         "resetDefault": "Reset to default",
         "copyDice": "Duplicate",
         "saving": "Saving {{percent}}%",
-        "save": "Save"
+        "save": "Save",
+        "description": "Description",
+        "descriptionHint": "Shown when the pointer rests on the die"
       },
       "tableSetting": {
         "title": "Dice tables",
@@ -1974,6 +1991,7 @@
           "send": "Send",
           "newline": "Start a new line",
           "history": "Bring back what you sent",
+          "tabs": "Switch the chat tab",
           "search": "Search the log, with the pointer over the chat window"
         },
         "firstPerson": {
@@ -2418,7 +2436,13 @@
           "denied": "You do not have permission to edit this table, so the room data was not imported.",
           "unrecognized": "This file could not be read as CCFOLIA room data.",
           "failed": "Importing the room data failed."
-        }
+        },
+        "sceneName": "Scene {{index}}",
+        "importedScenes": "The {{count}} scenes of the CCFOLIA room are now scenes of the table. Apply them from the Scenes panel.",
+        "shapeTitle": "Importing the CCFOLIA scenes",
+        "shapeQuestion": "This room has {{count}} scenes. Import them as scenes of one table? Each can also become a table of its own.",
+        "shapeScenes": "One table with scenes",
+        "shapeTables": "A table for each scene"
       },
       "selection": {
         "title": "Selected objects",
@@ -2718,6 +2742,17 @@
         "bgFilterNone": "None",
         "bgFilterWhite": "White",
         "bgFilterBlack": "Black",
+        "imageForeground": "Foreground",
+        "imageForegroundAlt": "Foreground image",
+        "addImageForeground": "Add foreground image",
+        "clearForeground": "Remove",
+        "foregroundOpacity": "Opacity",
+        "foregroundFit": "Fit",
+        "foregroundFit_cover": "Fill the screen (crop the rest)",
+        "foregroundFit_contain": "Show it whole",
+        "foregroundFit_fill": "Stretch to the screen",
+        "foregroundSeeThrough": "See through it on my screen (GM only)",
+        "foregroundHint": "A picture laid in front of everything, over the pieces: a window frame, mist, a scene's picture. Clicks go through to the pieces and the board.",
         "wallHeight": "Wall height",
         "cellSize": "Cell size (px)",
         "squareSpan": "One square for moves and ranges",
@@ -2738,6 +2773,9 @@
         "addImageSouthWall": "Add south wall image",
         "addImageWestWall": "Add west wall image",
         "save": "Save",
+        "duplicate": "Duplicate",
+        "duplicateHint": "Copy this table with its terrain, walls, lights, background layers and switches",
+        "copyName": "Copy of {{name}}",
         "delete": "Delete",
         "restore": "Restore",
         "sectionWeather": "Weather (whole map)",
@@ -3260,6 +3298,8 @@
         "openFromRound": "Choose where notices go",
         "kind_round": "Round and turn progress",
         "kindHint_round": "Rounds starting and ending, turns, buffs running out or swept off",
+        "kind_clock": "Time in the story",
+        "kindHint_clock": "When the game master moves the time in the story on or back",
         "kind_diceReveal": "Dice revealed on the table",
         "kindHint_diceReveal": "The face of a hidden die when it is opened",
         "kind_trigger": "Triggers",
@@ -3606,12 +3646,14 @@
       },
       "invite": {
         "joining": "Joining \"{{roomName}}\"…",
+        "askLogin": "To join \"{{roomName}}\" as a player or GM, log in with Discord. Without logging in, you join as a guest",
         "notFound": "\"{{roomName}}\" was not found",
         "failed": "Could not join \"{{roomName}}\"",
         "banned": "Cannot join \"{{roomName}}\". The room server's operator has blocked this connection.",
         "offline": "You are offline, so you cannot join \"{{roomName}}\". To join, switch to online in the connection panel",
         "openLobby": "Open lobby",
-        "dismiss": "Dismiss"
+        "dismiss": "Dismiss",
+        "watch": "Join as a guest"
       },
       "account": {
         "login": "Log in with Discord",
@@ -3748,11 +3790,12 @@
         "sendToTickerHint": "Also run this line around the edge of the screen",
         "tools": "Input settings",
         "myDice": "My Dice",
-        "stamp": "Send a stamp (with what you have typed, if anything)"
+        "stamp": "Put in a stamp",
+        "bar": "Chat input tools",
+        "colorSlot": "Colour {{n}}",
+        "colors": "Speech colour"
       },
       "decoration": {
-        "title": "Text decoration",
-        "button": "Style",
         "bold": "Bold",
         "italic": "Italic",
         "strike": "Strikethrough",
@@ -3934,7 +3977,9 @@
         "ruby_size_half": "Half the text",
         "ruby_size_normal": "Standard",
         "ruby_size_large": "Large",
-        "rubyHint": "Applies to ruby in the chat, novel mode, shared notes and saved logs. This setting is for this device only"
+        "rubyHint": "Applies to ruby in the chat, novel mode, shared notes and saved logs. This setting is for this device only",
+        "richInput": "Use the formatted chat input",
+        "richInputTooltip": "Write bold, colours and ruby in the chat input as they will look, with each syntax coloured and what will not work marked. Off, the input takes the syntax as typed. This screen only"
       },
       "systemAvatar": {
         "title": "System-chan",
@@ -4143,6 +4188,122 @@
         "noPacks": "The room has no stamp sets yet",
         "tooLarge": "Over 2MB and not added: {{names}}",
         "alreadyIn": "That picture is in this set already"
+      },
+      "lint": {
+        "list": "Syntax notes",
+        "dice": {
+          "plainText": "Not a command of this dice bot, so it is sent as chat",
+          "unrollable": "The dice bot cannot roll this, so no result comes",
+          "failed": "The dice bot breaks off rolling this, so no result comes",
+          "tooMany": "Too many dice to roll, so the dice bot does not roll it",
+          "noRepeat": "Repeated 0 times, it is not rolled",
+          "cannotCheck": "The dice bot could not be loaded, so this cannot be checked",
+          "tooManyDice": "A term rolls up to 200 dice; more comes out as 0",
+          "tooManySides": "A die has up to 10000 sides; more comes out as 0",
+          "tooManyRepeats": "A roll repeats up to 100 times"
+        },
+        "target": {
+          "none": "No target is picked out, so \"No target selected\" is sent in place of this line"
+        },
+        "ref": {
+          "unknownKept": "\"{{name}}\" is on neither the sheet nor the palette, so it is sent as typed",
+          "unknownEmptied": "\"{{name}}\" is on neither the sheet nor the palette, so it comes out empty",
+          "noSpeaker": "The speaker is no piece, so references are not filled in"
+        },
+        "edit": {
+          "noSpeaker": "The speaker is no piece, so this does nothing",
+          "keptOffTable": "This does nothing while you are watching"
+        },
+        "res": {
+          "noOperator": "No + - = or > after the name, so this does nothing",
+          "noAmount": "No amount, so this does nothing",
+          "unknownStatus": "{{piece}} has no \"{{name}}\", so this does nothing",
+          "badOption": "Letters after the amount cannot be read, so this does nothing"
+        },
+        "buff": {
+          "noName": "The buff has no name, so this does nothing",
+          "unreadable": "The status, operation or amount cannot be read, so no buff is laid",
+          "missingStatus": "There is no \"{{name}}\", so that status does not move",
+          "notFound": "{{piece}} has no buff \"{{name}}\"",
+          "roundsDefault": "The rounds are no number, so it lasts 3 rounds"
+        },
+        "sweep": {
+          "gmOnly": "Only the GM can sweep buffs off"
+        },
+        "portrait": {
+          "unknown": "No such portrait, so this is sent as typed",
+          "lostByTarget": "A line aimed at targets does not change the portrait"
+        },
+        "cutIn": {
+          "secret": "A secret line does not start the cut-in \"{{name}}\"",
+          "lostByTarget": "A line aimed at targets does not start the cut-in \"{{name}}\""
+        },
+        "effect": {
+          "blank": "Effects after an empty 《》 are not read",
+          "unknown": "The effect \"{{name}}\" is not in the library",
+          "extra": "One effect plays per line; the rest are not read",
+          "noTarget": "No piece is targeted or selected, so the effect “{{name}}” does not play"
+        },
+        "battle": {
+          "noSpeaker": "The speaker is no piece, so no battle cut-in plays",
+          "noTarget": "No piece is targeted or selected, so the battle cut-in does not play"
+        },
+        "diceToken": {
+          "unknown": "There is no piece named \"{{name}}\"",
+          "keptOffTable": "Dice do not move while you are watching"
+        },
+        "deco": {
+          "unpaired": "An unclosed decoration shows as typed",
+          "hidesCommand": "Inside a decoration, this is not read as a command"
+        },
+        "vn": {
+          "dropped": "Unknown words ({{words}}) leave the 〔〕 as text",
+          "duplicate": "Two words of one kind leave the 〔〕 as text"
+        },
+        "chipNotAtEnd": "Works only at the end of the line",
+        "stamp": {
+          "unknown": "“{{name}}” is a stamp this version does not have, so its name is shown instead",
+          "denied": "“{{name}}” is a stamp this room has stopped, so its name is sent instead"
+        }
+      },
+      "syntax": {
+        "title": "Write syntax",
+        "ruby": "Ruby",
+        "rubyWrap": "Ruby over the selected word",
+        "base": "word",
+        "reading": "reading",
+        "dice": "Dice",
+        "secretRoll": "Roll in secret",
+        "repeat": "Roll repeatedly",
+        "reference": "Reference",
+        "targetReference": "A value of the target",
+        "name": "name",
+        "resource": "Resource change",
+        "text": "text",
+        "toTarget": "On the target",
+        "secret": "In secret",
+        "buff": "Buff",
+        "buffPlain": "Lay",
+        "buffEffect": "effect",
+        "buffCalculated": "Move a status",
+        "buffRemove": "Take off",
+        "buffRoundsDown": "Count rounds down",
+        "buffClear": "Clear those at 0 rounds",
+        "buffSweep": "Take off the whole table",
+        "portrait": "Portrait",
+        "portraitHide": "No portrait",
+        "effect": "Effects and cut-ins",
+        "battle": "Battle cut-in",
+        "quote": "Quote",
+        "quoteLine": "Quote"
+      },
+      "toolbar": {
+        "label": "Formatting",
+        "style": "Size, font and colour",
+        "normal": "Normal",
+        "clearColor": "No colour",
+        "applyRuby": "Add",
+        "removeRuby": "Remove the ruby"
       }
     },
     "visualNovel": {
@@ -5376,7 +5537,8 @@
         "showTable": "Switch the table",
         "carry": "Carry the presser's piece",
         "tableSetting": "Change table settings",
-        "battle": "Battle cut-in"
+        "battle": "Battle cut-in",
+        "scene": "Apply a scene"
       },
       "delay": "Wait (s)",
       "moveUp": "Move up",
@@ -5468,7 +5630,8 @@
         "on": "On",
         "off": "Off"
       },
-      "battleHint": "Plays a battle cut-in for everyone with the pieces the GM put on the left and right. The attacker is, of the pieces in the lineup, the one whose turn it is, then the presser's piece, then the first on the left."
+      "battleHint": "Plays a battle cut-in for everyone with the pieces the GM put on the left and right. The attacker is, of the pieces in the lineup, the one whose turn it is, then the presser's piece, then the first on the left.",
+      "sceneHint": "Applies the scene from the screen of whoever presses it, a player as well."
     },
     "soundSettings": {
       "ownHeading": "Your volume",
@@ -5620,11 +5783,22 @@
       "onTable": "Pieces on the table",
       "toLeft": "To left",
       "toRight": "To right",
+      "partyHeading": "Sides of the parties",
+      "partyHint": "Put a party on the left or the right, and its members not put on a side of their own stand there, until it is changed.",
+      "partyNone": "Neither",
+      "withParty": "party",
+      "withPartyHint": "Stands where its party does",
+      "followParty": "Back to its party",
       "effectHeading": "Attack effect of a piece",
       "effectHint": "An attack that names no effect plays the effect set on the piece. Without one, an effect that suits the amount of damage or healing plays.",
       "piece": "Piece",
       "effect": "Effect",
       "stageEffect": "(None)",
+      "facing": "Facing",
+      "facingAsDrawn": "As drawn",
+      "facingLeft": "Faces left",
+      "facingRight": "Faces right",
+      "facingHint": "Say which way the picture faces, and the stage turns it left for right where it would face away from the one across.",
       "noPieces": "There are no pieces on the table.",
       "roomHeading": "Room settings",
       "roomMasterOnly": "Only the GM can change these.",
@@ -5650,6 +5824,155 @@
       "addPicture": "Add picture",
       "removePicture": "Remove “{{name}}”",
       "picturesHint": "Pictures added here can be chosen as the stage, up to {{limit}}."
+    },
+    "gameClock": {
+      "title": "Time in the story",
+      "dayFormat": "Day {n}",
+      "defaultPeriods": "Morning,Noon,Evening,Night",
+      "announceOn": "Time moves on: {{day}}, {{time}}",
+      "announceBack": "Time goes back: {{day}}, {{time}}",
+      "stepOn": "Move the time on",
+      "stepBack": "Move the time back",
+      "settings": "Set up the time in the story",
+      "close": "Hide the time in the story",
+      "mode": "Told by",
+      "mode_periods": "Parts of the day",
+      "mode_hours": "24 hours",
+      "day": "Day",
+      "period": "Part of the day now",
+      "periods": "Names of the parts of the day",
+      "periodsHint": "Write them in the order of a day, with commas between. Empty is Morning, Noon, Evening, Night.",
+      "time": "Time now",
+      "step": "One step",
+      "stepMinutes": "{{n}} min",
+      "stepHours": "{{n}} h",
+      "dayFormatLabel": "How the day is written",
+      "dayFormatHint": "{n} is the number of the day (e.g. Day {n}). Empty is Day {n}.",
+      "announce": "Say it in the chat when the time moves on or back",
+      "skies": "Sky of each part of the day",
+      "skiesHint": "Choose the hour whose sky each part of the day shows. Even spaces the parts evenly over the day.",
+      "skyEven": "Even ({{hour}}:00)",
+      "sky_6": "Morning (6:00)",
+      "sky_9": "Forenoon (9:00)",
+      "sky_12": "Noon (12:00)",
+      "sky_15": "Afternoon (15:00)",
+      "sky_18": "Evening (18:00)",
+      "sky_21": "Late evening (21:00)",
+      "sky_0": "Night (0:00)",
+      "sky_3": "Small hours (3:00)"
+    },
+    "scene": {
+      "title": "Scenes",
+      "create": "From the board",
+      "createHint": "Make a scene of how the shown table looks and the music and background sounds playing",
+      "defaultName": "Scene {{index}}",
+      "untitled": "Untitled scene",
+      "copyName": "Copy of {{name}}",
+      "empty": "No scenes yet. Set the board up, then press From the board.",
+      "apply": "Apply",
+      "applyNamed": "Apply \"{{name}}\"",
+      "current": "Current scene",
+      "gameMasterOnly": "Only the GM uses scenes",
+      "overwriteConfirm": "Overwrite \"{{name}}\" with the board as it is? (Only the ticked parts change.)",
+      "deleteConfirm": "Delete \"{{name}}\"?",
+      "menu": {
+        "applyWithoutBgm": "Apply, keeping the music",
+        "applyWithoutText": "Apply without the text",
+        "edit": "Edit",
+        "overwrite": "Overwrite from the board",
+        "overwriteHint": "Write the shown table and the sounds playing over the ticked parts",
+        "duplicate": "Duplicate",
+        "moveTo": "Move to folder",
+        "delete": "Delete"
+      },
+      "part": {
+        "table": "Table shown",
+        "floor": "Floor",
+        "background": "Background",
+        "walls": "Walls",
+        "foreground": "Foreground",
+        "weather": "Weather",
+        "darkness": "Darkness",
+        "fog": "Fog of war",
+        "bgm": "Music",
+        "bgs": "Ambience",
+        "cutIn": "Cut-ins",
+        "clock": "Part of the day",
+        "text": "Scene text",
+        "fade": "Fade to black"
+      },
+      "wall": {
+        "north": "North wall",
+        "east": "East wall",
+        "south": "South wall",
+        "west": "West wall"
+      },
+      "editor": {
+        "namePlaceholder": "Scene name",
+        "hint": "Only the ticked parts change when the scene is applied. Ticking one starts it from the board as it is.",
+        "leave": "Leave as is",
+        "pickPicture": "Choose an image",
+        "noPicture": "None",
+        "takeAway": "Set to none",
+        "on": "On",
+        "off": "Off",
+        "bgmStop": "Stop",
+        "bgmTrack": "Play a track",
+        "bgmPlaylist": "Play a playlist from the top",
+        "chooseTrack": "Choose a track",
+        "choosePlaylist": "Choose a playlist",
+        "bgsNone": "With none chosen, every ambience stops",
+        "bgsHint": "Plays only the ambience chosen and stops the rest",
+        "clockHours": "Left alone while the time is told on a 24-hour clock",
+        "cutInsNone": "Cut-ins to play on applying (one of several is drawn)",
+        "cutInStopsMusic": "A cut-in with music of its own stops the room's music when it plays, so it cannot go with the scene's music",
+        "textPlaceholder": "Said in the chat on applying (chat decoration works)",
+        "textTab": "Tab",
+        "firstTab": "First tab"
+      }
+    },
+    "scenarioText": {
+      "title": "Scenario texts",
+      "create": "New text",
+      "defaultTitle": "Text {{index}}",
+      "untitled": "Untitled text",
+      "copyTitle": "Copy of {{title}}",
+      "empty": "No texts yet. Start one with New text.",
+      "noWords": "(no words)",
+      "noMatch": "Nothing found",
+      "search": "Search titles and words",
+      "gameMasterOnly": "Only the GM uses scenario texts",
+      "titlePlaceholder": "Title (sent as the speaker's name when said under the title)",
+      "wordsPlaceholder": "The words. Chat decoration works. Enter starts a new line.",
+      "saidAs": "Said as",
+      "tab": "Tab",
+      "tabBeingRead": "Tab being read",
+      "color": "Colour",
+      "colorOfSpeaker": "Use the speaker's colour",
+      "colorOfSpeakerNote": "(the speaker's colour)",
+      "whisperPlaceholder": "Whisper to (none sends it to everyone)",
+      "send": "Send",
+      "whisper": "Whisper",
+      "sendNamed": "Send \"{{title}}\"",
+      "sentAt": "Sent at {{time}}",
+      "deleteConfirm": "Delete \"{{title}}\"?",
+      "speaker": {
+        "title": "Under its title",
+        "character": "As the character speaking",
+        "system": "As the system"
+      },
+      "menu": {
+        "sendAs": "Send as someone else",
+        "edit": "Edit",
+        "duplicate": "Duplicate",
+        "moveTo": "Move to folder",
+        "delete": "Delete"
+      },
+      "suggestions": "Scenario text suggestions",
+      "import": "Import in bulk",
+      "importRun": "Import",
+      "importHint": "Paste the script: each heading (a line starting with # or ■) becomes a text, the heading its title.",
+      "importPlaceholder": "# Opening\nRain is falling.\n\n# The mansion\nThe door creaks."
     }
   },
   "app": {
@@ -5670,6 +5993,7 @@
       "gameResources": "Game resources",
       "media": "Media",
       "clock": "Clock",
+      "gameClock": "Time in the story",
       "compass": "Compass",
       "connectionQuality": "Connection quality",
       "miniPlayer": "Mini player",
@@ -5914,6 +6238,11 @@
       "pieceGauge": "Show a bar on the piece",
       "resourceSlider": "Slider",
       "gaugeInverted": "Negative resource",
+      "gaugeInvertedHint": "Treats the value as worse the higher it goes: the bar turns red as it fills, and a rise plays the damage effect and sound, a fall the healing ones. To change only the bar's colour, use Bar colour",
+      "gaugeColor": "Bar colour",
+      "gaugeColorAuto": "Back to automatic",
+      "gaugeColorAutoNote": "(automatic: follows what is left)",
+      "gaugeColorHint": "Draws the bar over the piece and elsewhere in this colour however full it is. The effects and sounds of a change stay as they are",
       "overResource": "Over-resource",
       "overResourceHint": "Lets the current value go over the maximum, so a temporary bonus can be tracked with the maximum as the value it returns to",
       "changeEffect": "Effect on change",

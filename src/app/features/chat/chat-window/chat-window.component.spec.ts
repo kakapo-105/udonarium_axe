@@ -1,5 +1,6 @@
 import { ChangeDetectorRef } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
 import { ChatPreferencesService } from '@axe/application/chat/chat-preferences.service';
 import { ChatSpeakerService } from '@axe/application/chat/chat-speaker.service';
@@ -14,6 +15,8 @@ import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { DataElement, DataElementFieldType } from '@axe/domain/data/data-element';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
+import { ScenarioText } from '@axe/domain/scenario-text/scenario-text';
+import { ChatInputComponent } from '@axe/features/chat/chat-input/chat-input.component';
 import { ChatTabComponent } from '@axe/features/chat/chat-tab/chat-tab.component';
 import { ChatTickerSelectionService } from '@axe/features/chat/chat-ticker-selection.service';
 import { ChatWindowComponent } from '@axe/features/chat/chat-window/chat-window.component';
@@ -214,6 +217,49 @@ describe('ChatWindowComponent', () => {
     } finally {
       tab.destroy();
     }
+  });
+
+  describe('offering the scenario texts as the game master types', () => {
+    type Offering = {
+      typed: { set(value: string): void };
+      textSuggestions(): { identifier: string; words: string }[];
+      takeSuggestion(index: number): void;
+    };
+
+    function textOf(title: string, words: string): ScenarioText {
+      const text = new ScenarioText();
+      text.title = title;
+      text.text = words;
+      text.initialize();
+      return text;
+    }
+
+    it('offers the texts what is typed matches, and puts the words of the one taken in the input', () => {
+      PeerCursor.myCursor.role = PeerRole.GameMaster;
+      textOf('導入', '**雨**が降っている');
+      textOf('真相', '犯人は執事');
+      fixture.detectChanges();
+      const offering = component as unknown as Offering;
+
+      offering.typed.set('雨が');
+      expect(offering.textSuggestions().map((suggestion) => suggestion.words)).toEqual(['**雨**が降っている']);
+
+      offering.takeSuggestion(0);
+      fixture.detectChanges();
+      const input = fixture.debugElement.query(By.directive(ChatInputComponent))
+        .componentInstance as ChatInputComponent;
+      expect(input.text).toBe('**雨**が降っている');
+    });
+
+    it('offers a player nothing', () => {
+      PeerCursor.myCursor.role = PeerRole.Player;
+      textOf('真相', '犯人は執事');
+      const offering = component as unknown as Offering;
+
+      offering.typed.set('犯人');
+
+      expect(offering.textSuggestions()).toEqual([]);
+    });
   });
 
   describe('who is typing', () => {
@@ -955,6 +1001,31 @@ describe('ChatWindowComponent', () => {
       speak('t:HP-t{HP}', PeerCursor.myCursor.identifier);
 
       expect(sent[0].text).toBe('t:HP-7 [対象]');
+    });
+
+    it('aims a line at the target when a field of the speaker it names reads the target through t{}', () => {
+      character.rootDataElement?.getFirstElementByName('detail')?.appendChild(DataElement.create('攻撃', '{HP}+t{HP}'));
+      mark = GameCharacter.create('対象', 1, '');
+      mark.status.setValue('HP', 'now', 7);
+      mark.setLocation('table');
+      mark.targeted = true;
+
+      speak('{攻撃}', character.identifier);
+
+      expect(sent[0].text).toBe('13+7 [対象]');
+    });
+
+    it('sends on the picture a reference of the speaker stands for, in a line aimed at a target', () => {
+      character.rootDataElement
+        ?.getFirstElementByName('detail')
+        ?.appendChild(DataElement.create('立ち絵', 'portrait-id', { fieldType: DataElementFieldType.IMAGE }));
+      mark = GameCharacter.create('対象', 1, '');
+      mark.setLocation('table');
+      mark.targeted = true;
+
+      speak('{立ち絵}t:HP-1', character.identifier);
+
+      expect(sent[0]).toEqual({ text: 't:HP-1 [対象]', attachments: ['portrait-id'] });
     });
 
     it('sends on the picture a reference stands for', () => {

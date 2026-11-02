@@ -150,6 +150,17 @@ export default defineConfig({
         }
       });
 
+      // Vue reads `{{ }}` anywhere in a page as an expression, inline code included, while a page
+      // writes it there to show the braces themselves. Inline code is shown as written.
+      md.core.ruler.push('axe-code-as-written', (state) => {
+        for (const token of state.tokens) {
+          if (token.type !== 'inline') continue;
+          for (const kid of token.children ?? []) {
+            if (kid.type === 'code_inline') kid.attrSet('v-pre', '');
+          }
+        }
+      });
+
       // Default VitePress tables are `display: block`, so they shrink to their
       // content and hug the left edge. Wrapping them lets the table fill the
       // column while wide ones scroll sideways inside the wrapper.
@@ -296,6 +307,8 @@ export default defineConfig({
           text: 'GMの道具',
           items: [
             { text: 'オブジェクト一覧（GM）', link: '/manual/gm-object-list' },
+            { text: 'シーン', link: '/manual/scene' },
+            { text: 'シナリオテキスト', link: '/manual/scenario-text' },
             { text: 'マップエディター', link: '/manual/map-editor' },
             { text: 'マップ生成', link: '/manual/map-generator' },
           ],
@@ -340,6 +353,12 @@ export default defineConfig({
           text: 'リリースノート',
           items: [
             { text: '一覧', link: '/release-notes/' },
+            { text: 'v1.75.2', link: '/release-notes/v1.75.2' },
+            { text: 'v1.75.1', link: '/release-notes/v1.75.1' },
+            { text: 'v1.75.0', link: '/release-notes/v1.75.0' },
+            { text: 'v1.74.2', link: '/release-notes/v1.74.2' },
+            { text: 'v1.74.1', link: '/release-notes/v1.74.1' },
+            { text: 'v1.74.0', link: '/release-notes/v1.74.0' },
             { text: 'v1.73.0', link: '/release-notes/v1.73.0' },
             { text: 'v1.72.0', link: '/release-notes/v1.72.0' },
             { text: 'v1.71.1', link: '/release-notes/v1.71.1' },

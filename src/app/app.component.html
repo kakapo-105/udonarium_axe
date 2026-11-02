@@ -54,14 +54,27 @@
     }
     <app-digital-clock></app-digital-clock>
     <app-character-roster />
+    @defer (when widgets.gameClock()) {
+      <app-game-clock-widget></app-game-clock-widget>
+    } @error {
+      <ng-container appReloadNotice />
+    }
     @defer (when widgets.compass()) {
       <app-compass></app-compass>
     } @error {
       <ng-container appReloadNotice />
     }
     <app-connection-quality></app-connection-quality>
-    <app-gm-toolbar></app-gm-toolbar>
-    <app-pl-toolbar></app-pl-toolbar>
+    @defer (when gmToolbarWanted()) {
+      <app-gm-toolbar></app-gm-toolbar>
+    } @error {
+      <ng-container appReloadNotice />
+    }
+    @defer (when plToolbarWanted()) {
+      <app-pl-toolbar></app-pl-toolbar>
+    } @error {
+      <ng-container appReloadNotice />
+    }
     <app-hand-rail></app-hand-rail>
   }
   <app-hotbar />

@@ -1,10 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { VolumeType } from '@axe/core/storage/audio-output';
 import { ObjectContext } from '@axe/core/sync/game-object';
+import { ObjectStore } from '@axe/core/sync/object-store';
 import { waitZeroTimeout } from '@axe/core/util/zero-timeout';
 import { DEFAULT_BATTLE_SETTINGS } from '@axe/domain/battle/battle-settings';
 import { OPEN_STAMP_RULES, withStampsAllowed, withStampUseOn } from '@axe/domain/chat/stamp-rules';
 import { DEFAULT_SYSTEM_NOTICES, withNoticeRoute } from '@axe/domain/chat/system-notices';
+import { DEFAULT_GAME_CLOCK } from '@axe/domain/game-clock/game-clock';
 import { DEFAULT_DJ_SETTINGS } from '@axe/domain/media/dj-settings';
 import { DEFAULT_ROOM_VOLUMES } from '@axe/domain/media/room-volumes';
 import { Config } from '@axe/domain/peer/config';
@@ -23,6 +25,16 @@ describe('Config', () => {
     // thrown after the test has finished.
     await waitZeroTimeout();
     (Config as unknown as { _instance: Config | undefined })._instance = undefined;
+  });
+
+  it('makes one anew once the one held has left the store, rather than putting that one back', () => {
+    const held = Config.instance;
+    held.gameClock = { ...DEFAULT_GAME_CLOCK, day: 5 };
+
+    ObjectStore.instance.delete(held, false);
+
+    expect(Config.instance).not.toBe(held);
+    expect(Config.instance.gameClock.day).toBe(1);
   });
 
   describe('engagement-zone rules', () => {
@@ -124,6 +136,106 @@ describe('Config', () => {
 
       config.interruptKind = null;
       expect(config.interruptKind).toBeNull();
+    });
+  });
+
+  describe('the time the room keeps in its story', () => {
+    afterEach(() => {
+      Config.instance.gameClock = DEFAULT_GAME_CLOCK;
+    });
+
+    it('is the morning of the first day for a room saved before it could keep one, and reads back what it writes', () => {
+      const config = Config.instance;
+      expect(config.gameClock).toEqual(DEFAULT_GAME_CLOCK);
+
+      const kept = { ...DEFAULT_GAME_CLOCK, day: 4, mode: 'hours' as const, minutes: 1290 };
+      config.gameClock = kept;
+      expect(config.gameClock).toEqual(kept);
+    });
+
+    it('goes back to the first morning where an older version sends the config without it', () => {
+      Config.instance.gameClock = { ...DEFAULT_GAME_CLOCK, day: 9 };
+      const older = Config.instance.toContext();
+      delete (older.syncData['attributes'] as Record<string, unknown>)['_gameClock'];
+      older.majorVersion += 1;
+
+      Config.instance.apply(older);
+
+      expect(Config.instance.gameClock).toEqual(DEFAULT_GAME_CLOCK);
+    });
+  });
+
+  describe('the scenes', () => {
+    afterEach(() => {
+      Config.instance.boardScene = '';
+      Config.instance.boardSceneFolders = [];
+    });
+
+    it('holds no scene put on and no folder for a room saved before there were scenes', () => {
+      expect(Config.instance.boardScene).toBe('');
+      expect(Config.instance.boardSceneFolders).toEqual([]);
+    });
+
+    it('keeps the scenario texts’ folders apart from the scenes’', () => {
+      Config.instance.scenarioTextFolders = ['導入'];
+
+      expect(Config.instance.scenarioTextFolders).toEqual(['導入']);
+      expect(Config.instance.boardSceneFolders).toEqual([]);
+      Config.instance.scenarioTextFolders = [];
+    });
+
+    it('reads back the scene put on and the folders made, each folder tidied and once', () => {
+      Config.instance.boardScene = 'scene-night';
+      Config.instance.boardSceneFolders = ['第1話／村', '第1話/村', '', '第2話'];
+
+      expect(Config.instance.boardScene).toBe('scene-night');
+      expect(Config.instance.boardSceneFolders).toEqual(['第1話/村', '第2話']);
+    });
+  });
+
+  describe('the skies of the parts of a day', () => {
+    function attributesOf(context: ObjectContext): Record<string, unknown> {
+      return context.syncData['attributes'] as Record<string, unknown>;
+    }
+
+    afterEach(() => {
+      Config.instance.gameClock = DEFAULT_GAME_CLOCK;
+      Config.instance.gameClockSkies = [];
+    });
+
+    it('lays every part evenly for a room saved before the skies, and reads back what it writes', () => {
+      expect(Config.instance.gameClockSkies).toEqual([]);
+
+      Config.instance.gameClockSkies = [12, null, 0];
+
+      expect(Config.instance.gameClockSkies).toEqual([12, null, 0]);
+    });
+
+    it('holds nothing at all for a room that chose none', () => {
+      expect(attributesOf(Config.instance.toContext())['_gameClockSkies']).toBe('');
+    });
+
+    it('lays every part evenly again where the config comes in without them, as from a bag sent empty', () => {
+      Config.instance.gameClockSkies = [12, 0];
+      const older = Config.instance.toContext();
+      delete attributesOf(older)['_gameClockSkies'];
+      older.majorVersion += 1;
+
+      Config.instance.apply(older);
+
+      expect(Config.instance.gameClockSkies).toEqual([]);
+    });
+
+    it('stays as it was where an older version writes the clock, which knows nothing of the skies', () => {
+      Config.instance.gameClockSkies = [12, 0];
+      const older = Config.instance.toContext();
+      attributesOf(older)['_gameClock'] = JSON.stringify({ ...DEFAULT_GAME_CLOCK, period: 1 });
+      older.majorVersion += 1;
+
+      Config.instance.apply(older);
+
+      expect(Config.instance.gameClock.period).toBe(1);
+      expect(Config.instance.gameClockSkies).toEqual([12, 0]);
     });
   });
 

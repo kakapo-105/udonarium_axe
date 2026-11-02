@@ -30,6 +30,7 @@ export function fighterBetween(before: FighterReading, after: FighterReading, ru
       after: now.current,
       max: now.max,
       inverted: now.inverted,
+      color: now.color,
     };
     if (now.bar) gauges.push(gauge);
     else if (gauge.before !== gauge.after) moved.push(gauge);
@@ -45,5 +46,6 @@ export function fighterBetween(before: FighterReading, after: FighterReading, ru
     image: after.image,
     gauges: [...gauges, ...moved].slice(0, MAX_BATTLE_GAUGES),
     defeated,
+    facing: after.facing,
   };
 }

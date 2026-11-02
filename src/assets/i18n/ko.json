@@ -155,6 +155,15 @@
     "sound": {
       "mute": "{{name}} 끄기",
       "unmute": "{{name}} 켜기"
+    },
+    "folder": {
+      "newFolder": "새 폴더",
+      "newSubfolder": "이 안에 폴더 만들기",
+      "rename": "폴더 이름 바꾸기",
+      "delete": "이 폴더 삭제",
+      "none": "폴더 없음",
+      "defaultName": "폴더{{index}}",
+      "confirmDelete": "「{{name}}」을(를) 삭제할까요?（안의 {{count}}건은 폴더 없음으로 돌아갑니다）"
     }
   },
   "feature": {
@@ -423,7 +432,9 @@
         "gather": "이 지점을 중심으로 파티 배치",
         "gatherOnTable": "{{name}}（테이블의 {{count}}명）",
         "gatherWithAway": "{{name}}（테이블 밖 {{count}}명도 내보내기）",
-        "allies": "동맹:"
+        "allies": "동맹:",
+        "players": "플레이어:",
+        "playersHint": "체크한 플레이어는 이 파티의 말의 시야를 공유하고, 1인칭에서도 그 말에서 볼 수 있습니다. 하나의 말을 함께 움직이는 탁에서는 그 말을 파티에 넣고 플레이어를 체크합니다."
       }
     },
     "hotbar": {
@@ -485,6 +496,7 @@
         "fromPalette": "팔레트에서",
         "fromPaletteHint": "(채팅 팔레트의 줄을 고른다)",
         "paletteLoose": "제목 없음",
+        "paletteNotFound": "맞는 줄이 없습니다",
         "rangeName": "사거리 이름",
         "rangeSize": "크기",
         "rangeLength": "길이",
@@ -509,7 +521,8 @@
         "appearanceSize": "크기",
         "appearanceKeep": "그대로",
         "appearanceHint": "비워 둔 항목은 그대로입니다. 말 그림과 서 있는 그림은 캐릭터가 가진 이미지의 번호이며 1부터 셉니다. 크기는 칸 수입니다. 서 있는 그림은 이 화면에만 적용됩니다.",
-        "menuCommand": "항목"
+        "menuCommand": "항목",
+        "scene": "장면"
       },
       "kind": {
         "chat": "채팅 / 주사위",
@@ -526,7 +539,8 @@
         "prefill": "채팅창에 초안 넣기",
         "turn": "행동 순서",
         "group": "멀티 액션",
-        "appearance": "겉모습 바꾸기"
+        "appearance": "겉모습 바꾸기",
+        "scene": "장면"
       },
       "mode": {
         "cast": "발동",
@@ -560,7 +574,8 @@
         "prefill": "채팅 입력창에 문자를 넣기만 하고 보내지는 않습니다. 긴 문장의 초안에 씁니다.",
         "turn": "행동 순서를 진행하거나 되돌립니다.",
         "group": "다른 칸을 골라 차례로 쏩니다. 멀티 액션끼리는 고를 수 없습니다.",
-        "appearance": "말 그림·서 있는 그림·크기를 바꿉니다. 멀티 액션에서 이펙트와 나란히 두면 변신 연출이 됩니다."
+        "appearance": "말 그림·서 있는 그림·크기를 바꿉니다. 멀티 액션에서 이펙트와 나란히 두면 변신 연출이 됩니다.",
+        "scene": "장면을 골라 반영합니다. GM만 쓸 수 있습니다."
       },
       "lock": "위치 고정",
       "pageTitle": "{{page}} 페이지",
@@ -1264,7 +1279,9 @@
         "resetDefault": "기본값으로 되돌리기",
         "copyDice": "복제 만들기",
         "saving": "저장 중 {{percent}}%",
-        "save": "저장"
+        "save": "저장",
+        "description": "설명",
+        "descriptionHint": "주사위에 마우스를 올리면 표시됩니다"
       },
       "tableSetting": {
         "title": "주사위 표 설정",
@@ -1974,6 +1991,7 @@
           "send": "보내기",
           "newline": "줄 바꾸기",
           "history": "보낸 발언 불러오기",
+          "tabs": "채팅 탭 전환",
           "search": "채팅 창 위에서 로그 검색"
         },
         "firstPerson": {
@@ -2418,7 +2436,13 @@
           "denied": "탁상 편집 권한이 없어 룸 데이터를 가져올 수 없습니다.",
           "unrecognized": "코코포리아 룸 데이터로 읽을 수 없었습니다.",
           "failed": "룸 데이터 가져오기에 실패했습니다."
-        }
+        },
+        "sceneName": "장면{{index}}",
+        "importedScenes": "코코포리아의 장면 {{count}}건을 테이블의 장면으로 만들었습니다. 장면 패널에서 반영할 수 있습니다.",
+        "shapeTitle": "코코포리아 장면 가져오기",
+        "shapeQuestion": "이 룸에는 장면이 {{count}}건 있습니다. 테이블 1장으로 묶어 장면으로 가져올까요? 장면마다 테이블을 만들 수도 있습니다.",
+        "shapeScenes": "테이블 1장과 장면으로",
+        "shapeTables": "장면마다 테이블"
       },
       "selection": {
         "title": "선택 중인 오브젝트",
@@ -2718,6 +2742,17 @@
         "bgFilterNone": "없음",
         "bgFilterWhite": "화이트",
         "bgFilterBlack": "블랙",
+        "imageForeground": "전경",
+        "imageForegroundAlt": "전경 이미지",
+        "addImageForeground": "전경 이미지 추가",
+        "clearForeground": "제거",
+        "foregroundOpacity": "불투명도",
+        "foregroundFit": "맞춤",
+        "foregroundFit_cover": "화면 채우기（넘치는 부분은 자름）",
+        "foregroundFit_contain": "전체 보이기",
+        "foregroundFit_fill": "화면에 늘이기",
+        "foregroundSeeThrough": "내 화면에서는 흐리게 보기（GM만）",
+        "foregroundHint": "화면 앞쪽, 말 위에 겹치는 그림입니다. 창틀이나 안개, 장면의 그림에 씁니다. 클릭은 아래의 말과 판에 닿습니다",
         "wallHeight": "벽 높이",
         "cellSize": "한 칸의 크기(px)",
         "squareSpan": "이동과 사거리의 한 칸",
@@ -2738,6 +2773,9 @@
         "addImageSouthWall": "남쪽 벽 이미지 추가",
         "addImageWestWall": "서쪽 벽 이미지 추가",
         "save": "저장",
+        "duplicate": "복제",
+        "duplicateHint": "이 테이블을 지형·벽·조명·배경 레이어·스위치째로 복사합니다",
+        "copyName": "{{name}} 사본",
         "delete": "삭제",
         "restore": "되돌리기",
         "sectionWeather": "날씨(맵 전체)",
@@ -3260,6 +3298,8 @@
         "openFromRound": "알림을 보낼 곳 고르기",
         "kind_round": "라운드·차례 진행",
         "kindHint_round": "라운드 시작과 끝, 차례, 버프 만료와 일괄 해제",
+        "kind_clock": "게임 내 시간",
+        "kindHint_clock": "GM이 게임 내 시간을 진행하거나 되돌렸을 때",
         "kind_diceReveal": "판 위 주사위 공개",
         "kindHint_diceReveal": "엎어 둔 주사위를 열었을 때의 눈",
         "kind_trigger": "트리거",
@@ -3606,12 +3646,14 @@
       },
       "invite": {
         "joining": "\"{{roomName}}\"에 참가하고 있습니다…",
+        "askLogin": "\"{{roomName}}\"에 PL·GM으로 들어가려면 Discord로 로그인해 주세요. 로그인하지 않으면 관전 상태로 들어갑니다",
         "notFound": "\"{{roomName}}\"을(를) 찾지 못했습니다",
         "failed": "\"{{roomName}}\"에 참가하지 못했습니다",
         "banned": "\"{{roomName}}\"에 들어갈 수 없습니다. 방 서버 운영자가 이 회선을 차단했습니다.",
         "offline": "오프라인이라 \"{{roomName}}\"에 들어갈 수 없습니다. 들어가려면 연결 패널에서 온라인으로 전환해 주세요",
         "openLobby": "로비 열기",
-        "dismiss": "닫기"
+        "dismiss": "닫기",
+        "watch": "관전으로 들어가기"
       },
       "account": {
         "login": "Discord로 로그인",
@@ -3748,11 +3790,12 @@
         "sendToTickerHint": "이 발언을 화면 외곽에도 흘려보냅니다",
         "tools": "입력 설정",
         "myDice": "마이 주사위",
-        "stamp": "스탬프 보내기 (입력 중인 글이 있으면 함께)"
+        "stamp": "스탬프 넣기",
+        "bar": "입력란 도구",
+        "colorSlot": "보유 색 {{n}}",
+        "colors": "발언 색"
       },
       "decoration": {
-        "title": "글자 꾸미기",
-        "button": "꾸미기",
         "bold": "굵게",
         "italic": "기울임",
         "strike": "취소선",
@@ -3934,7 +3977,9 @@
         "ruby_size_half": "본문의 절반",
         "ruby_size_normal": "표준",
         "ruby_size_large": "크게",
-        "rubyHint": "채팅, 노벨 모드, 공유 메모, 내보내는 로그의 루비에 적용됩니다. 이 설정은 이 기기에만 적용됩니다"
+        "rubyHint": "채팅, 노벨 모드, 공유 메모, 내보내는 로그의 루비에 적용됩니다. 이 설정은 이 기기에만 적용됩니다",
+        "richInput": "서식 입력란 사용",
+        "richInputTooltip": "채팅 입력란에서 굵은 글씨, 색, 루비를 보낸 뒤의 모습 그대로 쓰고, 표기를 종류별로 색으로 구분하며, 효과가 없는 표기에 표시를 합니다. 끄면 표기를 그대로 입력하는 입력란이 됩니다. 이 화면만의 설정입니다"
       },
       "systemAvatar": {
         "title": "시스템쨩",
@@ -4143,6 +4188,122 @@
         "noPacks": "방의 스탬프 세트가 아직 없습니다",
         "tooLarge": "2MB를 넘어 추가하지 못했습니다: {{names}}",
         "alreadyIn": "그 이미지는 이미 이 세트에 있습니다"
+      },
+      "lint": {
+        "list": "표기 지적",
+        "dice": {
+          "plainText": "이 다이스봇의 커맨드가 아니므로 발언으로 보내집니다",
+          "unrollable": "다이스봇이 굴릴 수 없는 표기입니다. 결과는 나오지 않습니다",
+          "failed": "다이스봇이 굴리는 도중에 멈춥니다. 결과는 나오지 않습니다",
+          "tooMany": "굴릴 다이스가 너무 많아 다이스봇이 굴리지 않습니다",
+          "noRepeat": "0번은 굴려지지 않습니다",
+          "cannotCheck": "다이스봇을 불러올 수 없어 확인할 수 없습니다",
+          "tooManyDice": "다이스는 한 항에 200개까지입니다. 넘으면 0이 됩니다",
+          "tooManySides": "다이스의 면은 10000까지입니다. 넘으면 0이 됩니다",
+          "tooManyRepeats": "반복은 100번까지입니다"
+        },
+        "target": {
+          "none": "타깃이 없으므로 이 줄 대신 \"대상이 선택되지 않았습니다\"가 나옵니다"
+        },
+        "ref": {
+          "unknownKept": "\"{{name}}\"은(는) 시트에도 팔레트에도 없으므로 그대로 보내집니다",
+          "unknownEmptied": "\"{{name}}\"은(는) 시트에도 팔레트에도 없으므로 비게 됩니다",
+          "noSpeaker": "발언자가 말이 아니므로 참조가 채워지지 않습니다"
+        },
+        "edit": {
+          "noSpeaker": "발언자가 말이 아니므로 이 조작은 효과가 없습니다",
+          "keptOffTable": "관전하는 동안에는 이 조작은 효과가 없습니다"
+        },
+        "res": {
+          "noOperator": "증감 기호(+・-・=・>)가 없으므로 효과가 없습니다",
+          "noAmount": "양이 없으므로 효과가 없습니다",
+          "unknownStatus": "{{piece}}에 \"{{name}}\"이(가) 없으므로 효과가 없습니다",
+          "badOption": "양 뒤에 읽을 수 없는 문자가 있으므로 효과가 없습니다"
+        },
+        "buff": {
+          "noName": "버프 이름이 없으므로 효과가 없습니다",
+          "unreadable": "스테이터스・조작・양을 읽을 수 없으므로 버프가 붙지 않습니다",
+          "missingStatus": "\"{{name}}\"이(가) 없으므로 그 스테이터스는 움직이지 않습니다",
+          "notFound": "{{piece}}에는 \"{{name}}\" 버프가 없습니다",
+          "roundsDefault": "남은 라운드가 숫자가 아니므로 3라운드가 됩니다"
+        },
+        "sweep": {
+          "gmOnly": "버프 일괄 해제는 GM만 쓸 수 있습니다"
+        },
+        "portrait": {
+          "unknown": "이 스탠딩을 찾을 수 없어 문자 그대로 보내집니다",
+          "lostByTarget": "타깃을 향한 줄에서는 스탠딩이 바뀌지 않습니다"
+        },
+        "cutIn": {
+          "secret": "시크릿 줄에서는 컷인 \"{{name}}\"이(가) 일어나지 않습니다",
+          "lostByTarget": "타깃을 향한 줄에서는 컷인 \"{{name}}\"이(가) 일어나지 않습니다"
+        },
+        "effect": {
+          "blank": "빈 《》 뒤의 연출은 읽히지 않습니다",
+          "unknown": "연출 \"{{name}}\"은(는) 라이브러리에 없습니다",
+          "extra": "연출은 한 줄에 하나입니다. 두 번째부터는 읽히지 않습니다",
+          "noTarget": "대상 말이 없어 연출 「{{name}}」이(가) 일어나지 않습니다. 말을 타깃으로 하거나 선택하세요"
+        },
+        "battle": {
+          "noSpeaker": "발언자가 말이 아니므로 전투 컷인이 일어나지 않습니다",
+          "noTarget": "대상 말이 없어 전투 컷인이 일어나지 않습니다. 말을 타깃으로 하거나 선택하세요"
+        },
+        "diceToken": {
+          "unknown": "\"{{name}}\"이라는 이름의 말은 없습니다",
+          "keptOffTable": "관전하는 동안에는 다이스가 움직이지 않습니다"
+        },
+        "deco": {
+          "unpaired": "닫히지 않은 장식은 문자 그대로 나옵니다",
+          "hidesCommand": "장식 안에 있어서 명령으로 읽히지 않습니다"
+        },
+        "vn": {
+          "dropped": "모르는 단어({{words}})가 있어 〔〕는 문자 그대로 나옵니다",
+          "duplicate": "같은 종류의 단어가 2개 있어 〔〕는 문자 그대로 나옵니다"
+        },
+        "chipNotAtEnd": "문장 끝에 둘 때만 효과가 있습니다",
+        "stamp": {
+          "unknown": "「{{name}}」은(는) 이 버전에 없는 스탬프라 이름이 글자로 표시됩니다",
+          "denied": "「{{name}}」은(는) 이 방에서 막힌 스탬프라 이름이 글자로 전송됩니다"
+        }
+      },
+      "syntax": {
+        "title": "표기 넣기",
+        "ruby": "루비",
+        "rubyWrap": "선택한 단어에 루비 달기",
+        "base": "한자",
+        "reading": "읽기",
+        "dice": "다이스",
+        "secretRoll": "시크릿으로 굴리기",
+        "repeat": "반복해서 굴리기",
+        "reference": "참조",
+        "targetReference": "타깃의 값",
+        "name": "이름",
+        "resource": "리소스 조작",
+        "text": "문자",
+        "toTarget": "타깃에게",
+        "secret": "시크릿으로",
+        "buff": "버프",
+        "buffPlain": "붙이기",
+        "buffEffect": "효과",
+        "buffCalculated": "스테이터스 움직이기",
+        "buffRemove": "떼기",
+        "buffRoundsDown": "남은 라운드 줄이기",
+        "buffClear": "0라운드 이하 지우기",
+        "buffSweep": "탁자 전체에서 떼기",
+        "portrait": "스탠딩",
+        "portraitHide": "스탠딩 숨기기",
+        "effect": "연출・컷인",
+        "battle": "전투 컷인",
+        "quote": "인용",
+        "quoteLine": "인용하기"
+      },
+      "toolbar": {
+        "label": "서식",
+        "style": "크기・글꼴・색",
+        "normal": "기본",
+        "clearColor": "색 빼기",
+        "applyRuby": "달기",
+        "removeRuby": "루비 빼기"
       }
     },
     "visualNovel": {
@@ -5296,6 +5457,11 @@
         "pieceGauge": "말에 막대 표시",
         "resourceSlider": "슬라이더 표시",
         "gaugeInverted": "마이너스 리소스",
+        "gaugeInvertedHint": "늘어날수록 나쁜 값으로 다룹니다. 막대는 가득 찰수록 빨개지고, 늘면 대미지, 줄면 회복 연출과 소리가 납니다. 막대 색만 바꾸려면 「막대 색」을 씁니다",
+        "gaugeColor": "막대 색",
+        "gaugeColorAuto": "자동으로 되돌리기",
+        "gaugeColorAutoNote": "（자동: 남은 양에 따라 바뀜）",
+        "gaugeColorHint": "말 머리 위 등의 막대를 남은 양과 상관없이 이 색으로 그립니다. 증감 연출과 소리는 바뀌지 않습니다",
         "overResource": "오버 리소스",
         "overResourceHint": "현재값이 최댓값을 넘을 수 있게 합니다. 일시적인 보정 등을 최댓값을 돌아갈 값으로 삼아 관리할 수 있습니다",
         "changeEffect": "증감 시 이펙트",
@@ -5664,7 +5830,8 @@
         "showTable": "테이블 전환",
         "carry": "누른 사람의 말 옮기기",
         "tableSetting": "테이블 설정 바꾸기",
-        "battle": "전투 컷인"
+        "battle": "전투 컷인",
+        "scene": "장면 반영"
       },
       "delay": "대기 (초)",
       "moveUp": "위로",
@@ -5756,7 +5923,8 @@
         "on": "켜기",
         "off": "끄기"
       },
-      "battleHint": "GM이 좌우로 나눈 말로 전투 컷인을 모두에게 표시합니다. 공격하는 말은 편성에 있는 말 중 차례인 말, 누른 사람의 말, 왼쪽 첫 번째 말 순입니다."
+      "battleHint": "GM이 좌우로 나눈 말로 전투 컷인을 모두에게 표시합니다. 공격하는 말은 편성에 있는 말 중 차례인 말, 누른 사람의 말, 왼쪽 첫 번째 말 순입니다.",
+      "sceneHint": "누른 사람의 화면에서 장면을 반영합니다. PL이 눌러도 반영됩니다."
     },
     "soundSettings": {
       "ownHeading": "내 음량",
@@ -5908,11 +6076,22 @@
       "onTable": "테이블의 말",
       "toLeft": "왼쪽으로",
       "toRight": "오른쪽으로",
+      "partyHeading": "진영의 위치",
+      "partyHint": "진영마다 좌우를 정하면, 조를 정하지 않은 말은 그 진영 쪽에 섭니다. 바꿀 때까지 그 위치를 유지합니다.",
+      "partyNone": "없음",
+      "withParty": "진영",
+      "withPartyHint": "진영의 위치에 서 있습니다",
+      "followParty": "진영으로 되돌리기",
       "effectHeading": "말의 공격 연출",
       "effectHint": "연출을 지정하지 않은 공격에서는 말에 설정한 연출이 나옵니다. 설정이 없으면 피해나 회복량에 맞는 연출이 나옵니다.",
       "piece": "말",
       "effect": "연출",
       "stageEffect": "(설정 안 함)",
+      "facing": "그림의 방향",
+      "facingAsDrawn": "그대로",
+      "facingLeft": "왼쪽을 향함",
+      "facingRight": "오른쪽을 향함",
+      "facingHint": "그림이 향한 쪽을 고르면, 무대에서는 상대 쪽을 보도록 좌우를 반전합니다.",
       "noPieces": "테이블에 말이 없습니다.",
       "roomHeading": "방 설정",
       "roomMasterOnly": "GM만 변경할 수 있습니다.",
@@ -5938,6 +6117,155 @@
       "addPicture": "이미지 등록",
       "removePicture": "「{{name}}」 등록 해제",
       "picturesHint": "등록한 이미지는 무대로 고를 수 있습니다. {{limit}}장까지 등록할 수 있습니다."
+    },
+    "gameClock": {
+      "title": "게임 내 시간",
+      "dayFormat": "{n}일째",
+      "defaultPeriods": "아침,낮,저녁,밤",
+      "announceOn": "시간을 진행했습니다: {{day}} {{time}}",
+      "announceBack": "시간을 되돌렸습니다: {{day}} {{time}}",
+      "stepOn": "시간 진행",
+      "stepBack": "시간 되돌리기",
+      "settings": "게임 내 시간 설정",
+      "close": "게임 내 시간 숨기기",
+      "mode": "시각의 표시",
+      "mode_periods": "시간대",
+      "mode_hours": "24시간",
+      "day": "일",
+      "period": "지금의 시간대",
+      "periods": "시간대의 이름",
+      "periodsHint": "쉼표로 구분해 하루의 순서대로 씁니다. 비우면 「아침,낮,저녁,밤」입니다.",
+      "time": "지금의 시각",
+      "step": "한 번에 진행",
+      "stepMinutes": "{{n}}분",
+      "stepHours": "{{n}}시간",
+      "dayFormatLabel": "날짜의 표기",
+      "dayFormatHint": "{n}이 날의 수가 됩니다（예: Day {n}）. 비우면 「{n}일째」입니다.",
+      "announce": "진행하거나 되돌렸을 때 채팅에 표시",
+      "skies": "시간대의 하늘",
+      "skiesHint": "시간대마다 어느 시각의 하늘을 보일지 고릅니다. 자동은 하루를 시간대의 수로 나눈 시각입니다.",
+      "skyEven": "자동（{{hour}}시）",
+      "sky_6": "아침（6시）",
+      "sky_9": "오전（9시）",
+      "sky_12": "낮（12시）",
+      "sky_15": "오후（15시）",
+      "sky_18": "저녁（18시）",
+      "sky_21": "초저녁（21시）",
+      "sky_0": "밤（0시）",
+      "sky_3": "새벽（3시）"
+    },
+    "scene": {
+      "title": "장면",
+      "create": "지금의 판으로 만들기",
+      "createHint": "보여 주고 있는 테이블의 모습과 흐르는 BGM·환경음을 장면으로 만듭니다",
+      "defaultName": "장면{{index}}",
+      "untitled": "이름 없는 장면",
+      "copyName": "{{name}} 사본",
+      "empty": "장면이 아직 없습니다. 판을 갖춘 뒤 「지금의 판으로 만들기」를 누릅니다",
+      "apply": "반영",
+      "applyNamed": "「{{name}}」 반영",
+      "current": "지금의 장면",
+      "gameMasterOnly": "장면은 GM만 쓸 수 있습니다",
+      "overwriteConfirm": "「{{name}}」을(를) 지금의 판으로 덮어쓸까요?（표시한 항목만 바뀝니다）",
+      "deleteConfirm": "「{{name}}」을(를) 삭제할까요?",
+      "menu": {
+        "applyWithoutBgm": "BGM은 그대로 반영",
+        "applyWithoutText": "텍스트 없이 반영",
+        "edit": "편집",
+        "overwrite": "지금의 판으로 덮어쓰기",
+        "overwriteHint": "표시한 항목을 보여 주는 테이블과 흐르는 소리로 다시 씁니다",
+        "duplicate": "복제",
+        "moveTo": "폴더로 옮기기",
+        "delete": "삭제"
+      },
+      "part": {
+        "table": "보여 줄 테이블",
+        "floor": "바닥",
+        "background": "배경",
+        "walls": "벽",
+        "foreground": "전경",
+        "weather": "날씨",
+        "darkness": "어둠",
+        "fog": "전장의 안개",
+        "bgm": "BGM",
+        "bgs": "환경음",
+        "cutIn": "컷인",
+        "clock": "게임 내 시간의 시간대",
+        "text": "전환 텍스트",
+        "fade": "암전"
+      },
+      "wall": {
+        "north": "북쪽 벽",
+        "east": "동쪽 벽",
+        "south": "남쪽 벽",
+        "west": "서쪽 벽"
+      },
+      "editor": {
+        "namePlaceholder": "장면의 이름",
+        "hint": "체크한 항목만 반영할 때 바뀝니다. 체크하면 지금의 판의 값에서 시작합니다",
+        "leave": "바꾸지 않음",
+        "pickPicture": "이미지 고르기",
+        "noPicture": "없음",
+        "takeAway": "없음으로",
+        "on": "켜기",
+        "off": "끄기",
+        "bgmStop": "멈춤",
+        "bgmTrack": "곡 틀기",
+        "bgmPlaylist": "재생 목록을 처음부터 틀기",
+        "chooseTrack": "곡 고르기",
+        "choosePlaylist": "재생 목록 고르기",
+        "bgsNone": "고르지 않으면 환경음을 모두 멈춥니다",
+        "bgsHint": "고른 환경음만 틀고 나머지는 멈춥니다",
+        "clockHours": "게임 내 시간이 24시간일 때는 바뀌지 않습니다",
+        "cutInsNone": "반영할 때 틀 컷인（여럿이면 하나를 골라 틉니다）",
+        "cutInStopsMusic": "음악이 있는 컷인은 흐르면 BGM을 멈춥니다. 장면의 BGM과 함께는 쓸 수 없습니다",
+        "textPlaceholder": "반영할 때 채팅에 낼 문장（장식 표기를 쓸 수 있습니다）",
+        "textTab": "낼 탭",
+        "firstTab": "첫 탭"
+      }
+    },
+    "scenarioText": {
+      "title": "시나리오 텍스트",
+      "create": "새 텍스트",
+      "defaultTitle": "텍스트{{index}}",
+      "untitled": "이름 없는 텍스트",
+      "copyTitle": "{{title}} 사본",
+      "empty": "텍스트가 아직 없습니다. 「새 텍스트」로 쓰기 시작합니다",
+      "noWords": "（본문 없음）",
+      "noMatch": "찾을 수 없습니다",
+      "search": "제목과 본문에서 찾기",
+      "gameMasterOnly": "시나리오 텍스트는 GM만 쓸 수 있습니다",
+      "titlePlaceholder": "제목（제목으로 보내면 발언자의 이름이 됩니다）",
+      "wordsPlaceholder": "본문. 채팅과 같은 장식을 쓸 수 있습니다. Enter로 줄을 바꿉니다",
+      "saidAs": "보내는 방식",
+      "tab": "탭",
+      "tabBeingRead": "열려 있는 탭",
+      "color": "색",
+      "colorOfSpeaker": "말하는 쪽의 색으로 되돌리기",
+      "colorOfSpeakerNote": "（말하는 쪽의 색）",
+      "whisperPlaceholder": "귓속말로 보낼 상대（고르지 않으면 모두에게 보냅니다）",
+      "send": "보내기",
+      "whisper": "귓속말로 보내기",
+      "sendNamed": "「{{title}}」 보내기",
+      "sentAt": "{{time}}에 보냈습니다",
+      "deleteConfirm": "「{{title}}」을(를) 삭제할까요?",
+      "speaker": {
+        "title": "제목으로",
+        "character": "말하고 있는 캐릭터로",
+        "system": "시스템으로"
+      },
+      "menu": {
+        "sendAs": "보내는 방식을 바꿔 보내기",
+        "edit": "편집",
+        "duplicate": "복제",
+        "moveTo": "폴더로 옮기기",
+        "delete": "삭제"
+      },
+      "suggestions": "시나리오 텍스트 후보",
+      "import": "한꺼번에 가져오기",
+      "importRun": "가져오기",
+      "importHint": "대본의 글을 붙여 넣으면 제목 줄（# 또는 ■로 시작하는 줄）마다 텍스트 1건으로 나눕니다. 제목 줄이 제목이 됩니다",
+      "importPlaceholder": "# 도입\n비가 내리고 있다.\n\n# 저택\n문이 삐걱거린다."
     }
   },
   "app": {
@@ -5958,6 +6286,7 @@
       "gameResources": "게임 리소스",
       "media": "미디어",
       "clock": "시계",
+      "gameClock": "게임 내 시간",
       "compass": "나침반",
       "connectionQuality": "통신 품질",
       "miniPlayer": "미니 플레이어",

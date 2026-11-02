@@ -42,15 +42,18 @@ import {
 import { CutIn } from '@axe/domain/media/cut-in';
 import { presetSoundLabelKey, soundFileName } from '@axe/domain/media/preset-sound-labels';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { BoardScene } from '@axe/domain/scene/board-scene';
 import { RANGE_DEFAULT_BORDER_COLOR, RANGE_DEFAULT_FILL_COLOR } from '@axe/domain/tabletop/range';
 import { isMenuCommandOffered, MENU_COMMANDS } from '@axe/domain/ui/menu-command';
 import { CHARACTER_PANELS, DEFAULT_CHARACTER_PANEL, panelLabelKey } from '@axe/domain/ui/room-panel';
 import { EffectPreviewComponent } from '@axe/features/effect/effect-preview/effect-preview.component';
 import { findSlotActor } from '@axe/features/hotbar/hotbar-actor';
 import { HotbarRunnerService } from '@axe/features/hotbar/hotbar-runner.service';
+import { NgSelectWindowDirective } from '@axe/ui/directives/ng-select-window.directive';
 import { TextTooltipDirective } from '@axe/ui/directives/text-tooltip.directive';
 import { SafePipe } from '@axe/ui/pipes/safe.pipe';
 import { TranslocoModule } from '@jsverse/transloco';
+import { NgOptgroupTemplateDirective, NgSelectComponent } from '@ng-select/ng-select';
 
 /**
  * A trial belongs to no cell of the bar, so what it lays out is its own to take down again.
@@ -63,11 +66,31 @@ const REHEARSAL_CELL: HotbarCell = { page: -1, slotIndex: -1 };
 /** What a step joining a group waits for, until the reader says otherwise. */
 const DEFAULT_STEP_DELAY_MS = 300;
 
+/** A palette line as the picker lists it, with the tab and heading it was written beneath. */
+interface PalettePick {
+  /** Where it stands in the palette, which tells it from another line that reads the same. */
+  id: string;
+  line: string;
+  /** The group it was written in, counted in order, so two groups under the same heading stay apart. */
+  groupIndex: number;
+  /** `tab / heading`, either alone, or empty for a line written under neither. */
+  group: string;
+}
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'hotbar-slot-editor',
   templateUrl: './hotbar-slot-editor.component.html',
-  imports: [TextTooltipDirective, FormsModule, SafePipe, TranslocoModule, EffectPreviewComponent],
+  imports: [
+    TextTooltipDirective,
+    FormsModule,
+    SafePipe,
+    TranslocoModule,
+    EffectPreviewComponent,
+    NgSelectComponent,
+    NgOptgroupTemplateDirective,
+    NgSelectWindowDirective,
+  ],
 })
 export class HotbarSlotEditorComponent {
   private readonly panelService = inject(PanelService);
@@ -90,7 +113,16 @@ export class HotbarSlotEditorComponent {
   readonly cell = signal<HotbarCell>({ page: 0, slotIndex: 0 });
   readonly draft = signal<HotbarSlotDraft>(emptyHotbarSlotDraft());
 
-  readonly kinds = HOTBAR_SLOT_KINDS;
+  /**
+   * The kinds a slot may be made, the scenes only for the game master, who alone puts them on and
+   * whose scenes nobody else is to read the names of. A slot already of a kind keeps it listed.
+   */
+  readonly kinds = computed(() => {
+    this.objectChange.trackMyCursor();
+    const master = PeerCursor.isMyselfGameMaster;
+    const current = this.kind();
+    return HOTBAR_SLOT_KINDS.filter((kind) => kind !== 'scene' || master || kind === current);
+  });
   protected readonly effectModes = EFFECT_MODES;
   protected readonly panelNames = CHARACTER_PANELS;
   protected readonly turnActions = TURN_ACTIONS;
@@ -186,6 +218,38 @@ export class HotbarSlotEditorComponent {
     return paletteCommandGroups(palette.getPalette());
   });
 
+  /** The same lines laid out flat for the picker, in the order they are written, each carrying its group. */
+  protected readonly palettePickItems = computed<PalettePick[]>(() =>
+    this.palettePicks().flatMap((group, groupIndex) => {
+      const label = group.tab && group.heading ? `${group.tab} / ${group.heading}` : group.tab || group.heading;
+      return group.lines.map((line, lineIndex) => ({
+        id: `${groupIndex}:${lineIndex}`,
+        line,
+        groupIndex,
+        group: label,
+      }));
+    })
+  );
+
+  /** The line last taken from the palette, so that of two lines reading the same, the one taken is shown. */
+  private readonly takenPick = signal<string | null>(null);
+
+  /**
+   * The palette line the box holds as it stands, which the picker shows as chosen: the one taken,
+   * or the first that reads the same; none once it is reworded.
+   */
+  protected readonly pickedPaletteId = computed(() => {
+    const value = this.draft().value;
+    const picks = this.palettePickItems();
+    const taken = picks.find((pick) => pick.id === this.takenPick() && pick.line === value);
+    return (taken ?? picks.find((pick) => pick.line === value))?.id ?? null;
+  });
+
+  /** What a group of the picker shows as its heading, read from the lines in it. */
+  protected readonly palettePickGroup = (_groupIndex: number, picks: PalettePick[]) => ({
+    group: picks[0]?.group ?? '',
+  });
+
   /** Only a slot that acts on a character has to say which one. */
   protected readonly needsActor = computed(() => hotbarSlotNeedsCharacter(this.kind()));
 
@@ -209,6 +273,24 @@ export class HotbarSlotEditorComponent {
     const role = PeerCursor.myRole;
     return MENU_COMMANDS.filter((command) => command.action.kind !== 'custom' && isMenuCommandOffered(command, role));
   });
+  /** The scenes a scene slot may put on. */
+  protected readonly sceneChoices = computed(() => {
+    this.objectChange.trackMyCursor();
+    if (!PeerCursor.isMyselfGameMaster) return [];
+    this.objectChange.collectionOf(BoardScene.aliasName)();
+    return BoardScene.all().map((scene) => ({ identifier: scene.identifier, name: scene.name }));
+  });
+  protected readonly sceneOptions = computed(() => {
+    const options = this.options();
+    return options.kind === 'scene' ? options : null;
+  });
+
+  /** Points a scene slot at a scene, keeping the name it went by for a bar read in another room. */
+  protected setScene(identifier: string): void {
+    const scene = this.sceneChoices().find((choice) => choice.identifier === identifier);
+    this.patchOptions({ scene: scene?.identifier ?? '', sceneName: scene?.name ?? '' });
+  }
+
   protected readonly menuCommandKey = computed(() => {
     const options = this.options();
     return options.kind === 'menu' ? options.command : '';
@@ -411,9 +493,11 @@ export class HotbarSlotEditorComponent {
   }
 
   /** A line taken from the palette lands in the box, where it can still be worked on. */
-  protected takeFromPalette(line: string): void {
-    if (!line) return;
-    this.setValue(line);
+  protected takeFromPalette(id: string | null): void {
+    const pick = this.palettePickItems().find((candidate) => candidate.id === id);
+    if (!pick) return;
+    this.takenPick.set(pick.id);
+    this.setValue(pick.line);
   }
 
   /** A value chosen from a list keeps the name it was shown under; a typed one has none. */
