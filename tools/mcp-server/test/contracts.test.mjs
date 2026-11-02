@@ -757,6 +757,36 @@ test('says several lines in one call, each after the one before has had time to 
   );
 });
 
+test('takes the music of a novel scene from the sound folders with the stage', async () => {
+  await workspace(async ({ audio }) => {
+    const music = Buffer.from([2, 7, 1]);
+    await writeFile(path.join(audio, 'town.mp3'), music);
+    const calls = [];
+    await connected(
+      async (command, args) => {
+        calls.push([command, args]);
+        return { ok: true, data: {} };
+      },
+      async (client) => {
+        const stage = (extra) =>
+          client.callTool({ name: 'vn_stage', arguments: { sessionId: 'session', open: true, ...extra } });
+        await stage({ bgmFile: 'town.mp3', fade: true });
+        assert.equal(calls[0][1].bgm, sha(music));
+        assert.equal(calls[0][1].audios.length, 1);
+        assert.equal(calls[0][1].fade, true);
+        await stage({ stopBgm: true });
+        assert.equal(calls[1][1].bgm, 'stop');
+        assert.equal((await stage({ bgmFile: 'none.mp3' })).structuredContent.error.code, 'NOT_FOUND');
+        assert.equal(
+          (await stage({ bgmFile: 'town.mp3', stopBgm: true })).structuredContent.error.code,
+          'INVALID_ARGUMENT'
+        );
+      },
+      { templates: { audio: [audio] } }
+    );
+  });
+});
+
 test('dresses a table from the image and sound folders, sending a picture used twice once', async () => {
   await workspace(async ({ root, audio }) => {
     const folder = path.join(root, 'images');

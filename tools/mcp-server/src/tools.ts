@@ -104,6 +104,7 @@ function timeoutFor(command: string, args: Record<string, unknown>): number {
   if (command === 'table_create') return TABLE_CREATE_TIMEOUT_MS;
   if (command === 'room_template_load') return ROOM_TEMPLATE_TIMEOUT_MS;
   if (command === 'bgm_play' || command === 'audio_restore' || command === 'table_set') return BGM_PLAY_TIMEOUT_MS;
+  if (command === 'vn_stage' && args['audios'] !== undefined) return BGM_PLAY_TIMEOUT_MS;
   if (command !== 'chat_wait') return DEFAULT_TIMEOUT_MS;
   const seconds = typeof args['waitSeconds'] === 'number' ? args['waitSeconds'] : 60;
   // A wait that gathers speech in fragments may run on past waitSeconds, by up to the settling cap.
@@ -642,7 +643,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'vn_stage',
       read: false,
       description:
-        'Stage a scene of talk in novel mode: open: true opens novel mode on every screen (false closes it), backgroundFile sets the picture behind the speakers from the image folder (clear: true removes the picture, not the speakers), transition (fade, wipe, none) plays as it changes. Speakers stand in by themselves from the pieces whose lines are shown, so speak NPC lines with chat_send characterId set to the NPC piece; a piece put out of sight (piece_conceal) or removed leaves the stage. Opening or closing clears the speakers of the scene before from the stage (resetCast, default true whenever open is given; false keeps them), drawing the line in tabId (default the first tab, the main one). Use it for scenes centred on talking with NPCs, and close it when the talk ends; otherwise play on the table. Game master only; requires the prepare_room browser grant.',
+        'Stage a scene of talk in novel mode, all in one call: bgmFile (a file in the sound folders) plays the music of the scene, carrying on if that track is already playing, stopBgm: true stops the music, and fade: true darkens every screen for a moment while the rest changes, for a change of place or time. open: true opens novel mode on every screen (false closes it), backgroundFile sets the picture behind the speakers from the image folder (clear: true removes the picture, not the speakers), transition (fade, wipe, none) plays as it changes. Speakers stand in by themselves from the pieces whose lines are shown, so speak NPC lines with chat_send characterId set to the NPC piece; a piece put out of sight (piece_conceal) or removed leaves the stage. Opening or closing clears the speakers of the scene before from the stage (resetCast, default true whenever open is given; false keeps them), drawing the line in tabId (default the first tab, the main one). Use it for scenes centred on talking with NPCs, and close it when the talk ends; otherwise play on the table. Game master only; requires the prepare_room browser grant.',
       shape: {
         ...retry,
         open: z.boolean().optional(),
@@ -651,6 +652,9 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
         transition: z.enum(['fade', 'wipe', 'none']).optional(),
         resetCast: z.boolean().optional(),
         tabId: id.optional(),
+        bgmFile: z.string().min(1).max(256).optional(),
+        stopBgm: z.boolean().optional(),
+        fade: z.boolean().optional(),
       },
     },
     {
@@ -718,8 +722,14 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'table_select',
       read: false,
       description:
-        "Put a table in view for the whole room, playing its music and cut-ins as choosing it in the table settings does. flat sets the view the table recommends first, as table_view does (true: laid flat, 2D; false: perspective, 3D), so no separate table_view is needed; the result's flat says what it recommends now. Players' pieces stay at the same coordinates, so move them to where the scene starts. Notes and pieces are shared by every table, so standing lists the notes and pieces out on the table now (kind note or piece): put out of sight with piece_conceal whatever belongs to the scene left behind, such as place-name notes on a town map or NPCs, before playing on. Game master only; requires the prepare_room browser grant.",
-      shape: { ...retry, identifier: id, flat: z.boolean().optional(), dryRun: z.boolean().optional() },
+        "Put a table in view for the whole room, playing its music and cut-ins as choosing it in the table settings does. fade: true darkens every screen for a moment while the table changes. flat sets the view the table recommends first, as table_view does (true: laid flat, 2D; false: perspective, 3D), so no separate table_view is needed; the result's flat says what it recommends now. Players' pieces stay at the same coordinates, so move them to where the scene starts. Notes and pieces are shared by every table, so standing lists the notes and pieces out on the table now (kind note or piece): put out of sight with piece_conceal whatever belongs to the scene left behind, such as place-name notes on a town map or NPCs, before playing on. Game master only; requires the prepare_room browser grant.",
+      shape: {
+        ...retry,
+        identifier: id,
+        flat: z.boolean().optional(),
+        fade: z.boolean().optional(),
+        dryRun: z.boolean().optional(),
+      },
     },
     {
       name: 'chat_tab_create',
@@ -857,9 +867,21 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
           };
         }
         if (tool.name === 'vn_stage') {
-          const { backgroundFile, clear, ...rest } = given;
+          const { backgroundFile, clear, bgmFile, stopBgm, ...rest } = given;
           if (backgroundFile !== undefined && clear === true)
             return mapResult(failure('INVALID_ARGUMENT', 'Give backgroundFile or clear, not both.'));
+          if (bgmFile !== undefined && stopBgm === true)
+            return mapResult(failure('INVALID_ARGUMENT', 'Give bgmFile or stopBgm, not both.'));
+          if (stopBgm === true) rest['bgm'] = 'stop';
+          if (bgmFile !== undefined) {
+            const entry = (await library.entries(folders.audio ?? [])).find((sound) =>
+              sameName(sound.name, String(bgmFile))
+            );
+            if (!entry)
+              return mapResult(failure('NOT_FOUND', `No sound file ${String(bgmFile)} in the sound folders.`));
+            rest['bgm'] = entry.identifier;
+            rest['audios'] = [await library.read(entry)];
+          }
           if (clear === true) rest['background'] = '';
           if (backgroundFile !== undefined) {
             const picture = await images.read(String(backgroundFile));

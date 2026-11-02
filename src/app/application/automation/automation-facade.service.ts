@@ -45,6 +45,7 @@ import { EffectLibraryService } from '@axe/application/effect/effect-library.ser
 import { GameClockService } from '@axe/application/game-clock/game-clock.service';
 import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
 import { TurnOrderService } from '@axe/application/turn/turn-order.service';
+import { callSceneFade } from '@axe/core/event/domain-events';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { BuffRemovalRule } from '@axe/domain/character/buff-bulk-removal';
 import { GameCharacter } from '@axe/domain/character/game-character';
@@ -56,9 +57,11 @@ import { paletteLineAsChat, PaletteRow, paletteRowsOf } from '@axe/domain/chat/p
 import { DiceBot } from '@axe/domain/dice/dice-bot';
 import { DisclosureMode } from '@axe/domain/disclosure/disclosure';
 import { parseEffectChatToken } from '@axe/domain/effect/effect-chat-token';
+import { Jukebox } from '@axe/domain/media/jukebox';
 import { isTextureId, isWallTextureId } from '@axe/domain/media/texture-catalog';
 import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { SCENE_FADE } from '@axe/domain/scene/board-scene';
 import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 import { FilterType } from '@axe/domain/tabletop/game-table';
 import { MapMaterial } from '@axe/domain/tabletop/map-blocks';
@@ -232,7 +235,7 @@ function waitSecondsOf(value: unknown): number {
 /** How long a request may run before it is given up: a wait for chat gets its own wait and a margin. */
 function timeoutFor(request: AutomationRequest): number {
   if (request.command === 'table_create') return TABLE_CREATE_TIMEOUT_MS;
-  if (['room_template_load', 'bgm_play', 'audio_restore', 'table_set'].includes(request.command))
+  if (['room_template_load', 'bgm_play', 'audio_restore', 'table_set', 'vn_stage'].includes(request.command))
     return ROOM_TEMPLATE_TIMEOUT_MS;
   if (request.command !== 'chat_wait') return REQUEST_TIMEOUT_MS;
   return waitSecondsOf(request.arguments['waitSeconds']) * 1000 + WAIT_MARGIN_MS;
@@ -1220,7 +1223,7 @@ export class AutomationFacadeService {
         return this.ranges.set(range, change);
       }
       case 'vn_stage': {
-        onlyKeys(a, ['open', 'background', 'transition', 'resetCast', 'tabId', 'images']);
+        onlyKeys(a, ['open', 'background', 'transition', 'resetCast', 'tabId', 'images', 'bgm', 'audios', 'fade']);
         const transition = a['transition'];
         if (transition !== undefined && !VN_STAGE_TRANSITIONS.includes(transition as VnStageTransition))
           fail('INVALID_ARGUMENT', `transition must be one of ${VN_STAGE_TRANSITIONS.join(', ')}.`);
@@ -1230,7 +1233,11 @@ export class AutomationFacadeService {
         const open = a['open'] === undefined ? undefined : booleanOf(a['open'], 'open');
         // Opening or closing the stage starts the next scene of talk with nobody standing.
         const resets = a['resetCast'] === undefined ? open !== undefined : booleanOf(a['resetCast'], 'resetCast');
-        return this.vnStage.set(
+        const bgm = a['bgm'];
+        if (bgm !== undefined && (typeof bgm !== 'string' || !/^(stop|[0-9a-f]{64})$/.test(bgm)))
+          fail('INVALID_ARGUMENT', 'bgm must be a sound’s SHA-256, or stop.');
+        if (booleanOf(a['fade'], 'fade')) await this.darken(guard);
+        const stage = await this.vnStage.set(
           {
             open,
             resetCast: resets ? this.castTab(a['tabId']) : undefined,
@@ -1240,6 +1247,13 @@ export class AutomationFacadeService {
           },
           guard
         );
+        if (bgm === undefined) return stage;
+        const jukebox = this.store.get<Jukebox>('Jukebox');
+        // The music of the scene before carries on where it is the same, rather than start again.
+        if (jukebox?.isPlaying && jukebox.audioIdentifier === bgm)
+          return { ...stage, music: { playing: bgm, kept: true } };
+        const audios = a['audios'] === undefined ? [] : automationAudiosOf(a['audios']);
+        return { ...stage, music: await this.roomTemplates.play(bgm === 'stop' ? null : bgm, true, audios, guard) };
       }
       case 'view_focus': {
         onlyKeys(a, ['identifier', 'x', 'y', 'unit']);
@@ -1314,10 +1328,11 @@ export class AutomationFacadeService {
         return this.roomPrep.view(table, a['flat']);
       }
       case 'table_select': {
-        onlyKeys(a, ['identifier', 'flat', 'dryRun']);
+        onlyKeys(a, ['identifier', 'flat', 'fade', 'dryRun']);
         const table = this.roomPrep.table(textArgument(a['identifier']));
         const flat = a['flat'] === undefined ? undefined : booleanOf(a['flat'], 'flat');
         if (booleanOf(a['dryRun'], 'dryRun')) return { identifier: table.identifier, dryRun: true };
+        if (booleanOf(a['fade'], 'fade')) await this.darken(guard);
         // The view it recommends is set first, so the table comes into view already laid flat or stood up.
         if (flat !== undefined) this.roomPrep.view(table, flat);
         return { ...this.roomPrep.select(table), flat: table.mode2d };
@@ -1383,6 +1398,13 @@ export class AutomationFacadeService {
         );
       }
     }
+  }
+
+  /** Darkens every screen and waits for the dark, so what changes next changes unseen, as a scene that fades does. */
+  private async darken(guard: () => void): Promise<void> {
+    callSceneFade();
+    await new Promise((resolve) => setTimeout(resolve, SCENE_FADE.inMs));
+    guard();
   }
 
   /** Where the round stands: its number, its phase, whose turn it is and who has had theirs, in order. */

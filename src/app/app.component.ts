@@ -97,6 +97,7 @@ import { GameTableComponent } from '@axe/features/tabletop/game-table/game-table
 import { ImageDropEventHandlerService } from '@axe/features/tabletop/image-drop/image-drop-event-handler.service';
 import { InterruptPromptComponent } from '@axe/features/tabletop/interrupt-prompt/interrupt-prompt.component';
 import { MovePlanBandComponent } from '@axe/features/tabletop/move-plan-band/move-plan-band.component';
+import { SceneFadeOverlayComponent } from '@axe/features/tabletop/scene-fade-overlay/scene-fade-overlay.component';
 import { MovePlanEventHandlerService } from '@axe/features/tabletop/table-move-range-overlay/move-plan-event-handler.service';
 import { VisualNovelEventHandlerService } from '@axe/features/visual-novel/visual-novel-event-handler.service';
 import { VisualNovelOverlayComponent } from '@axe/features/visual-novel/visual-novel-overlay/visual-novel-overlay.component';
@@ -155,6 +156,7 @@ import { version as APP_VERSION } from '@pkg';
     AutomationControlComponent,
     VoiceStatusComponent,
     CharacterRosterComponent,
+    SceneFadeOverlayComponent,
   ],
 })
 export class AppComponent {

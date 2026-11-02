@@ -1759,11 +1759,15 @@ describe('AutomationFacadeService', () => {
       const identifier = await calcSHA256Async(bytes.buffer);
       vi.spyOn(ImageStorage.instance, 'addAsync').mockResolvedValue(null as never);
       const opened: unknown[] = [];
+      let faded = 0;
       const listening = networkMessage$.subscribe((message) => {
         if (message.eventName === VN_MODE_EVENT) opened.push(message.data);
+        if (message.eventName === 'SCENE_FADE') faded++;
       });
       setNetworkIsolated(true);
       try {
+        expect((await call('vn_stage', { fade: true })).ok).toBe(true);
+        expect(faded).toBe(1);
         const result = await call('vn_stage', {
           open: true,
           background: identifier,
@@ -1776,6 +1780,8 @@ describe('AutomationFacadeService', () => {
         expect((await call('vn_stage', { open: false, background: '' })).ok).toBe(true);
         expect(stage.backgroundImageIdentifier).toBe('');
         error(await call('vn_stage', { transition: 'spin' }), 'INVALID_ARGUMENT');
+        error(await call('vn_stage', { bgm: 'not-a-sound' }), 'INVALID_ARGUMENT');
+        error(await call('vn_stage', { fade: 'yes' }), 'INVALID_ARGUMENT');
       } finally {
         setNetworkIsolated(false);
         listening();
@@ -2122,6 +2128,51 @@ describe('AutomationFacadeService', () => {
         expect((await call('bgm_play', { stop: true })).ok).toBe(true);
         expect(stop).toHaveBeenCalled();
         error(await call('bgm_play', {}), 'INVALID_ARGUMENT');
+      });
+
+      it('plays the music of a novel scene with its stage, carrying on the same track', async () => {
+        beGameMaster();
+        new VnStage('VnStage').initialize();
+        const jukebox = new Jukebox('Jukebox');
+        jukebox.initialize();
+        const play = vi.spyOn(jukebox, 'play').mockImplementation(() => undefined);
+        const stop = vi.spyOn(jukebox, 'stop').mockImplementation(() => undefined);
+        const town = await sound(4);
+
+        expect(await call('vn_stage', { bgm: town.identifier, audios: [town] })).toMatchObject({
+          ok: true,
+          data: { music: { playing: town.identifier, loop: true } },
+        });
+        expect(play).toHaveBeenCalledTimes(1);
+
+        jukebox.audioIdentifier = town.identifier;
+        jukebox.isPlaying = true;
+        expect(await call('vn_stage', { bgm: town.identifier })).toMatchObject({
+          ok: true,
+          data: { music: { playing: town.identifier, kept: true } },
+        });
+        expect(play).toHaveBeenCalledTimes(1);
+
+        expect((await call('vn_stage', { bgm: 'stop' })).ok).toBe(true);
+        expect(stop).toHaveBeenCalled();
+      });
+
+      it('darkens every screen before the table changes when asked', async () => {
+        beGameMaster();
+        const faded: string[] = [];
+        const listening = networkMessage$.subscribe((message) => {
+          if (message.eventName === 'SCENE_FADE') faded.push(message.eventName);
+        });
+        setNetworkIsolated(true);
+        try {
+          expect((await call('table_select', { identifier: table.identifier, fade: true })).ok).toBe(true);
+          expect(faded).toHaveLength(1);
+          expect((await call('table_select', { identifier: table.identifier })).ok).toBe(true);
+          expect(faded).toHaveLength(1);
+        } finally {
+          setNetworkIsolated(false);
+          listening();
+        }
       });
 
       it('leaves templates and music to the game master', async () => {
