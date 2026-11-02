@@ -22,6 +22,7 @@ export const AUTOMATION_COMMANDS = [
   'piece_remove',
   'piece_reveal',
   'piece_conceal',
+  'piece_stealth',
   'table_list',
   'table_create',
   'table_select',
@@ -48,6 +49,7 @@ export const AUTOMATION_COMMANDS = [
   'turn_get',
   'turn_set',
   'character_update',
+  'game_clock_set',
 ] as const;
 export type AutomationCommand = (typeof AUTOMATION_COMMANDS)[number];
 export const AUTOMATION_SCOPES = [
@@ -75,6 +77,7 @@ export const AUTOMATION_WRITES: readonly AutomationCommand[] = [
   'piece_remove',
   'piece_reveal',
   'piece_conceal',
+  'piece_stealth',
   'table_create',
   'table_select',
   'chat_tab_create',
@@ -95,6 +98,7 @@ export const AUTOMATION_WRITES: readonly AutomationCommand[] = [
   'self_set',
   'turn_set',
   'character_update',
+  'game_clock_set',
 ];
 export type AutomationScope = (typeof AUTOMATION_SCOPES)[number];
 export type AutomationErrorCode =

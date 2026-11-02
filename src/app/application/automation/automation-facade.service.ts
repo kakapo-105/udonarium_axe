@@ -39,7 +39,9 @@ import { RoomTemplateCommandService } from '@axe/application/automation/room-tem
 import { SessionCommandService } from '@axe/application/automation/session-command.service';
 import { SwitchCommandService, SwitchRequest } from '@axe/application/automation/switch-command.service';
 import { VnStageCommandService } from '@axe/application/automation/vn-stage-command.service';
+import { StealthService } from '@axe/application/character/stealth.service';
 import { EffectLibraryService } from '@axe/application/effect/effect-library.service';
+import { GameClockService } from '@axe/application/game-clock/game-clock.service';
 import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
 import { TurnOrderService } from '@axe/application/turn/turn-order.service';
 import { ObjectStore } from '@axe/core/sync/object-store';
@@ -81,6 +83,7 @@ const MAX_TEMPLATE_PART_XML = 200_000;
 const MAX_TEMPLATE_TABLES = 20;
 /** The commands that set the room up, which only the game master runs. */
 const ROOM_PREP_WRITES: readonly AutomationCommand[] = [
+  'game_clock_set',
   'table_create',
   'table_select',
   'chat_tab_create',
@@ -337,6 +340,8 @@ export class AutomationFacadeService {
   private readonly audit = inject(AutomationAuditService);
   private readonly effects = inject(EffectLibraryService);
   private readonly turns = inject(TurnOrderService);
+  private readonly stealth = inject(StealthService);
+  private readonly gameClock = inject(GameClockService);
   private readonly store = inject(ObjectStore);
   private readonly tables = inject(TableSelecter);
   private readonly remembered = new Map<string, Remembered>();
@@ -510,6 +515,12 @@ export class AutomationFacadeService {
       const from = request.command === 'piece_reveal' ? CONCEALED_LOCATION : 'table';
       for (const identifier of textsOf(args['identifiers'], 'identifiers', MAX_CREATED_PIECES))
         this.pieceCommands.own(identifier, [from]);
+    }
+    if (request.command === 'piece_stealth') {
+      this.policy.require('create_piece');
+      this.policy.requireGameMaster();
+      for (const identifier of textsOf(args['identifiers'], 'identifiers', MAX_CREATED_PIECES))
+        this.pieceCommands.own(identifier, ['table']);
     }
     if (request.command === 'character_update') {
       // A piece's sheet is rewritten, as making it again would: whoever may make pieces and control this one.
@@ -922,6 +933,37 @@ export class AutomationFacadeService {
         if (booleanOf(a['dryRun'], 'dryRun'))
           return { [revealing ? 'revealed' : 'concealed']: pieces.map((piece) => piece.identifier), dryRun: true };
         return revealing ? this.pieceCommands.reveal(pieces) : this.pieceCommands.conceal(pieces);
+      }
+      case 'piece_stealth': {
+        onlyKeys(a, ['identifiers', 'stealth', 'dryRun']);
+        const on = booleanOf(a['stealth'], 'stealth');
+        const pieces = textsOf(a['identifiers'], 'identifiers', MAX_CREATED_PIECES).map((identifier) =>
+          this.pieceCommands.own(identifier, ['table'])
+        );
+        const characters = pieces.filter((piece): piece is GameCharacter => piece instanceof GameCharacter);
+        if (characters.length < pieces.length) fail('INVALID_ARGUMENT', 'Only a character can go into stealth.');
+        const identifiers = characters.map((piece) => piece.identifier);
+        if (booleanOf(a['dryRun'], 'dryRun')) return { stealth: on, identifiers, dryRun: true };
+        for (const character of characters) this.stealth.set(character, on);
+        return { stealth: on, identifiers };
+      }
+      case 'game_clock_set': {
+        onlyKeys(a, ['steps', 'day', 'period', 'minutes']);
+        const steps = wholeOf(a['steps'], 'steps', -24, 24, 0);
+        if (a['day'] !== undefined) this.gameClock.setDay(wholeOf(a['day'], 'day', 1, 99999, 1));
+        if (a['period'] !== undefined) {
+          const named = this.gameClock.periods().indexOf(textArgument(a['period'], 64).trim());
+          if (named < 0) fail('INVALID_ARGUMENT', `period must be one of ${this.gameClock.periods().join(', ')}.`);
+          this.gameClock.setPeriod(named);
+        }
+        if (a['minutes'] !== undefined) this.gameClock.setMinutes(wholeOf(a['minutes'], 'minutes', 0, 1439, 0));
+        for (let step = 0; step < Math.abs(steps); step++) this.gameClock.step(steps > 0 ? 1 : -1);
+        return {
+          day: this.gameClock.dayText(),
+          time: this.gameClock.timeText(),
+          mode: this.gameClock.clock().mode,
+          periods: this.gameClock.periods(),
+        };
       }
       case 'table_list':
         onlyKeys(a, []);

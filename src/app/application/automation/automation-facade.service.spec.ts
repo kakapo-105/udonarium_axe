@@ -4,6 +4,7 @@ import { AutomationFacadeService } from '@axe/application/automation/automation-
 import { AutomationPolicyService } from '@axe/application/automation/automation-policy.service';
 import { ChatWaitService } from '@axe/application/automation/chat-wait.service';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
+import { GameClockService } from '@axe/application/game-clock/game-clock.service';
 import { ConcealmentService } from '@axe/application/tabletop/concealment.service';
 import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
 import { VisionService } from '@axe/application/tabletop/vision.service';
@@ -1297,6 +1298,46 @@ describe('AutomationFacadeService', () => {
         });
         expect((await call('character_sheet_get', { identifier: made.identifier, paths: ['リソース'] })).ok).toBe(true);
         expect((await call('palette_get', { identifier: made.identifier })).ok).toBe(true);
+      });
+
+      it('puts a piece on the table into stealth and brings it out, for the master alone', async () => {
+        beGameMaster();
+        const made = await hide();
+        await call('piece_reveal', { identifiers: [made.identifier] });
+        const piece = store.get<GameCharacter>(made.identifier)!;
+
+        expect(
+          await call('piece_stealth', { identifiers: [made.identifier], stealth: true, dryRun: true })
+        ).toMatchObject({ ok: true, data: { dryRun: true } });
+        expect(piece.stealth).not.toBe('1');
+
+        expect(await call('piece_stealth', { identifiers: [made.identifier], stealth: true })).toMatchObject({
+          ok: true,
+          data: { stealth: true, identifiers: [made.identifier] },
+        });
+        expect(piece.stealth).toBe('1');
+        expect((await call('piece_stealth', { identifiers: [made.identifier], stealth: false })).ok).toBe(true);
+        expect(piece.stealth).toBe('');
+        error(await call('piece_stealth', { identifiers: [made.identifier], stealth: 'yes' }), 'INVALID_ARGUMENT');
+      });
+
+      it('moves the story clock, and only answers the time when given nothing', async () => {
+        beGameMaster();
+        policy.setScope('prepare_room', true);
+        const clock = TestBed.inject(GameClockService);
+        const periods = clock.periods();
+
+        const before = await call('game_clock_set', {});
+        expect(before).toMatchObject({ ok: true, data: { periods: [...periods] } });
+
+        expect(await call('game_clock_set', { day: 3, period: periods[0] })).toMatchObject({ ok: true });
+        expect(clock.clock()).toMatchObject({ day: 3, period: 0 });
+
+        expect((await call('game_clock_set', { steps: 1 })).ok).toBe(true);
+        expect(clock.clock().period).toBe(1);
+
+        error(await call('game_clock_set', { period: 'no such hour' }), 'INVALID_ARGUMENT');
+        error(await call('game_clock_set', { steps: 99 }), 'INVALID_ARGUMENT');
       });
 
       it('brings it back where it stood, and puts it out of sight again', async () => {

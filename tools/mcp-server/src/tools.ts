@@ -404,6 +404,30 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       shape: { ...retry, identifiers: z.array(id).min(1).max(MAX_PIECES), dryRun: z.boolean().optional() },
     },
     {
+      name: 'piece_stealth',
+      read: false,
+      description: `Put 1 to ${MAX_PIECES} of your own characters on the table into stealth, or bring them out with stealth: false. A piece in stealth stays on the board for the game master, marked, while the players cannot see it. Use it for a hidden enemy standing where it stands; use piece_conceal for one not on the scene yet. Game master only. Requires the create_piece browser grant.`,
+      shape: {
+        ...retry,
+        identifiers: z.array(id).min(1).max(MAX_PIECES),
+        stealth: z.boolean(),
+        dryRun: z.boolean().optional(),
+      },
+    },
+    {
+      name: 'game_clock_set',
+      read: false,
+      description:
+        "Move the story's clock, which everyone who shows the clock widget sees: steps moves it on (or back, negative) that many parts of the day or that many of its steps, saying each one in the chat if the room has it said; day, period (a name among the parts of the day) and minutes (past midnight, on a 24-hour clock) put it there silently. Given nothing, it only answers the time. Game master only; requires the prepare_room browser grant.",
+      shape: {
+        ...retry,
+        steps: z.number().int().min(-24).max(24).optional(),
+        day: z.number().int().min(1).max(99999).optional(),
+        period: z.string().min(1).max(64).optional(),
+        minutes: z.number().int().min(0).max(1439).optional(),
+      },
+    },
+    {
       name: 'table_list',
       read: true,
       description:
