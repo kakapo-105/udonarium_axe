@@ -85,6 +85,8 @@ export interface TemplateFolders {
   audio?: readonly string[];
   /** The folder of pictures: backgrounds, portraits and textures, with an index.json saying what each is. */
   images?: string;
+  /** The folder of scenarios, which lines written before a session are read from. */
+  scenarios?: string;
 }
 
 export interface LoadedTemplate {

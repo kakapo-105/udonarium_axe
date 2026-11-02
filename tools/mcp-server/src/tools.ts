@@ -12,6 +12,7 @@ import {
   type FetchText,
   MAX_PIECES,
 } from '#mcp/piece-source.js';
+import { type ChatLine, chatLineSchema, readPreparedLines } from '#mcp/prepared-lines.js';
 import { mapResult } from '#mcp/result-mapper.js';
 import {
   AudioLibrary,
@@ -166,26 +167,16 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'chat_send',
       read: false,
       description:
-        'Send public chat in an allowed tab as yourself or a controllable character. BCDice expressions are supported, and the answers of the dice bot to a line with dice come back in `rolls` (text, and `outcome` critical / fumble / success / failure when the bot told), so no chat_read_recent is needed to read the result. A line with no piece speaking is rolled under the default dice bot of the room. The answer to a secret roll (an S in front, such as S2d6 or SCCB<=50) comes back too, marked secret: true; only the roller sees it, so do not repeat it in public. A line of resource commands on the speaking character (:HP-5, :HP-2d6, :HP-if([2d6]>=10,5,0), $1 reads the first bracketed roll again; up to 10 on one line separated by spaces, such as :HP+6 :MP+3, and nothing else on that line) also needs edit_resource; write each without spaces. In lines, such a line with its characterId changes that piece, so a rest that restores several pieces is one call: the narration, then one resource line per piece. References ({name}), targets (t:, t&), an @word at the end of a line (it picks a portrait) and 《name》 naming one of the effects of the room (it plays it) are refused, and the error says how to write it instead; any other 《》, such as the name of a feat, and an @ inside a sentence are said as they are. style stages the line as the kinds in the chat input do, standing out in the log and in novel mode: narration (description by the narrator), location (a place heading, when the party arrives somewhere) or scene (a scene heading, when the scene changes). Give text for one line, or lines for several said in order in one call (a heading, the narration, then each NPC line as that NPC piece): each waits for the one before to be typed out and read in novel mode, so none is hidden, and the call returns once all are said (sent lists each identifier; on a failure the rest are not said and failed says which and why). Prefer lines to several calls. Requires a browser grant.',
+        'Send public chat in an allowed tab as yourself or a controllable character. BCDice expressions are supported, and the answers of the dice bot to a line with dice come back in `rolls` (text, and `outcome` critical / fumble / success / failure when the bot told), so no chat_read_recent is needed to read the result. A line with no piece speaking is rolled under the default dice bot of the room. The answer to a secret roll (an S in front, such as S2d6 or SCCB<=50) comes back too, marked secret: true; only the roller sees it, so do not repeat it in public. A line of resource commands on the speaking character (:HP-5, :HP-2d6, :HP-if([2d6]>=10,5,0), $1 reads the first bracketed roll again; up to 10 on one line separated by spaces, such as :HP+6 :MP+3, and nothing else on that line) also needs edit_resource; write each without spaces. In lines, such a line with its characterId changes that piece, so a rest that restores several pieces is one call: the narration, then one resource line per piece. References ({name}), targets (t:, t&), an @word at the end of a line (it picks a portrait) and 《name》 naming one of the effects of the room (it plays it) are refused, and the error says how to write it instead; any other 《》, such as the name of a feat, and an @ inside a sentence are said as they are. style stages the line as the kinds in the chat input do, standing out in the log and in novel mode: narration (description by the narrator), location (a place heading, when the party arrives somewhere) or scene (a scene heading, when the scene changes). Give text for one line, or lines for several said in order in one call (a heading, the narration, then each NPC line as that NPC piece): each waits for the one before to be typed out and read in novel mode, so none is hidden, and the call returns once all are said (sent lists each identifier; on a failure the rest are not said and failed says which and why). Prefer lines to several calls. linesFile (a .json file in the scenario folder, by its path from there) and linesKey say lines written before the session, kept in that file under that key, instead of giving them here: they are said just as lines are, and come back in lines so you know what was said. dryRun checks them without saying them. Requires a browser grant.',
       shape: {
         ...retry,
         tabId: id,
         text: z.string().min(1).max(2000).optional(),
         characterId: id.optional(),
         style: z.enum(['normal', 'narration', 'location', 'scene']).optional(),
-        lines: z
-          .array(
-            z
-              .object({
-                text: z.string().min(1).max(2000),
-                characterId: id.optional(),
-                style: z.enum(['normal', 'narration', 'location', 'scene']).optional(),
-              })
-              .strict()
-          )
-          .min(1)
-          .max(MAX_CHAT_LINES)
-          .optional(),
+        lines: z.array(chatLineSchema).min(1).max(MAX_CHAT_LINES).optional(),
+        linesFile: z.string().min(1).max(256).optional(),
+        linesKey: z.string().min(1).max(64).optional(),
         dryRun: z.boolean().optional(),
       },
     },
@@ -878,13 +869,24 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
           }
           args = rest;
         }
-        if (tool.name === 'chat_send' && given['lines'] !== undefined) {
-          const { lines, tabId, dryRun, ...rest } = given;
-          if (Object.keys(rest).length > 0)
-            return mapResult(failure('INVALID_ARGUMENT', 'Give lines, or text with characterId and style, not both.'));
+        const fromFile = tool.name === 'chat_send' && given['linesFile'] !== undefined;
+        if (tool.name === 'chat_send' && (given['lines'] !== undefined || fromFile)) {
+          const { lines, linesFile, linesKey, tabId, dryRun, ...rest } = given;
+          if (Object.keys(rest).length > 0 || (fromFile && lines !== undefined))
+            return mapResult(
+              failure('INVALID_ARGUMENT', 'Give lines, linesFile, or text with characterId and style: one of them.')
+            );
+          let list = lines as ChatLine[];
+          if (fromFile) {
+            if (typeof linesKey !== 'string')
+              return mapResult(failure('INVALID_ARGUMENT', 'Give linesKey with linesFile.'));
+            const read = await readPreparedLines(folders.scenarios, String(linesFile), linesKey, MAX_CHAT_LINES);
+            if (!('lines' in read)) return mapResult(read);
+            list = read.lines;
+          }
+          const told = fromFile ? { lines: list } : {};
           const base = typeof requestId === 'string' ? requestId : randomUUID();
           const said: unknown[] = [];
-          const list = lines as { text: string; characterId?: string; style?: string }[];
           for (const [index, line] of list.entries()) {
             if (index > 0 && dryRun !== true) await sleep(lineGapMs(list[index - 1].text));
             const result = await session.invoke(
@@ -895,10 +897,10 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
               DEFAULT_TIMEOUT_MS
             );
             if (!result.ok)
-              return mapResult({ ok: true, data: { sent: said, failed: { index, error: result.error } } });
+              return mapResult({ ok: true, data: { sent: said, failed: { index, error: result.error }, ...told } });
             said.push(result.data);
           }
-          return mapResult({ ok: true, data: { sent: said } });
+          return mapResult({ ok: true, data: { sent: said, ...told } });
         }
         if (tool.name === 'chat_send' && given['text'] === undefined)
           return mapResult(failure('INVALID_ARGUMENT', 'Give text or lines.'));

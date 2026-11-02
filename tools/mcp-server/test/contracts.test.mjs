@@ -648,6 +648,47 @@ test('builds scenes and maps from pictures in the image folder, which reach the 
   });
 });
 
+test('says lines kept in a file of the scenario folder, and tells what they were', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'axe-lines-'));
+  try {
+    const lines = [
+      { style: 'location', text: '酒場' },
+      { style: 'narration', text: '煙の匂いがする。' },
+    ];
+    await mkdir(path.join(root, 'demo'));
+    await writeFile(path.join(root, 'demo', 'openings.json'), JSON.stringify({ 1: lines, 2: [{ text: '' }] }));
+    await writeFile(path.join(tmpdir(), 'axe-lines-outside.json'), JSON.stringify({ 1: lines }));
+    const received = [];
+    await connected(
+      async (command, args) => {
+        received.push([command, args]);
+        return { ok: true, data: { identifier: 'said' } };
+      },
+      async (client) => {
+        const send = (extra) =>
+          client.callTool({ name: 'chat_send', arguments: { sessionId: 'session', tabId: 'main', ...extra } });
+        const said = await send({ linesFile: 'demo/openings.json', linesKey: '1', dryRun: true });
+        assert.deepEqual(said.structuredContent.data.lines, lines);
+        assert.deepEqual(
+          received.map(([, args]) => args.text),
+          ['酒場', '煙の匂いがする。']
+        );
+        const code = async (extra) => (await send(extra)).structuredContent.error?.code;
+        assert.equal(await code({ linesFile: 'demo/openings.json', linesKey: '9' }), 'NOT_FOUND');
+        assert.equal(await code({ linesFile: 'demo/openings.json', linesKey: '2' }), 'INVALID_ARGUMENT');
+        assert.equal(await code({ linesFile: 'demo/none.json', linesKey: '1' }), 'NOT_FOUND');
+        assert.equal(await code({ linesFile: '../axe-lines-outside.json', linesKey: '1' }), 'INVALID_ARGUMENT');
+        assert.equal(await code({ linesFile: 'demo/openings.json' }), 'INVALID_ARGUMENT');
+        assert.equal(await code({ linesFile: 'demo/openings.json', linesKey: '1', text: 'x' }), 'INVALID_ARGUMENT');
+      },
+      { templates: { scenarios: root } }
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(path.join(tmpdir(), 'axe-lines-outside.json'), { force: true });
+  }
+});
+
 test('says several lines in one call, each after the one before has had time to be read', async () => {
   const calls = [];
   const waits = [];

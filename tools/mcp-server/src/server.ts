@@ -28,6 +28,7 @@ const server = createServer(session, {
     templates: process.env.UDONARIUM_TEMPLATE_DIR || undefined,
     audio: audioFolders,
     images: process.env.UDONARIUM_IMAGE_DIR || undefined,
+    scenarios: process.env.UDONARIUM_SCENARIO_DIR || undefined,
   },
 });
 const stop = async () => {
