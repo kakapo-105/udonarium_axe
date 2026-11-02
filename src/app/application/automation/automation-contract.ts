@@ -50,6 +50,7 @@ export const AUTOMATION_COMMANDS = [
   'turn_set',
   'character_update',
   'game_clock_set',
+  'chat_check',
 ] as const;
 export type AutomationCommand = (typeof AUTOMATION_COMMANDS)[number];
 export const AUTOMATION_SCOPES = [

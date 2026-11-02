@@ -1321,6 +1321,22 @@ describe('AutomationFacadeService', () => {
         error(await call('piece_stealth', { identifiers: [made.identifier], stealth: 'yes' }), 'INVALID_ARGUMENT');
       });
 
+      it('checks a line against the room without saying it', async () => {
+        beGameMaster();
+        const said = TestBed.inject(ObjectStore).getObjects(ChatMessage).length;
+
+        const fine = await call('chat_check', { text: 'こんにちは' });
+        expect(fine).toMatchObject({ ok: true, data: { ok: true, problems: [] } });
+
+        const made = await hide();
+        const checked = await call('chat_check', { text: ':存在しない項目-5', characterId: made.identifier });
+        expect(checked).toMatchObject({
+          ok: true,
+          data: { problems: [{ code: 'res.unknownStatus', line: 1 }] },
+        });
+        expect(TestBed.inject(ObjectStore).getObjects(ChatMessage)).toHaveLength(said);
+      });
+
       it('moves the story clock, and only answers the time when given nothing', async () => {
         beGameMaster();
         policy.setScope('prepare_room', true);

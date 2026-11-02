@@ -1,4 +1,4 @@
-import { inject, Injectable } from '@angular/core';
+import { inject, Injectable, signal } from '@angular/core';
 import { AmbienceAreaRequest, AmbienceCommandService } from '@axe/application/automation/ambience-command.service';
 import { automationAudiosOf } from '@axe/application/automation/automation-audio.service';
 import { AutomationAuditService } from '@axe/application/automation/automation-audit.service';
@@ -40,6 +40,7 @@ import { SessionCommandService } from '@axe/application/automation/session-comma
 import { SwitchCommandService, SwitchRequest } from '@axe/application/automation/switch-command.service';
 import { VnStageCommandService } from '@axe/application/automation/vn-stage-command.service';
 import { StealthService } from '@axe/application/character/stealth.service';
+import { ChatLintService } from '@axe/application/chat/chat-lint.service';
 import { EffectLibraryService } from '@axe/application/effect/effect-library.service';
 import { GameClockService } from '@axe/application/game-clock/game-clock.service';
 import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
@@ -52,9 +53,11 @@ import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { ChatTabList } from '@axe/domain/chat/chat-tab-list';
 import { canRoleSpeakTab, canRoleViewTab } from '@axe/domain/chat/chat-tab-permission';
 import { paletteLineAsChat, PaletteRow, paletteRowsOf } from '@axe/domain/chat/palette-rows';
+import { DiceBot } from '@axe/domain/dice/dice-bot';
 import { DisclosureMode } from '@axe/domain/disclosure/disclosure';
 import { parseEffectChatToken } from '@axe/domain/effect/effect-chat-token';
 import { isTextureId, isWallTextureId } from '@axe/domain/media/texture-catalog';
+import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { CONCEALED_LOCATION } from '@axe/domain/tabletop/board-switch/concealment';
 import { FilterType } from '@axe/domain/tabletop/game-table';
@@ -81,6 +84,9 @@ const ROOM_TEMPLATE_TIMEOUT_MS = 60000;
 const MAX_TEMPLATE_XML = 4_000_000;
 const MAX_TEMPLATE_PART_XML = 200_000;
 const MAX_TEMPLATE_TABLES = 20;
+/** The most a chat_check reads, enough for a whole chat palette. */
+const MAX_CHECKED_TEXT = 20_000;
+const MAX_CHECK_PROBLEMS = 50;
 /** The commands that set the room up, which only the game master runs. */
 const ROOM_PREP_WRITES: readonly AutomationCommand[] = [
   'game_clock_set',
@@ -342,6 +348,7 @@ export class AutomationFacadeService {
   private readonly turns = inject(TurnOrderService);
   private readonly stealth = inject(StealthService);
   private readonly gameClock = inject(GameClockService);
+  private readonly chatLint = inject(ChatLintService);
   private readonly store = inject(ObjectStore);
   private readonly tables = inject(TableSelecter);
   private readonly remembered = new Map<string, Remembered>();
@@ -933,6 +940,33 @@ export class AutomationFacadeService {
         if (booleanOf(a['dryRun'], 'dryRun'))
           return { [revealing ? 'revealed' : 'concealed']: pieces.map((piece) => piece.identifier), dryRun: true };
         return revealing ? this.pieceCommands.reveal(pieces) : this.pieceCommands.conceal(pieces);
+      }
+      case 'chat_check': {
+        onlyKeys(a, ['text', 'characterId', 'palette']);
+        const text = textArgument(a['text'], MAX_CHECKED_TEXT);
+        const speaker = a['characterId'] === undefined ? null : this.readable(textArgument(a['characterId']));
+        const asPalette = booleanOf(a['palette'], 'palette');
+        const gameType = speaker?.chatPalette?.dicebot || Config.instance.defaultDiceBot;
+        await DiceBot.loadGameSystemAsync(gameType);
+        const session = this.chatLint.watch({
+          text: signal(text),
+          sendFrom: signal(speaker?.identifier ?? ''),
+          gameType: signal(gameType),
+          path: asPalette ? 'palette' : 'chatWindow',
+          mode: asPalette ? 'palette' : 'chat',
+        });
+        const problems = session
+          .diagnostics()
+          .filter((found) => found.severity !== 'info')
+          .slice(0, MAX_CHECK_PROBLEMS)
+          .map((found) => ({
+            severity: found.severity,
+            code: found.code,
+            line: text.slice(0, found.from).split('\n').length,
+            text: text.slice(found.from, found.to).slice(0, 80),
+            ...(found.params ? { params: found.params } : {}),
+          }));
+        return { ok: problems.every((found) => found.severity !== 'error'), problems };
       }
       case 'piece_stealth': {
         onlyKeys(a, ['identifiers', 'stealth', 'dryRun']);

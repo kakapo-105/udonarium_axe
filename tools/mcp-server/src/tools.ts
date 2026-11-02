@@ -404,6 +404,17 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       shape: { ...retry, identifiers: z.array(id).min(1).max(MAX_PIECES), dryRun: z.boolean().optional() },
     },
     {
+      name: 'chat_check',
+      read: true,
+      description:
+        'Check a chat line, or a whole chat palette with palette: true, against the room without saying it, as the chat input checks what is typed: rolls the dice bot cannot read, statuses, references, buffs, portraits, cut-ins and effects the room has not got, as spoken by characterId (a piece you can see) or by nobody. Answers ok, false when something would fail, and problems, each with severity (error, warning), code, line, and the text it was found in. A target (t:) is checked against the pieces marked now, so target.none only means nothing is marked yet. Use it after writing a palette or a line with commands.',
+      shape: {
+        text: z.string().min(1).max(20000),
+        characterId: id.optional(),
+        palette: z.boolean().optional(),
+      },
+    },
+    {
       name: 'piece_stealth',
       read: false,
       description: `Put 1 to ${MAX_PIECES} of your own characters on the table into stealth, or bring them out with stealth: false. A piece in stealth stays on the board for the game master, marked, while the players cannot see it. Use it for a hidden enemy standing where it stands; use piece_conceal for one not on the scene yet. Game master only. Requires the create_piece browser grant.`,
