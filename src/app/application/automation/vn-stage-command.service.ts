@@ -8,7 +8,8 @@ import { networkSend } from '@axe/core/network/network-messaging';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { ChatTab } from '@axe/domain/chat/chat-tab';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
-import { VN_MODE_EVENT, VnStage, VnStageTransition } from '@axe/domain/visual-novel/vn-stage';
+import { VN_ROOM_MODE_EVENT } from '@axe/domain/visual-novel/vn-mode-event';
+import { VnStage, VnStageTransition } from '@axe/domain/visual-novel/vn-stage';
 
 /** What the master asks of the novel stage; each part left out is left as it is. */
 export interface VnStageRequest {
@@ -44,7 +45,7 @@ export class VnStageCommandService {
     if (request.background !== undefined) stage.setBackground(request.background, request.transition);
     else if (request.transition !== undefined) stage.playTransition(request.transition);
     if (request.resetCast) this.resetCast(request.resetCast);
-    if (request.open !== undefined) networkSend(VN_MODE_EVENT, { active: request.open });
+    if (request.open !== undefined) networkSend(VN_ROOM_MODE_EVENT, { active: request.open });
     return {
       background: stage.backgroundImageIdentifier || null,
       transition: stage.transition,

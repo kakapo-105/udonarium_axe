@@ -648,6 +648,25 @@ test('builds scenes and maps from pictures in the image folder, which reach the 
   });
 });
 
+test('holds the next line back until the last line of several has been read', async () => {
+  const slept = [];
+  await connected(
+    async () => ({ ok: true, data: { identifier: 'said' } }),
+    async (client) => {
+      const send = (extra) =>
+        client.callTool({ name: 'chat_send', arguments: { sessionId: 'session', tabId: 'main', ...extra } });
+      await send({ lines: [{ text: 'ひとつめ' }] });
+      assert.deepEqual(slept, []);
+      await send({ text: 'つぎ', dryRun: true });
+      assert.deepEqual(slept, []);
+      await send({ text: 'つぎ' });
+      assert.equal(slept.length, 1);
+      assert.ok(slept[0] > 0 && slept[0] <= 1500);
+    },
+    { sleep: async (ms) => void slept.push(ms) }
+  );
+});
+
 test('says lines kept in a file of the scenario folder, and tells what they were', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'axe-lines-'));
   try {

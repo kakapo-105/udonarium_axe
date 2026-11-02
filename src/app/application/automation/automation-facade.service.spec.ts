@@ -45,7 +45,8 @@ import { DoorStyle, Terrain } from '@axe/domain/tabletop/terrain';
 import { TextNote } from '@axe/domain/tabletop/text-note';
 import { TurnState } from '@axe/domain/tabletop/turn-state';
 import { decodeVnEmote } from '@axe/domain/visual-novel/vn-emote';
-import { VN_MODE_EVENT, VnStage } from '@axe/domain/visual-novel/vn-stage';
+import { VN_ROOM_MODE_EVENT } from '@axe/domain/visual-novel/vn-mode-event';
+import { VnStage } from '@axe/domain/visual-novel/vn-stage';
 import { TEST_PROVIDERS } from '@axe/testing/test-providers';
 
 describe('AutomationFacadeService', () => {
@@ -1761,7 +1762,7 @@ describe('AutomationFacadeService', () => {
       const opened: unknown[] = [];
       let faded = 0;
       const listening = networkMessage$.subscribe((message) => {
-        if (message.eventName === VN_MODE_EVENT) opened.push(message.data);
+        if (message.eventName === VN_ROOM_MODE_EVENT) opened.push(message.data);
         if (message.eventName === 'SCENE_FADE') faded++;
       });
       setNetworkIsolated(true);

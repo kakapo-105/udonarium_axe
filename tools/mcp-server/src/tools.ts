@@ -122,6 +122,12 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
   );
   const id = z.string().min(1).max(256);
   const folders = options.templates ?? {};
+  /** When the last line said has been read, so the next is not put over it in novel mode. */
+  let readByAt = 0;
+  const waitForReading = async () => {
+    const left = readByAt - Date.now();
+    if (left > 0) await sleep(left);
+  };
   const library = new AudioLibrary();
   const images = new ImageLibrary(folders.images);
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
@@ -909,6 +915,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
           const told = fromFile ? { lines: list } : {};
           const base = typeof requestId === 'string' ? requestId : randomUUID();
           const said: unknown[] = [];
+          if (dryRun !== true) await waitForReading();
           for (const [index, line] of list.entries()) {
             if (index > 0 && dryRun !== true) await sleep(lineGapMs(list[index - 1].text));
             const result = await session.invoke(
@@ -922,10 +929,12 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
               return mapResult({ ok: true, data: { sent: said, failed: { index, error: result.error }, ...told } });
             said.push(result.data);
           }
+          if (dryRun !== true) readByAt = Date.now() + lineGapMs(list[list.length - 1].text);
           return mapResult({ ok: true, data: { sent: said, ...told } });
         }
         if (tool.name === 'chat_send' && given['text'] === undefined)
           return mapResult(failure('INVALID_ARGUMENT', 'Give text or lines.'));
+        if (tool.name === 'chat_send' && given['dryRun'] !== true) await waitForReading();
         if (tool.name === 'self_set') {
           const { imageFile, ...rest } = given;
           if (imageFile !== undefined) {

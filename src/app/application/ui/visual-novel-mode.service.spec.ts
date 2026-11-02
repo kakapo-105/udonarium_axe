@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { VisualNovelModeService, VN_MODE_EVENT } from '@axe/application/ui/visual-novel-mode.service';
 import { localDispatch, networkMessage$, receiveEvents } from '@axe/core/network/network-messaging';
+import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { VN_ROOM_MODE_EVENT } from '@axe/domain/visual-novel/vn-mode-event';
 
 describe('VisualNovelModeService', () => {
   let service: VisualNovelModeService;
@@ -63,6 +65,22 @@ describe('VisualNovelModeService', () => {
     receiveEvents([{ eventName: VN_MODE_EVENT, data: { active: true }, sendFrom: 'peer-a' }]);
 
     expect(service.active()).toBe(false);
+  });
+
+  it('opens and closes on a game master’s word to the room, and on nobody else’s', () => {
+    const findByPeerId = vi.spyOn(PeerCursor, 'findByPeerId');
+    findByPeerId.mockReturnValue({ isGameMaster: false } as PeerCursor);
+    receiveEvents([{ eventName: VN_ROOM_MODE_EVENT, data: { active: true }, sendFrom: 'peer-a' }]);
+    expect(service.active()).toBe(false);
+
+    findByPeerId.mockReturnValue({ isGameMaster: true } as PeerCursor);
+    receiveEvents([{ eventName: VN_ROOM_MODE_EVENT, data: { active: true }, sendFrom: 'peer-gm' }]);
+    expect(service.active()).toBe(true);
+    expect(announced).toEqual([true]);
+
+    receiveEvents([{ eventName: VN_ROOM_MODE_EVENT, data: { active: false }, sendFrom: 'peer-gm' }]);
+    expect(service.active()).toBe(false);
+    findByPeerId.mockRestore();
   });
 
   it('does not pass that word on again', () => {

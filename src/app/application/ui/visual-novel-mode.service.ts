@@ -1,6 +1,7 @@
 import { DestroyRef, inject, Injectable, signal } from '@angular/core';
 import { localDispatch, networkMessage$ } from '@axe/core/network/network-messaging';
-import { VN_MODE_EVENT } from '@axe/domain/visual-novel/vn-mode-event';
+import { PeerCursor } from '@axe/domain/peer/peer-cursor';
+import { VN_MODE_EVENT, VN_ROOM_MODE_EVENT } from '@axe/domain/visual-novel/vn-mode-event';
 
 export { VN_MODE_EVENT };
 
@@ -14,6 +15,12 @@ export class VisualNovelModeService {
     networkMessage$.subscribe((message) => {
       if (message.eventName !== VN_MODE_EVENT) return;
       this._active.set(Boolean((message.data as { active?: unknown } | null)?.active));
+    }, this.destroyRef);
+    networkMessage$.subscribe((message) => {
+      if (message.eventName !== VN_ROOM_MODE_EVENT) return;
+      const sender = message.isSendFromSelf ? PeerCursor.myCursor : PeerCursor.findByPeerId(message.sendFrom);
+      if (!sender?.isGameMaster) return;
+      this.set(Boolean((message.data as { active?: unknown } | null)?.active));
     }, this.destroyRef);
   }
 
