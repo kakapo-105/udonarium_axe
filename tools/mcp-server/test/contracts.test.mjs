@@ -744,7 +744,9 @@ test('says several lines in one call, each after the one before has had time to 
           ['chat_send', { tabId: 'main', text: 'よく来てくれた', characterId: 'chief' }, 'scene:2'],
         ]
       );
-      assert.deepEqual(waits, [lineGapMs('村の広場'), lineGapMs('夕暮れの広場に人影はまばらだ。')]);
+      assert.deepEqual(waits, [lineGapMs('村の広場', 'location'), lineGapMs('夕暮れの広場に人影はまばらだ。')]);
+      assert.equal(lineGapMs('村の広場', 'location'), lineGapMs('村の広場') + 2000);
+      assert.equal(lineGapMs('第1話', 'scene'), lineGapMs('第1話') + 2000);
       assert.equal(lineGapMs('あ'), 1500);
       assert.equal(lineGapMs('あ'.repeat(1000)), 15000);
       // A line of resource commands is not there to be read, so the next follows soon after.

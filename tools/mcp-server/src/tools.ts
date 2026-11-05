@@ -53,6 +53,8 @@ const TABLE_CREATE_TIMEOUT_MS = 130000;
 /** A template brings its pictures and sounds, which the browser checks for a minute at most. */
 const ROOM_TEMPLATE_TIMEOUT_MS = 70000;
 const BGM_PLAY_TIMEOUT_MS = 70000;
+/** A scene or place heading stays alone on the screen this long more, so the change of scene lands. */
+const HEADING_PAUSE_MS = 2000;
 /** At most this many lines go in one chat_send. */
 const MAX_CHAT_LINES = 20;
 
@@ -65,10 +67,11 @@ const RESOURCE_GAP_MS = 300;
  * that arrives while the last is still being typed out hides it. The wait covers typing at the slow
  * speed (60 ms a character) and a moment to read, within bounds.
  */
-export function lineGapMs(text: string): number {
+export function lineGapMs(text: string, style?: string): number {
   // A line of resource commands (:HP+6 :MP+3) is not there to be read; the next follows soon after.
   if (RESOURCE_LINE.test(text.trim())) return RESOURCE_GAP_MS;
-  return Math.min(15000, Math.max(1500, [...text].length * 60 + 1200));
+  const gap = Math.min(15000, Math.max(1500, [...text].length * 60 + 1200));
+  return style === 'scene' || style === 'location' ? gap + HEADING_PAUSE_MS : gap;
 }
 /** The tools answered here from this machine's folders, without the browser. */
 const LOCAL_TOOLS = new Set(['room_template_list']);
@@ -917,7 +920,7 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
           const said: unknown[] = [];
           if (dryRun !== true) await waitForReading();
           for (const [index, line] of list.entries()) {
-            if (index > 0 && dryRun !== true) await sleep(lineGapMs(list[index - 1].text));
+            if (index > 0 && dryRun !== true) await sleep(lineGapMs(list[index - 1].text, list[index - 1].style));
             const result = await session.invoke(
               'chat_send',
               { tabId, ...line, ...(dryRun === true ? { dryRun } : {}) },
@@ -929,7 +932,8 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
               return mapResult({ ok: true, data: { sent: said, failed: { index, error: result.error }, ...told } });
             said.push(result.data);
           }
-          if (dryRun !== true) readByAt = Date.now() + lineGapMs(list[list.length - 1].text);
+          if (dryRun !== true)
+            readByAt = Date.now() + lineGapMs(list[list.length - 1].text, list[list.length - 1].style);
           return mapResult({ ok: true, data: { sent: said, ...told } });
         }
         if (tool.name === 'chat_send' && given['text'] === undefined)
