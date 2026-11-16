@@ -6,6 +6,7 @@ import { PersonalVolumeService } from '@axe/application/media/personal-volume.se
 import { ObjectChangeService } from '@axe/application/sync/object-change.service';
 import { TabletopActionService } from '@axe/application/tabletop/tabletop-action.service';
 import { ConfirmService } from '@axe/application/ui/confirm.service';
+import { SamplePiecesPreferenceService } from '@axe/application/ui/sample-pieces-preference.service';
 import { SnackbarService } from '@axe/application/ui/snackbar.service';
 import { Logger } from '@axe/core/logging/logger';
 import { Network } from '@axe/core/network/network';
@@ -18,6 +19,7 @@ import { GameObject } from '@axe/core/sync/game-object';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { isOrSitsUnder, restoreStore, snapshotStore, StoreSnapshot } from '@axe/core/sync/store-snapshot';
 import { Jukebox } from '@axe/domain/media/jukebox';
+import { parseInviteLink } from '@axe/domain/peer/invite-link';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { ReloadCheck } from '@axe/domain/peer/reload-check';
 
@@ -74,6 +76,7 @@ export class StartRoomService {
   private readonly audioStorage = inject(AudioStorage);
   private readonly snackbar = inject(SnackbarService);
   private readonly confirm = inject(ConfirmService);
+  private readonly samplePieces = inject(SamplePiecesPreferenceService);
   private readonly t = inject(TRANSLATE_FN);
   private readonly tabletopAction = inject(TabletopActionService);
   private readonly personalVolumes = inject(PersonalVolumeService);
@@ -115,6 +118,29 @@ export class StartRoomService {
   /** Whether a room to start on was found at launch and waits to be set out in place of the sample pieces. */
   get hasPending(): boolean {
     return this.pending !== null;
+  }
+
+  private invited = false;
+
+  /**
+   * Whether the page opened with an invitation into a room, which the table waits on in place of the
+   * sample pieces: they would be on show until the room's own pieces came, as if brought into it.
+   * See {@link inviteEnded}.
+   */
+  get waitsOnInvite(): boolean {
+    return this.invited;
+  }
+
+  /**
+   * Hears that the invitation the page opened with has come to an end. One that leaves the seat
+   * outside any room, as for a room not found, a join refused or a browser set to play offline, has
+   * the sample pieces set out, as on a page opened with none, unless this browser turned them off;
+   * one that took it into a room leaves the table to the room.
+   */
+  inviteEnded(): void {
+    if (!this.invited) return;
+    this.invited = false;
+    if (!isInOrGoingIntoRoom() && this.samplePieces.enabled()) this.tabletopAction.makeDefaultTabletopObjects();
   }
 
   /** Whether the room to start on found at launch is being set out just now. */
@@ -171,10 +197,12 @@ export class StartRoomService {
    * browser that will not be asked holds nothing up at all.
    *
    * A page opened with anything after its `#`, such as an invitation or the way back from a login,
-   * is going somewhere of its own and is left the sample as before. A browser too slow to answer
-   * starts on the sample too, and is told whether it keeps a room once the answer comes.
+   * is going somewhere of its own and is left the sample as before, but for one opened with an
+   * invitation, which waits on the room it goes into (see {@link waitsOnInvite}). A browser too slow
+   * to answer starts on the sample too, and is told whether it keeps a room once the answer comes.
    */
   async prepare(hash: string = window.location.hash): Promise<void> {
+    this.invited = parseInviteLink(hash) !== null;
     try {
       if (!this.store.isAvailable()) return;
       const asked = this.store.has(StartRoomStore.KEY).catch(() => null);

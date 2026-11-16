@@ -66,6 +66,10 @@ export interface GameCharacterContextMenuCallbacks {
   onViewFirstPerson?: () => void;
   onShareFirstPerson?: () => void;
   onStopSharingFirstPerson?: () => void;
+  /** Follows the piece from behind with the table's camera, on a table drawn on a canvas. */
+  onFollowFromBehind?: () => void;
+  /** Gives the table its own camera back, where the piece is followed from behind. */
+  onStopFollowing?: () => void;
 }
 
 /**
@@ -337,6 +341,12 @@ export function buildGameCharacterContextMenuModel(
             action: () => callbacks.onStopSharingFirstPerson?.(),
           },
         ]
+      : []),
+    ...(callbacks.onFollowFromBehind
+      ? [{ name: t('feature.character.contextMenu.followFromBehind'), action: () => callbacks.onFollowFromBehind?.() }]
+      : []),
+    ...(callbacks.onStopFollowing
+      ? [{ name: t('feature.character.contextMenu.stopFollowing'), action: () => callbacks.onStopFollowing?.() }]
       : []),
   ];
 

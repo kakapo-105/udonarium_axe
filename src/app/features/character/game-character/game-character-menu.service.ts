@@ -21,6 +21,7 @@ import { RangeShapeInvokeService } from '@axe/application/tabletop/range-shape-i
 import { RideMenuModel, RideService } from '@axe/application/tabletop/ride.service';
 import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
+import { ThirdPersonService } from '@axe/application/tabletop/third-person.service';
 import { ContextMenuAction, ContextMenuService } from '@axe/application/ui/context-menu.service';
 import { buildOverlapContextMenu } from '@axe/application/ui/overlap-context-menu';
 import { PanelOption, PanelService } from '@axe/application/ui/panel.service';
@@ -101,6 +102,7 @@ export class GameCharacterMenuService {
   private readonly movePlan = inject(MovePlannerService);
   private readonly firstPerson = inject(FirstPersonService);
   private readonly sharedFocus = inject(SharedFocusService);
+  private readonly thirdPerson = inject(ThirdPersonService);
   private readonly effectLibrary = inject(EffectLibraryService);
   private readonly effectCast = inject(EffectCastService);
   private readonly rolePermission = inject(RolePermissionService);
@@ -183,6 +185,11 @@ export class GameCharacterMenuService {
           this.firstPerson.isGameMaster() && this.firstPerson.sharedPiece() === char.identifier
             ? () => this.firstPerson.share(null)
             : undefined,
+        onFollowFromBehind:
+          this.firstPerson.canLookOutOf(char) && !this.thirdPerson.isFollowing(char.identifier)
+            ? () => this.thirdPerson.follow(char.identifier)
+            : undefined,
+        onStopFollowing: this.thirdPerson.isFollowing(char.identifier) ? () => this.thirdPerson.stop() : undefined,
       },
       this.translateFn,
       overlapEntries,
