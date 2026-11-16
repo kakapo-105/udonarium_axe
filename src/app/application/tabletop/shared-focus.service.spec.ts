@@ -62,7 +62,8 @@ describe('SharedFocusService', () => {
       gm.peerId
     );
 
-    expect(selection.focusCoordinate()).toMatchObject({ x: 300, y: 200 });
+    // The view is brought to the piece's middle, half a cell in from its corner.
+    expect(selection.focusCoordinate()).toMatchObject({ x: 325, y: 225 });
     expect(selection.highlightedObject()).toMatchObject({ identifier: piece.identifier });
   });
 

@@ -2,8 +2,10 @@ import { SyncObject, SyncVar } from '@axe/core/sync/decorator';
 import { ObjectContext } from '@axe/core/sync/game-object';
 import { ObjectNode } from '@axe/core/sync/object-node';
 import { toHalfWidth } from '@axe/core/util/string-util';
+import { aimedAtBonusesOf } from '@axe/domain/character/aimed-at-buff';
 import { parseBuffStrength } from '@axe/domain/character/buff-badge';
 import { GameCharacter } from '@axe/domain/character/game-character';
+import { SAID_HIDDEN_NAME } from '@axe/domain/character/hidden-name';
 import { CHARACTER_REFERENCE, readReferenceName } from '@axe/domain/chat/chat-reference';
 import { withInlineStampsAsSpaces } from '@axe/domain/chat/inline-stamp';
 import { isPaletteTabLine } from '@axe/domain/chat/palette-rows';
@@ -271,12 +273,27 @@ export function paletteVariableSite(line: string): PaletteVariableSite | null {
 }
 
 /**
+ * Whether a sheet's item is the name of a piece whose name is hidden, which a line names as
+ * {@link SAID_HIDDEN_NAME} names it, as everyone reads the line.
+ */
+function isHiddenNameElement(element: DataElement): boolean {
+  if (element.name !== 'name') return false;
+  let node: ObjectNode | null = element.parent;
+  while (node && !(node instanceof GameCharacter)) node = node.parent;
+  return (
+    node instanceof GameCharacter && node.hideName && node.commonDataElement?.getFirstElementByName('name') === element
+  );
+}
+
+/**
  * Fills in the references in a line of text.
  *
  * `{name}` reads from the speaker, `t{name}` from the target it is aimed at, and a reference
  * standing for an image is taken out of the line and sent alongside it instead. `{tcount}` is
  * the number of targets when `targetCount` is given, but only when neither a palette variable
  * nor the sheet already answers that name, so a sheet that keeps its own `tcount` reads as before.
+ * A `{name}` of the speaker's in a number worked out takes what the target's buffs give whoever
+ * aims at it as well, `相手の物理特攻+2` adding 2 to `{物理特攻}` (see {@link aimedAtBonusesOf}).
  * Once the references are in, each `if(condition, then, else)` is worked out; see {@link fillInConditions}.
  */
 export function evaluateReferences(
@@ -293,15 +310,29 @@ export function evaluateReferences(
    * from the speaker before it is aimed at anyone, whose `t{}` a target may yet answer.
    */
   keepUnfilled: boolean | 'always' = false,
-  targetCount?: number
+  targetCount?: number,
+  /**
+   * The speaker's references left as typed, for each target to fill in with what its buffs give
+   * whoever aims at it as well: those a line is first filled in with from the speaker alone.
+   */
+  leftForTargets: ReadonlySet<string> = NOTHING_LEFT
 ): PaletteEvaluationResult {
   let evaluate = source;
   const attachmentImageIdentifiers: string[] = [];
+  let bonuses: ReadonlyMap<string, number> | null = null;
+  /** What the target's buffs give whoever aims at it, added to a value of the speaker's standing in a number. */
+  const withAimedAtBonus = (value: string | null, name: string, useMax: boolean, formula: FormulaPlace) => {
+    if (!target || useMax || formula === 'none') return value;
+    bonuses ??= aimedAtBonusesOf(target.buffs.list());
+    const bonus = bonuses.get(name) ?? 0;
+    return bonus === 0 ? value : addedToTerm(value, bonus, formula);
+  };
 
   // One line can name the same sheet several times over, so it is read once for all of them.
   const calcPass = createCalcPass();
 
   const evaluateElementText = (element: DataElement, useMax: boolean, formula: FormulaPlace): string | null => {
+    if (isHiddenNameElement(element)) return SAID_HIDDEN_NAME;
     if (collectImageAttachments && element.fieldType === DataElementFieldType.IMAGE) {
       const imageIdentifier = String(element.value ?? '').trim();
       if (imageIdentifier.length > 0 && !attachmentImageIdentifiers.includes(imageIdentifier)) {
@@ -340,12 +371,13 @@ export function evaluateReferences(
         : targetElementText;
     }
 
+    if (leftForTargets.has(name)) return null;
     for (const variable of paletteVariables) {
-      if (variable.name == name) return variable.value;
+      if (variable.name == name) return withAimedAtBonus(variable.value, name, useMax, formula);
     }
     const element = extendVariables ? DataElement.findElementByReference(extendVariables, name) : null;
-    if (element) return evaluateElementText(element, useMax, formula);
-    return targetCount != null && name === TARGET_COUNT_REFERENCE ? `${targetCount}` : null;
+    if (!element && targetCount != null && name === TARGET_COUNT_REFERENCE) return `${targetCount}`;
+    return withAimedAtBonus(element ? evaluateElementText(element, useMax, formula) : null, name, useMax, formula);
   };
 
   const limit = 128;
@@ -422,6 +454,29 @@ function formulaPlace(line: string, offset: number): FormulaPlace {
   return /[0-9０-９)）\]］}｝]$/.test(before) ? 'joined' : 'within';
 }
 
+/** No reference left for the targets to fill in. */
+const NOTHING_LEFT: ReadonlySet<string> = new Set();
+
+/**
+ * A value of the speaker's with an amount a target's buffs give added to it, as a term of the number
+ * it stands in: worked out where the value is a number, nothing standing for none, and otherwise the
+ * two written out together, in brackets after an operator. Within a number of its own, as after
+ * `@`, a value that is no number is left as it is, as nothing can be added there.
+ */
+function addedToTerm(value: string | null, bonus: number, place: FormulaPlace): string | null {
+  const written = (value ?? '').trim();
+  const signedBonus = bonus < 0 ? `${bonus}` : `+${bonus}`;
+  if (written === '' || /^[-+]?\d+$/.test(written)) {
+    const sum = Number(written || '0') + bonus;
+    if (place === 'joined') return sum < 0 ? `${sum}` : `+${sum}`;
+    if (place === 'operand') return sum < 0 ? `(${sum})` : `${sum}`;
+    return `${sum}`;
+  }
+  if (place === 'operand') return `(${written}${signedBonus})`;
+  if (place === 'joined') return `${written}${signedBonus}`;
+  return value;
+}
+
 /**
  * A buff's strength as a term of the number it stands in: after an operator without a sign of its
  * own, a negative one in brackets, and nought for a note that carries no number, so the operator
@@ -476,7 +531,8 @@ export function evaluateCharacterReferences(
   speaker: GameCharacter | null,
   target?: GameCharacter,
   keepUnfilled: boolean | 'always' = true,
-  targetCount?: number
+  targetCount?: number,
+  leftForTargets?: ReadonlySet<string>
 ): PaletteEvaluationResult {
   return evaluateReferences(
     text,
@@ -485,7 +541,8 @@ export function evaluateCharacterReferences(
     target,
     true,
     keepUnfilled,
-    targetCount
+    targetCount,
+    leftForTargets
   );
 }
 

@@ -44,6 +44,7 @@ import { voiceEndpoint } from '@axe/application/voice/voice-request';
 import { automationRequested } from '@axe/composition/automation/automation-request';
 import { FileArchiver } from '@axe/core/storage/file-archiver';
 import { ObjectStore } from '@axe/core/sync/object-store';
+import { parseInviteLink } from '@axe/domain/peer/invite-link';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { PeerRole } from '@axe/domain/peer/peer-role';
 import { RoomPanelName } from '@axe/domain/ui/room-panel';
@@ -104,6 +105,9 @@ import { InterruptPromptComponent } from '@axe/features/tabletop/interrupt-promp
 import { MovePlanBandComponent } from '@axe/features/tabletop/move-plan-band/move-plan-band.component';
 import { SceneFadeOverlayComponent } from '@axe/features/tabletop/scene-fade-overlay/scene-fade-overlay.component';
 import { MovePlanEventHandlerService } from '@axe/features/tabletop/table-move-range-overlay/move-plan-event-handler.service';
+import { TargetBandComponent } from '@axe/features/tabletop/target-band/target-band.component';
+import { TargetReleaseEventHandlerService } from '@axe/features/tabletop/target-release/target-release-event-handler.service';
+import { TurnFocusEventHandlerService } from '@axe/features/tabletop/turn-focus/turn-focus-event-handler.service';
 import { VisualNovelEventHandlerService } from '@axe/features/visual-novel/visual-novel-event-handler.service';
 import { VisualNovelOverlayComponent } from '@axe/features/visual-novel/visual-novel-overlay/visual-novel-overlay.component';
 import { VoiceStatusComponent } from '@axe/features/voice/voice-status.component';
@@ -153,6 +157,7 @@ import { version as APP_VERSION } from '@pkg';
     SwitchNoticeComponent,
     GroundBrushBandComponent,
     MovePlanBandComponent,
+    TargetBandComponent,
     InterruptPromptComponent,
     SnackbarComponent,
     ChatTickerComponent,
@@ -175,7 +180,10 @@ export class AppComponent {
   private readonly language = inject(LanguageService);
   readonly visualNovel = inject(VisualNovelModeService);
   protected readonly battleCutIn = inject(BattleCutInStateService);
-  private readonly handRail = inject(HandRailService);
+  /** Whose hand rail is open, which the rail is fetched for only once it first is. */
+  protected readonly handRail = inject(HandRailService);
+  /** Whether the page was opened from an invitation, which the join is fetched for only then. */
+  protected readonly invited = parseInviteLink(location.hash) !== null;
   readonly widgets = inject(WidgetVisibilityService);
   private readonly rolePermission = inject(RolePermissionService);
   /**
@@ -253,6 +261,8 @@ export class AppComponent {
     inject(ChatSettingsEventHandlerService);
     inject(ChatSoundEventHandlerService);
     inject(TurnSoundEventHandlerService);
+    inject(TurnFocusEventHandlerService);
+    inject(TargetReleaseEventHandlerService);
     inject(EffectChatEventHandlerService);
     inject(BattleCutInEventHandlerService);
     inject(BattleChatEventHandlerService);

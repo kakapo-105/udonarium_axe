@@ -29,6 +29,11 @@ export interface MacroSendOptions {
   replyTo?: string;
   quoteOf?: string;
   targets?: readonly GameCharacter[];
+  /**
+   * Whether the line is one a game master wrote for whoever sets it off to say, as a switch's line
+   * is, which is marked as the master's words (see `ChatMessageService.asMastersWords`).
+   */
+  mastersWords?: boolean;
   /** A stamp to send under the line. */
   stamp?: OutgoingStamp;
   /** The number the reader picked to fill a `{目標値}` in the line with; absent to fill it with the one found. */
@@ -105,10 +110,10 @@ export class CharacterMacroService {
     line: string,
     options: MacroSendOptions = {}
   ): Promise<ChatMessage | null> {
-    if (options.gameSystem !== undefined) return this.send(character, line, options);
+    if (options.gameSystem !== undefined) return this.markedAs(options, () => this.send(character, line, options));
 
     const gameSystem = await DiceBot.loadGameSystemAsync(this.gameTypeFor(character, options.gameType));
-    return this.send(character, line, { ...options, gameSystem });
+    return this.markedAs(options, () => this.send(character, line, { ...options, gameSystem }));
   }
 
   /**
@@ -146,20 +151,14 @@ export class CharacterMacroService {
    */
   async sendAsSelf(
     line: string,
-    options: Pick<MacroSendOptions, 'tab' | 'gameType'> = {}
+    options: Pick<MacroSendOptions, 'tab' | 'gameType' | 'mastersWords'> = {}
   ): Promise<ChatMessage | null> {
     const tab = this.resolveTab(options.tab);
     const cursor = PeerCursor.myCursor;
     if (!tab || !cursor) return null;
     const gameSystem = await DiceBot.loadGameSystemAsync(this.gameTypeForSelf(options.gameType));
-    return this.chatMessageService.sendMessage(
-      tab,
-      line,
-      gameSystem,
-      cursor.identifier,
-      '',
-      0,
-      cursor.chatColorCode[0]
+    return this.markedAs(options, () =>
+      this.chatMessageService.sendMessage(tab, line, gameSystem, cursor.identifier, '', 0, cursor.chatColorCode[0])
     );
   }
 
@@ -174,7 +173,7 @@ export class CharacterMacroService {
     name: string,
     line: string,
     character: GameCharacter | null,
-    options: Pick<MacroSendOptions, 'tab' | 'gameType'> = {}
+    options: Pick<MacroSendOptions, 'tab' | 'gameType' | 'mastersWords'> = {}
   ): Promise<ChatMessage | null> {
     const tab = this.resolveTab(options.tab);
     if (!tab) return null;
@@ -185,7 +184,12 @@ export class CharacterMacroService {
       this.chatMessageService.gameType;
     const gameSystem = await DiceBot.loadGameSystemAsync(gameType);
     const text = character ? evaluateCharacterReferences(line, character).text : line;
-    return this.chatMessageService.sendAsNamed(tab, text, gameSystem, name);
+    return this.markedAs(options, () => this.chatMessageService.sendAsNamed(tab, text, gameSystem, name));
+  }
+
+  /** Sends at once through `send`, marked as a game master's words where the options say the line is. */
+  private markedAs<T>(options: Pick<MacroSendOptions, 'mastersWords'>, send: () => T): T {
+    return options.mastersWords ? this.chatMessageService.asMastersWords(send) : send();
   }
 
   /**
