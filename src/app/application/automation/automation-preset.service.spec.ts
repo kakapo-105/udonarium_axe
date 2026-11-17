@@ -1,7 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { AUTOMATION_SCOPES } from '@axe/application/automation/automation-contract';
 import { AutomationPolicyService } from '@axe/application/automation/automation-policy.service';
-import { automationPresetOf, AutomationPresetService } from '@axe/application/automation/automation-preset.service';
+import {
+  automationPresetOf,
+  AutomationPresetService,
+  automationRoomOf,
+} from '@axe/application/automation/automation-preset.service';
 import { LocalModePreferenceService } from '@axe/application/ui/local-mode-preference.service';
 import { PAGE_ADDRESS } from '@axe/application/ui/page-address.token';
 import { ObjectStore } from '@axe/core/sync/object-store';
@@ -40,6 +44,21 @@ describe('AutomationPresetService', () => {
     expect(automationPresetOf('http://localhost:4200/?automation=1&automationPreset=gm')).toBe('gm');
     expect(automationPresetOf('http://localhost:4200/?automation=1')).toBeNull();
     expect(automationPresetOf('http://localhost:4200/?automationPreset=root')).toBeNull();
+    expect(automationPresetOf('http://localhost:4200/?automation=1&automationPreset=pl')).toBe('pl');
+  });
+
+  it('reads the room to open from the address, only when its id is a room id', () => {
+    expect(
+      automationRoomOf('http://localhost:4200/?automationRoom=a1Z&automationRoomName=test&automationRoomPassword=pw')
+    ).toEqual({ roomId: 'a1Z', roomName: 'test', password: 'pw' });
+    expect(automationRoomOf('http://localhost:4200/?automationRoom=a1Z&automationRoomName=test')).toEqual({
+      roomId: 'a1Z',
+      roomName: 'test',
+      password: '',
+    });
+    expect(automationRoomOf('http://localhost:4200/?automationRoom=abcd&automationRoomName=test')).toBeNull();
+    expect(automationRoomOf('http://localhost:4200/?automationRoom=abc')).toBeNull();
+    expect(automationRoomOf('http://localhost:4200/')).toBeNull();
   });
 
   it('does nothing without a preset', () => {
@@ -85,6 +104,29 @@ describe('AutomationPresetService', () => {
 
   it('never takes the game master’s seat from somebody who has it', () => {
     const { preset } = start('/?automation=1&automationPreset=gm');
+    const other = new PeerCursor();
+    other.initialize();
+    other.role = PeerRole.GameMaster;
+
+    preset.apply();
+
+    expect(PeerCursor.myCursor.role).toBe(PeerRole.Player);
+  });
+
+  it('keeps a player a player and enables every grant, leaving the room’s rules alone', () => {
+    const { preset, policy } = start('/?automation=1&automationPreset=pl');
+
+    preset.apply();
+
+    expect(PeerCursor.myCursor.role).toBe(PeerRole.Player);
+    expect(policy.enabled()).toBe(true);
+    expect([...policy.scopes()].sort()).toEqual([...AUTOMATION_SCOPES].sort());
+    expect(Config.instance.automationOwnedOnly).not.toBe(false);
+  });
+
+  it('steps a player seat down from game master where another seat is the game master', () => {
+    const { preset } = start('/?automation=1&automationPreset=pl');
+    PeerCursor.myCursor.role = PeerRole.GameMaster;
     const other = new PeerCursor();
     other.initialize();
     other.role = PeerRole.GameMaster;

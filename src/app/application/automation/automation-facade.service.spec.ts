@@ -130,6 +130,18 @@ describe('AutomationFacadeService', () => {
     data.scopes.push('move_piece');
     error(await move(), 'FORBIDDEN');
   });
+  it('reads what this screen shows: its role, the view, the music and novel mode', async () => {
+    const result = await call('view_get');
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        view: { mode: expect.any(String), flat: expect.any(Boolean) },
+        bgm: { playing: expect.any(Boolean) },
+        novel: { open: false },
+      },
+    });
+    error(await call('view_get', { extra: true }), 'INVALID_ARGUMENT');
+  });
   it.each([NaN, Infinity, -1, 9999999, '3', null])('rejects invalid coordinates %s', async (x) => {
     error(await move({ x }), 'INVALID_ARGUMENT');
     expect(piece.location.x).toBe(50);

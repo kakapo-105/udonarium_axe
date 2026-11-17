@@ -4,6 +4,9 @@ import { AutomationFacadeService } from '@axe/application/automation/automation-
 import { AutomationPolicyService } from '@axe/application/automation/automation-policy.service';
 import { SessionCommandService } from '@axe/application/automation/session-command.service';
 import { PAGE_ADDRESS } from '@axe/application/ui/page-address.token';
+import { Network } from '@axe/core/network/network';
+import { PeerContext } from '@axe/core/network/peer-context';
+import { saveIdentity } from '@axe/core/storage/identity-storage';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
@@ -12,12 +15,41 @@ import { PeerRole } from '@axe/domain/peer/peer-role';
 /** The address parameter that asks for a preset, as `automationPreset=gm`. */
 export const AUTOMATION_PRESET_PARAM = 'automationPreset';
 
-export type AutomationPreset = 'gm';
+export type AutomationPreset = 'gm' | 'pl';
 
 /** The preset an address asks for, or none. */
 export function automationPresetOf(href: string): AutomationPreset | null {
   try {
-    return new URL(href).searchParams.get(AUTOMATION_PRESET_PARAM) === 'gm' ? 'gm' : null;
+    const asked = new URL(href).searchParams.get(AUTOMATION_PRESET_PARAM);
+    return asked === 'gm' || asked === 'pl' ? asked : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A room the `gm` preset opens by itself, so a run started by a script needs nobody at the lobby. */
+export interface AutomationRoom {
+  roomId: string;
+  roomName: string;
+  password: string;
+}
+
+/**
+ * The room an address asks the `gm` preset to open, as `automationRoom=abc&automationRoomName=test`
+ * with `automationRoomPassword` optional, or none. The id is the three letters or digits a room id
+ * is; whoever starts the browser picks it, so the invitation for the other seats is known beforehand.
+ * With a password the room opens under the first two letters and a checksum of the name and password
+ * in place of the third, as every room with a password does; the invitation names that id.
+ */
+export function automationRoomOf(href: string): AutomationRoom | null {
+  try {
+    const params = new URL(href).searchParams;
+    const roomId = params.get('automationRoom') ?? '';
+    const roomName = params.get('automationRoomName') ?? '';
+    const password = params.get('automationRoomPassword') ?? '';
+    if (!/^[0-9A-Za-z]{3}$/.test(roomId) || roomName.length < 1 || roomName.length > 255 || password.length > 64)
+      return null;
+    return { roomId, roomName, password };
   } catch {
     return null;
   }
@@ -33,6 +65,15 @@ export function automationPresetOf(href: string): AutomationPreset | null {
  * as they always do; the preset gives them back the next time it is applied. Pressing stop is
  * respected: nothing is given back until the person enables AI control again.
  *
+ * The `pl` preset keeps the seat a player (one that came in as the game master steps down where
+ * another seat is the game master) and enables AI control with every grant, so a script or an AI
+ * can play a player's part through what a player's screen shows. What a player may not do is still
+ * refused by the role, and the room's own rules, such as control of owned pieces only, are left as
+ * the game master set them.
+ *
+ * With `automationRoom` the `gm` preset also opens that room once the seat is on the network and not
+ * in a room yet, as the room dialog would, so the other seats can join by an invitation built from it.
+ *
  * The address is the only way in. A preset is asked for by whoever starts the dedicated browser,
  * and the panel shows AI control as active the whole time.
  */
@@ -42,13 +83,21 @@ export class AutomationPresetService {
   private readonly policy = inject(AutomationPolicyService);
   private readonly session = inject(SessionCommandService);
   private readonly store = inject(ObjectStore);
-  readonly preset: AutomationPreset | null = automationPresetOf(inject(PAGE_ADDRESS)());
+  private readonly address = inject(PAGE_ADDRESS)();
+  readonly preset: AutomationPreset | null = automationPresetOf(this.address);
+  private readonly room: AutomationRoom | null = this.preset === 'gm' ? automationRoomOf(this.address) : null;
+  private roomOpened = false;
 
   /** Applies the preset once, doing as much as the seat's state allows; meant to be run again and again. */
   apply(): void {
-    if (this.preset !== 'gm' || this.policy.stoppedByUser()) return;
+    if (!this.preset || this.policy.stoppedByUser()) return;
     const me = PeerCursor.myCursor;
     if (!me) return;
+    if (this.preset === 'pl') {
+      this.applyPlayer(me);
+      return;
+    }
+    this.openRoom(me);
     // A seat that changed since it was last looked at drops its old session first, so the one
     // enabled here is not ended by that afterwards.
     this.facade.health();
@@ -67,6 +116,35 @@ export class AutomationPresetService {
     }
     const config = this.store.get<Config>('Config');
     if (config && config.automationOwnedOnly !== false) config.automationOwnedOnly = false;
+  }
+
+  private applyPlayer(me: PeerCursor): void {
+    this.facade.health();
+    if (me.role === PeerRole.GameMaster && this.someoneElseIsGameMaster(me)) {
+      me.role = PeerRole.Player;
+      me.update();
+      return;
+    }
+    if (!this.session.ready) return;
+    if (!this.policy.enabled()) {
+      this.policy.enable();
+      for (const scope of AUTOMATION_SCOPES) this.policy.setScope(scope, true);
+    }
+  }
+
+  /** Opens the room the address names, once, on SkyWay; a room server makes its own rooms. */
+  private openRoom(me: PeerCursor): void {
+    const room = this.room;
+    if (!room || this.roomOpened) return;
+    const network = Network.instance;
+    if (network.transport === 'server' || !network.isOpen || network.peerContext.isRoom) return;
+    this.roomOpened = true;
+    const userId = network.peerContext ? network.peerContext.userId : PeerContext.generateUserId();
+    network.open(userId, room.roomId, room.roomName, room.password);
+    me.peerId = network.peerId;
+    me.reConnectPass = room.password;
+    if (me.role !== PeerRole.GameMaster) me.role = PeerRole.GameMaster;
+    saveIdentity({ userId, roomId: room.roomId, roomName: room.roomName, role: me.role, reConnectPass: room.password });
   }
 
   private someoneElseIsGameMaster(me: PeerCursor): boolean {

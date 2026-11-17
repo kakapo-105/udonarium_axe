@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
@@ -32,6 +33,8 @@ export interface SessionInvoker {
     sessionId?: string,
     timeoutMs?: number
   ): Promise<FacadeResult>;
+  /** Saves what the dedicated browser shows as a PNG at the path; absent where there is no screen. */
+  screenshot?(file: string): Promise<FacadeResult>;
 }
 
 export interface ServerOptions {
@@ -43,6 +46,8 @@ export interface ServerOptions {
   sleep?: (ms: number) => Promise<void>;
   /** Where room templates and sounds are kept on this machine. None, and no template can be loaded. */
   templates?: TemplateFolders;
+  /** Where screenshot saves its pictures. None, and screenshot is refused. */
+  shotDir?: string;
 }
 
 /** How long the browser is given for a request; a wait for chat gets its own wait and a margin. */
@@ -75,6 +80,7 @@ export function lineGapMs(text: string, style?: string): number {
 }
 /** The tools answered here from this machine's folders, without the browser. */
 const LOCAL_TOOLS = new Set(['room_template_list']);
+const SHOT_NAME = /^[\w.-]{1,64}$/;
 // The atmospheres the map generator offers (DUNGEON_ATMOSPHERE_IDS and FIELD_ATMOSPHERE_IDS in the app);
 // the browser refuses any it does not know, so a stale list here only narrows what can be asked for.
 const DUNGEON_ATMOSPHERES = [
@@ -143,6 +149,20 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       description:
         'Read connection, role, table geometry, allowed scopes, chat tab identifiers and the current sessionId.',
       shape: {},
+    },
+    {
+      name: 'view_get',
+      read: true,
+      description:
+        "Read what this seat's own screen shows: its role, the table in view, whether the table is seen from straight above (view.flat, after this seat's view setting in view.mode), the room's music (playing, identifier, name) and whether novel mode is open on this screen with the stage's background. Run from a player's seat, it tells what the players see.",
+      shape: {},
+    },
+    {
+      name: 'screenshot',
+      read: true,
+      description:
+        'Save a PNG of what the dedicated browser shows into the screenshot folder (UDONARIUM_SHOT_DIR) under name (letters, digits, ., _ and -; .png is added), and return its path. Nothing in the room changes.',
+      shape: { name: z.string().regex(SHOT_NAME) },
     },
     {
       name: 'scene_list',
@@ -841,6 +861,12 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
         let args = given;
         let warnings: string[] = [];
         let notes: Record<string, unknown> = {};
+        if (tool.name === 'screenshot') {
+          if (!options.shotDir || !session.screenshot)
+            return mapResult(failure('NOT_READY', 'Set UDONARIUM_SHOT_DIR to a folder for screenshots.'));
+          const name = String(given['name']).replace(/\.png$/i, '');
+          return mapResult(await session.screenshot(path.join(options.shotDir, `${name}.png`)));
+        }
         if (LOCAL_TOOLS.has(tool.name)) {
           const sounds = await library.entries(folders.audio ?? []);
           return mapResult({

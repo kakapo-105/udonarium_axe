@@ -1,3 +1,5 @@
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { Browser, Page } from 'playwright';
@@ -48,7 +50,11 @@ export class BrowserSession {
       throw new Error('Browser startup was cancelled.');
     }
     // No fixed viewport: the page follows the window, so a person checking on it can make it larger.
-    const context = await this.browser.newContext({ acceptDownloads: false, viewport: null });
+    // Without a window, the page is given a screen large enough that its screenshots show the table.
+    const context = await this.browser.newContext({
+      acceptDownloads: false,
+      viewport: this.headless ? { width: 1600, height: 900 } : null,
+    });
     const page = await context.newPage();
     this.page = page;
     context.on('page', (opened) => {
@@ -110,6 +116,17 @@ export class BrowserSession {
       );
     } finally {
       if (timer) clearTimeout(timer);
+    }
+  }
+  async screenshot(file: string): Promise<FacadeResult> {
+    try {
+      const page = await this.start();
+      await mkdir(path.dirname(file), { recursive: true });
+      await page.screenshot({ path: file, timeout: 15000 });
+      return { ok: true, data: { path: file } };
+    } catch (error) {
+      console.error('Udonarium screenshot:', error instanceof Error ? error.message : 'failed');
+      return failure('NOT_READY', 'Could not take a screenshot of the dedicated browser.');
     }
   }
   async close(): Promise<void> {

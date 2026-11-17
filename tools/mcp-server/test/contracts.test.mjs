@@ -29,7 +29,7 @@ test('the real stdio entry point lists tools and reports missing Chromium withou
   });
   try {
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length, 51);
+    assert.equal((await client.listTools()).tools.length, 53);
     const result = await client.callTool({ name: 'session_get', arguments: {} });
     assert.equal(result.structuredContent.error.code, 'NOT_READY');
     assert.match(stderr, /Udonarium browser/);
@@ -52,7 +52,7 @@ async function connected(invoke, work, options) {
   }
 }
 
-test('exposes exactly the fifty-one bounded tools with schemas and read annotations', async () => {
+test('exposes exactly the fifty-three bounded tools with schemas and read annotations', async () => {
   await connected(
     async () => ({ ok: true, data: {} }),
     async (client) => {
@@ -95,6 +95,7 @@ test('exposes exactly the fifty-one bounded tools with schemas and read annotati
         'room_template_list',
         'room_template_load',
         'scene_list',
+        'screenshot',
         'self_set',
         'session_get',
         'switch_list',
@@ -108,6 +109,7 @@ test('exposes exactly the fifty-one bounded tools with schemas and read annotati
         'turn_get',
         'turn_set',
         'view_focus',
+        'view_get',
         'vn_stage',
       ]);
       assert.equal(tools.find((t) => t.name === 'palette_send').annotations.readOnlyHint, false);
@@ -851,4 +853,37 @@ test('dresses a table from the image and sound folders, sending a picture used t
       { templates: { images: folder, audio: [audio] } }
     );
   });
+});
+
+test('screenshot saves under the folder by a plain name, and is refused without one', async () => {
+  const saved = [];
+  const invoker = {
+    invoke: async () => ({ ok: true, data: {} }),
+    screenshot: async (file) => {
+      saved.push(file);
+      return { ok: true, data: { path: file } };
+    },
+  };
+  const server = createServer(invoker, { shotDir: path.join(tmpdir(), 'shots') });
+  const client = new Client({ name: 'contract-test', version: '1' });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await server.connect(serverTransport);
+  await client.connect(clientTransport);
+  try {
+    const result = await client.callTool({ name: 'screenshot', arguments: { name: 'tavern-view.png' } });
+    assert.equal(result.structuredContent.data.path, path.join(tmpdir(), 'shots', 'tavern-view.png'));
+    const bad = await client.callTool({ name: 'screenshot', arguments: { name: '../escape' } });
+    assert.equal(bad.isError, true);
+    assert.equal(saved.length, 1);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+  await connected(
+    async () => ({ ok: true, data: {} }),
+    async (client) => {
+      const result = await client.callTool({ name: 'screenshot', arguments: { name: 'x' } });
+      assert.equal(result.structuredContent.error.code, 'NOT_READY');
+    }
+  );
 });

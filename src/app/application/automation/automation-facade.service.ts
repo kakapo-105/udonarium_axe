@@ -45,6 +45,8 @@ import { EffectLibraryService } from '@axe/application/effect/effect-library.ser
 import { GameClockService } from '@axe/application/game-clock/game-clock.service';
 import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
 import { TurnOrderService } from '@axe/application/turn/turn-order.service';
+import { ViewModePreferenceService } from '@axe/application/ui/view-mode-preference.service';
+import { VisualNovelModeService } from '@axe/application/ui/visual-novel-mode.service';
 import { callSceneFade } from '@axe/core/event/domain-events';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { BuffRemovalRule } from '@axe/domain/character/buff-bulk-removal';
@@ -68,8 +70,9 @@ import { MapMaterial } from '@axe/domain/tabletop/map-blocks';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { TabletopObject } from '@axe/domain/tabletop/tabletop-object';
 import { TextNote } from '@axe/domain/tabletop/text-note';
+import { laysFlat } from '@axe/domain/ui/view-mode';
 import { VN_MESSAGE_KINDS, VnMessageKind } from '@axe/domain/visual-novel/vn-emote';
-import { VN_STAGE_TRANSITIONS, VnStageTransition } from '@axe/domain/visual-novel/vn-stage';
+import { VN_STAGE_TRANSITIONS, VnStage, VnStageTransition } from '@axe/domain/visual-novel/vn-stage';
 
 const REQUEST_TIMEOUT_MS = 15000;
 const DEFAULT_WAIT_SECONDS = 60;
@@ -352,6 +355,8 @@ export class AutomationFacadeService {
   private readonly stealth = inject(StealthService);
   private readonly gameClock = inject(GameClockService);
   private readonly chatLint = inject(ChatLintService);
+  private readonly viewMode = inject(ViewModePreferenceService);
+  private readonly novelMode = inject(VisualNovelModeService);
   private readonly store = inject(ObjectStore);
   /** The room's table selecter, read through `instance` as it is replaced with the room. */
   private get tables(): TableSelecter {
@@ -649,6 +654,25 @@ export class AutomationFacadeService {
           objects: pieces.slice(0, limit),
           next: pieces.length > limit ? pieces[limit - 1].identifier : null,
           ...(notes ? { notes } : {}),
+        };
+      }
+      case 'view_get': {
+        onlyKeys(a, []);
+        // What this seat's own screen shows, so a seat in another role can tell what its players see.
+        const table = this.tables.viewTable;
+        const jukebox = this.store.get<Jukebox>('Jukebox');
+        const stage = this.store.get<VnStage>('VnStage');
+        const track = jukebox?.audio ?? null;
+        return {
+          role: PeerCursor.myRole,
+          table: table ? { identifier: table.identifier, name: table.name.slice(0, 256) } : null,
+          view: { mode: this.viewMode.mode(), flat: laysFlat(this.viewMode.mode(), table?.mode2d ?? false) },
+          bgm: {
+            playing: jukebox?.isPlaying === true,
+            identifier: jukebox?.audioIdentifier || null,
+            name: track ? track.name.slice(0, 256) : null,
+          },
+          novel: { open: this.novelMode.active(), background: stage?.backgroundImageIdentifier || null },
         };
       }
       case 'object_get':

@@ -11,7 +11,11 @@ if (args.length !== 0 && (args.length !== 2 || args[0] !== '--url')) {
   console.error('Usage: node dist/server.js [--url http://localhost:4200]');
   process.exit(1);
 }
-const session = new BrowserSession(args[1] ?? process.env.UDONARIUM_URL ?? 'http://localhost:4200');
+// UDONARIUM_HEADLESS=1 runs the browser without a window, for a seat a script plays unattended.
+const session = new BrowserSession(
+  args[1] ?? process.env.UDONARIUM_URL ?? 'http://localhost:4200',
+  process.env.UDONARIUM_HEADLESS === '1'
+);
 let pieceSources: string[];
 try {
   pieceSources = pieceSourceOrigins(process.env.UDONARIUM_PIECE_SOURCES);
@@ -30,6 +34,7 @@ const server = createServer(session, {
     images: process.env.UDONARIUM_IMAGE_DIR || undefined,
     scenarios: process.env.UDONARIUM_SCENARIO_DIR || undefined,
   },
+  shotDir: process.env.UDONARIUM_SHOT_DIR || undefined,
 });
 const stop = async () => {
   await session.close();
