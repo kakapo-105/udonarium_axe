@@ -2070,6 +2070,27 @@ describe('AutomationFacadeService', () => {
         expect(tables()).toHaveLength(3);
       });
 
+      it('lends what was owned in the save to nobody, or makes it the loader’s own with adopt', async () => {
+        beGameMaster();
+        const saved = (name: string) =>
+          '<room><character owner="someone-who-saved"><data name="character"><data name="common">' +
+          `<data name="name">${name}</data></data></data></character></room>`;
+        const named = (name: string) =>
+          store.getObjects<GameCharacter>(GameCharacter).find((piece) => piece.name === name);
+
+        expect((await call('room_template_load', { room: saved('貸し') })).ok).toBe(true);
+        expect(named('貸し')?.owner).toBe('');
+
+        const adopted = await call('room_template_load', { room: saved('引き取り'), adopt: true });
+        expect(named('引き取り')?.owner).toBe(PeerCursor.myCursor.userId);
+        // A save keeps no identifiers; the answer names what was built with the ones it was given.
+        expect(adopted).toMatchObject({
+          ok: true,
+          data: { pieces: [{ identifier: named('引き取り')?.identifier, name: '引き取り' }], notes: [] },
+        });
+        error(await call('room_template_load', { room: saved('x'), adopt: 'yes' }), 'INVALID_ARGUMENT');
+      });
+
       it('takes the rules of play from the template, but not how far automation may reach', async () => {
         beGameMaster();
         Config.instance.automationOwnedOnly = false;

@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 import { type FacadeResult, failure } from '#mcp/facade-client.js';
+import { readZip } from '#mcp/zip-reader.js';
 
 /** As many pictures and sounds as the browser takes in one request. */
 const MAX_IMAGES = 20;
@@ -108,6 +110,44 @@ function templateFolder(root: string, name: string): string {
   return folder;
 }
 
+/** A saved room kept as the zip Udonarium saves, beside the folders: read once into a folder of its own. */
+const MAX_ZIP_FILE_BYTES = 16 * 1024 * 1024;
+const MAX_ZIP_BYTES = 128 * 1024 * 1024;
+const ZIP_SUFFIX = '.zip';
+
+async function isDirectory(file: string): Promise<boolean> {
+  return stat(file).then(
+    (found) => found.isDirectory(),
+    () => false
+  );
+}
+
+/**
+ * The folder a template is read from: its own folder, or else the zip of the same name unpacked into
+ * the system's temporary folder, once for each version of the zip (by its size and time).
+ */
+async function templateSource(root: string, name: string): Promise<string> {
+  const folder = templateFolder(root, name);
+  if (await isDirectory(folder)) return folder;
+  const zip = `${folder}${ZIP_SUFFIX}`;
+  const found = await stat(zip).catch(() => null);
+  if (!found?.isFile()) return folder;
+  const key = createHash('sha256').update(`${zip}|${found.size}|${found.mtimeMs}`).digest('hex').slice(0, 24);
+  const unpacked = path.join(os.tmpdir(), 'udonarium-axe-templates', key);
+  if (await isDirectory(unpacked)) return unpacked;
+  const files = readZip(await readFile(zip), MAX_ZIP_FILE_BYTES, MAX_ZIP_BYTES);
+  // Written beside and then moved, so a folder that is there is always whole.
+  const writing = `${unpacked}.${process.pid}.part`;
+  await rm(writing, { recursive: true, force: true });
+  await mkdir(writing, { recursive: true });
+  for (const [file, bytes] of files) await writeFile(path.join(writing, file), bytes);
+  await rename(writing, unpacked).catch(async (error: NodeJS.ErrnoException) => {
+    await rm(writing, { recursive: true, force: true });
+    if (!(await isDirectory(unpacked))) throw error;
+  });
+  return unpacked;
+}
+
 async function readOptional(file: string, max: number): Promise<string | undefined> {
   try {
     if ((await stat(file)).size > max) throw new RangeError(`${path.basename(file)} is too large.`);
@@ -147,15 +187,20 @@ export async function listTemplates(
   if (!folders.templates) return [];
   const entries = await readdir(folders.templates, { withFileTypes: true }).catch(() => []);
   const templates = [];
+  const folderNames = new Set(entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name));
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const room = await readOptional(path.join(folders.templates, entry.name, 'data.xml'), MAX_ROOM_BYTES).catch(
-      () => undefined
-    );
+    const zipped = entry.isFile() && entry.name.toLowerCase().endsWith(ZIP_SUFFIX);
+    if (!entry.isDirectory() && !zipped) continue;
+    const name = zipped ? entry.name.slice(0, -ZIP_SUFFIX.length) : entry.name;
+    // A folder of the same name is the one read.
+    if (zipped && folderNames.has(name)) continue;
+    const folder = await templateSource(folders.templates, name).catch(() => undefined);
+    if (folder === undefined) continue;
+    const room = await readOptional(path.join(folder, 'data.xml'), MAX_ROOM_BYTES).catch(() => undefined);
     if (room === undefined) continue;
-    const notes = await readNotes(path.join(folders.templates, entry.name)).catch(() => undefined);
+    const notes = await readNotes(folder).catch(() => undefined);
     templates.push({
-      name: entry.name,
+      name,
       tables: tableNamesOf(room),
       ...(notes?.['description'] !== undefined ? { description: notes['description'] } : {}),
     });
@@ -219,8 +264,10 @@ export async function loadTemplate(
     return failure('NOT_READY', 'No templates folder is set. Start the MCP server with UDONARIUM_TEMPLATE_DIR.');
   let folder: string;
   try {
-    folder = templateFolder(folders.templates, name);
-  } catch {
+    folder = await templateSource(folders.templates, name);
+  } catch (error) {
+    if (error instanceof RangeError && error.message !== 'Bad template name.')
+      return failure('INVALID_ARGUMENT', `The template zip cannot be read: ${error.message}`);
     return failure('INVALID_ARGUMENT', 'A template is named by its folder alone.');
   }
   let room: string | undefined;

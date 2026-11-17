@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { deflateRawSync } from 'node:zlib';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -886,4 +887,97 @@ test('screenshot saves under the folder by a plain name, and is refused without 
       assert.equal(result.structuredContent.error.code, 'NOT_READY');
     }
   );
+});
+
+/** A zip as Udonarium saves a room: flat files, the large ones deflated. */
+function zipOf(files) {
+  const locals = [];
+  const directory = [];
+  let offset = 0;
+  for (const [name, content] of Object.entries(files)) {
+    const data = Buffer.from(content);
+    const deflate = data.length > 8;
+    const packed = deflate ? deflateRawSync(data) : data;
+    const fileName = Buffer.from(name, 'utf8');
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(0x800, 6);
+    local.writeUInt16LE(deflate ? 8 : 0, 8);
+    local.writeUInt32LE(packed.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(fileName.length, 26);
+    const entry = Buffer.alloc(46);
+    entry.writeUInt32LE(0x02014b50, 0);
+    entry.writeUInt16LE(0x800, 8);
+    entry.writeUInt16LE(deflate ? 8 : 0, 10);
+    entry.writeUInt32LE(packed.length, 20);
+    entry.writeUInt32LE(data.length, 24);
+    entry.writeUInt16LE(fileName.length, 28);
+    entry.writeUInt32LE(offset, 42);
+    locals.push(local, fileName, packed);
+    directory.push(entry, fileName);
+    offset += 30 + fileName.length + packed.length;
+  }
+  const dir = Buffer.concat(directory);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(Object.keys(files).length, 8);
+  end.writeUInt16LE(Object.keys(files).length, 10);
+  end.writeUInt32LE(dir.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, dir, end]);
+}
+
+test('reads a template kept as the zip a room is saved as, and passes adopt on', async () => {
+  await workspace(async ({ root, templates, audio }) => {
+    const picture = Buffer.from([7, 8, 9]);
+    const room =
+      `<room><game-table name="テスト: 宿" imageIdentifier="${sha(picture)}"></game-table>` +
+      '<character identifier="pc-1" owner="someone"></character></room>';
+    await writeFile(
+      path.join(templates, 'テスト部屋.zip'),
+      zipOf({ 'data.xml': room, [`${sha(picture)}.webp`]: picture, 'folder/inner.txt': 'skipped' })
+    );
+    let received;
+    await connected(
+      async (command, args) => {
+        received = [command, args];
+        return { ok: true, data: { tables: [], missingAudio: [] } };
+      },
+      async (client) => {
+        const listed = await client.callTool({ name: 'room_template_list', arguments: {} });
+        assert.deepEqual(
+          listed.structuredContent.data.templates.find((t) => t.name === 'テスト部屋'),
+          { name: 'テスト部屋', tables: ['テスト: 宿'] }
+        );
+        const loaded = await client.callTool({
+          name: 'room_template_load',
+          arguments: { sessionId: 's', template: 'テスト部屋', adopt: true },
+        });
+        assert.equal(loaded.structuredContent.ok, true);
+        assert.equal(received[0], 'room_template_load');
+        assert.equal(received[1].room, room);
+        assert.equal(received[1].adopt, true);
+        assert.deepEqual(
+          received[1].images.map((image) => image.identifier),
+          [sha(picture)]
+        );
+      },
+      { templates: { templates, audio: [audio] } }
+    );
+    await writeFile(path.join(templates, 'broken.zip'), 'not a zip');
+    await connected(
+      async () => ({ ok: true, data: {} }),
+      async (client) => {
+        const broken = await client.callTool({
+          name: 'room_template_load',
+          arguments: { sessionId: 's', template: 'broken' },
+        });
+        assert.equal(broken.structuredContent.error.code, 'INVALID_ARGUMENT');
+        assert.match(broken.structuredContent.error.message, /zip/);
+      },
+      { templates: { templates, audio: [audio] } }
+    );
+    void root;
+  });
 });

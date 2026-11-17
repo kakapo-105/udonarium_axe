@@ -1392,7 +1392,7 @@ export class AutomationFacadeService {
         return this.roomPrep.createNote(request);
       }
       case 'room_template_load': {
-        onlyKeys(a, ['room', 'tables', 'presets', 'config', 'audioTags', 'images', 'audios']);
+        onlyKeys(a, ['room', 'tables', 'presets', 'config', 'audioTags', 'images', 'audios', 'adopt']);
         return this.roomTemplates.load(
           {
             room: textArgument(a['room'], MAX_TEMPLATE_XML),
@@ -1402,6 +1402,7 @@ export class AutomationFacadeService {
             audioTags: a['audioTags'] === undefined ? null : textArgument(a['audioTags'], MAX_TEMPLATE_PART_XML),
             images: a['images'] === undefined ? [] : automationImagesOf(a['images']),
             audios: a['audios'] === undefined ? [] : automationAudiosOf(a['audios']),
+            adopt: booleanOf(a['adopt'], 'adopt'),
           },
           guard
         );

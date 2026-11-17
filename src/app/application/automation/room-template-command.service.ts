@@ -6,15 +6,20 @@ import { GameObject } from '@axe/core/sync/game-object';
 import { ObjectSerializer } from '@axe/core/sync/object-serializer';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { xml2element } from '@axe/core/util/xml-util';
+import { GameCharacter } from '@axe/domain/character/game-character';
 import { CutIn } from '@axe/domain/media/cut-in';
 import { Jukebox } from '@axe/domain/media/jukebox';
 import { tableBgmModeOf } from '@axe/domain/media/table-bgm';
 import { Config } from '@axe/domain/peer/config';
+import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { GameTable } from '@axe/domain/tabletop/game-table';
-import { clearOwnership } from '@axe/domain/tabletop/ownership';
+import { TextNote } from '@axe/domain/tabletop/text-note';
+import { asOwnable, clearOwnership } from '@axe/domain/tabletop/ownership';
 import { adoptLegacyTableBgm, tableBgmSettingOf } from '@axe/domain/tabletop/table-bgm';
 
 /** What a saved room brings that is not a table but goes with one, as a battlefield's ranges and cut-ins do. */
+/** At most this many built pieces and notes are named in the answer. */
+const MAX_LISTED_BUILT = 100;
 const TEMPLATE_PARTS = new Set([
   'range',
   'cut-in',
@@ -53,6 +58,11 @@ export interface TemplateRequest {
   audioTags: string | null;
   images: readonly AutomationImage[];
   audios: readonly AutomationAudio[];
+  /**
+   * Whether what was owned in the save becomes the loader's own, as when a saved room is the table a
+   * master sets out again (a test room, the room of a campaign), rather than parts lent to the room.
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -113,13 +123,17 @@ export class RoomTemplateCommandService {
     const built = GameObject.batch(() =>
       wanted.map((child) => this.serializer.parseXml(child)).filter((object) => object !== null)
     );
-    clearOwnership(built);
+    if (request.adopt) adoptOwnership(built, PeerCursor.myCursor?.userId ?? '');
+    else clearOwnership(built);
     if (audioTags) this.serializer.parseXml(audioTags);
     if (config) this.applyConfig(config);
 
     const tables = built.filter((object): object is GameTable => object instanceof GameTable);
     for (const table of tables) adoptLegacyTableBgm(table);
     const cutIns = built.filter((object): object is CutIn => object instanceof CutIn);
+    // A save keeps no identifiers, so what was built is named here with the identifiers it was given.
+    const pieces = built.filter((object): object is GameCharacter => object instanceof GameCharacter);
+    const notes = built.filter((object): object is TextNote => object instanceof TextNote);
     return {
       tables: tables.map((table) => ({
         identifier: table.identifier,
@@ -130,7 +144,17 @@ export class RoomTemplateCommandService {
         cutIns: table.cutInIdentifiers.split(',').filter((identifier) => identifier.length > 0),
       })),
       cutIns: cutIns.map((cutIn) => ({ identifier: cutIn.identifier, name: cutIn.name.slice(0, 256) })),
-      others: built.length - tables.length - cutIns.length,
+      pieces: pieces.slice(0, MAX_LISTED_BUILT).map((piece) => ({
+        identifier: piece.identifier,
+        name: piece.name.slice(0, 256),
+        place: piece.location.name,
+      })),
+      notes: notes.slice(0, MAX_LISTED_BUILT).map((note) => ({
+        identifier: note.identifier,
+        title: note.title.slice(0, 256),
+        place: note.location.name,
+      })),
+      others: built.length - tables.length - cutIns.length - pieces.length - notes.length,
       skipped,
       missingAudio: this.unheard(tables, cutIns),
       config: config !== null,
@@ -218,5 +242,13 @@ export class RoomTemplateCommandService {
     const after = then ?? playingOver;
     jukebox.playOnce(identifier, after);
     return { playing: identifier, loop, then: jukebox.afterOnce || null };
+  }
+}
+
+/** Makes whatever had an owner in the save the loader's own; what nobody owned stays so. */
+function adoptOwnership(objects: Iterable<unknown>, owner: string): void {
+  for (const object of objects) {
+    const ownable = asOwnable(object);
+    if (ownable && ownable.owner.length > 0) ownable.owner = owner;
   }
 }

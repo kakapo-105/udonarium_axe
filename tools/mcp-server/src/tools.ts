@@ -805,13 +805,14 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'room_template_load',
       read: false,
       description:
-        "Build tables from a room template alongside the tables in play, for a scene's backdrop and music or a battlefield with its ranges and cut-ins. tables names the tables to build (all when left out); the template's ranges, cut-ins, notes and pieces come too, except what the room already has under the same identifier. A template's pictures come from its folder, and the sounds its tables and cut-ins name are found by content in its folder or the sound folders, since a saved room keeps no sounds; missingAudio and sourceWarnings say what could not be found. config (default true) takes the template's rules of play, such as the dice bot and turn order, keeping the room's volume and automation settings. presets also adds the template's effect library. templateNotes returns the template's template.json as written by the master, such as how each table is laid out (scale, where each side starts) and when to use it; read it before placing pieces. Nothing is put in view; use table_select. Game master only; requires the prepare_room browser grant.",
+        "Build tables from a room template alongside the tables in play, for a scene's backdrop and music or a battlefield with its ranges and cut-ins. tables names the tables to build (all when left out); the template's ranges, cut-ins, notes and pieces come too, except what the room already has under the same identifier. A template's pictures come from its folder, and the sounds its tables and cut-ins name are found by content in its folder or the sound folders, since a saved room keeps no sounds; missingAudio and sourceWarnings say what could not be found. config (default true) takes the template's rules of play, such as the dice bot and turn order, keeping the room's volume and automation settings. presets also adds the template's effect library. templateNotes returns the template's template.json as written by the master, such as how each table is laid out (scale, where each side starts) and when to use it; read it before placing pieces. Pieces and notes come without an owner, unless adopt is true: then whatever had an owner in the save becomes yours, so you can reveal, conceal and lock it, as when the template is a whole room you set out again (a test room). A saved room keeps no identifiers, so everything gets new ones each time it is loaded: the result names the tables, pieces (name, place) and notes (title, place) it built with their identifiers. A template is a folder, or the zip a room is saved as, placed in the templates folder under the template's name. Nothing is put in view; use table_select. Game master only; requires the prepare_room browser grant.",
       shape: {
         ...retry,
         template: z.string().min(1).max(128),
         tables: z.array(z.string().min(1).max(256)).min(1).max(20).optional(),
         config: z.boolean().optional(),
         presets: z.boolean().optional(),
+        adopt: z.boolean().optional(),
       },
     },
     {
