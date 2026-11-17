@@ -68,6 +68,8 @@ export interface GameCharacterContextMenuCallbacks {
   /** Points everyone's view at the piece. Left out for all but the game master. */
   onShowEveryone?: () => void;
   onViewFirstPerson?: () => void;
+  /** Starts measuring from the piece with the ruler. Left out for a seat that has no ruler, as one watching. */
+  onMeasureFrom?: () => void;
   onShareFirstPerson?: () => void;
   onStopSharingFirstPerson?: () => void;
   /** Follows the piece from behind with the table's camera, on a table drawn on a canvas. */
@@ -365,6 +367,9 @@ export function buildGameCharacterContextMenuModel(
       name: (char.showVisionRange ? '✔ ' : '') + t('feature.character.contextMenu.showVisionRange'),
       action: () => (char.showVisionRange = !char.showVisionRange),
     },
+    ...(callbacks.onMeasureFrom
+      ? [{ name: t('feature.character.contextMenu.measureFrom'), action: () => callbacks.onMeasureFrom?.() }]
+      : []),
     ...(callbacks.onViewFirstPerson
       ? [{ name: t('feature.character.contextMenu.viewFirstPerson'), action: () => callbacks.onViewFirstPerson?.() }]
       : []),

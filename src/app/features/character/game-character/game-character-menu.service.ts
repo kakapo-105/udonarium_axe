@@ -24,6 +24,7 @@ import { hasPartLook, PiecePartsService } from '@axe/application/tabletop/piece-
 import { PieceTargetService } from '@axe/application/tabletop/piece-target.service';
 import { RangeShapeInvokeService } from '@axe/application/tabletop/range-shape-invoke.service';
 import { RideMenuModel, RideService } from '@axe/application/tabletop/ride.service';
+import { RulerService } from '@axe/application/tabletop/ruler.service';
 import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
 import { TabletopService } from '@axe/application/tabletop/tabletop.service';
 import { ThirdPersonService } from '@axe/application/tabletop/third-person.service';
@@ -123,6 +124,7 @@ export class GameCharacterMenuService {
   private readonly effectCast = inject(EffectCastService);
   private readonly effectTargeting = inject(EffectTargetingService);
   private readonly rolePermission = inject(RolePermissionService);
+  private readonly ruler = inject(RulerService);
   private readonly engagementZones = inject(EngagementZoneService);
   private readonly ride = inject(RideService);
   private readonly parts = inject(PiecePartsService);
@@ -198,6 +200,7 @@ export class GameCharacterMenuService {
         onViewFirstPerson: this.firstPerson.canLookOutOf(char)
           ? () => this.firstPerson.enterSeat(char.identifier)
           : undefined,
+        onMeasureFrom: this.rolePermission.canEditTabletop() ? () => this.ruler.startFrom(char) : undefined,
         onShareFirstPerson:
           this.firstPerson.isGameMaster() &&
           this.firstPerson.canLookOutOf(char) &&

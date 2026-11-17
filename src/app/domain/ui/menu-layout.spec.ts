@@ -106,7 +106,7 @@ describe('how a menu is arranged', () => {
       }
     });
 
-    it('draws the drawer as it has always been drawn, with the guide to its buttons last', () => {
+    it('draws the drawer as it has always been drawn, the AI link and the AI GM before the guide to its buttons last', () => {
       expect(DEFAULT_MENU_LAYOUTS.fab.nodes.map((node) => node.id)).toEqual([
         'peerMenu',
         'chat',
@@ -118,6 +118,8 @@ describe('how a menu is arranged', () => {
         'widgets',
         'display',
         'manual',
+        'aiLink',
+        'aiGm',
         'buttonGuide',
       ]);
     });
@@ -137,7 +139,7 @@ describe('how a menu is arranged', () => {
       expect(commands('plToolbar').slice(0, 2)).toEqual(['ownedCharacters', 'inventory']);
     });
 
-    it('holds the table tools in the order it held them, the scenes after the settings and the first-person view last', () => {
+    it('holds the table tools in the order it held them, the scenes after the settings, then the first-person view and the ruler', () => {
       const table = DEFAULT_MENU_LAYOUTS.fab.nodes.find((node) => node.id === 'table') as MenuGroup;
 
       expect(table.items.map((item) => item.command)).toEqual([
@@ -148,6 +150,7 @@ describe('how a menu is arranged', () => {
         'tabletopDisplay',
         'visualNovel',
         'firstPersonView',
+        'ruler',
       ]);
     });
 
