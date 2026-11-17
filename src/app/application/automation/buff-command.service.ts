@@ -126,6 +126,12 @@ export class BuffCommandService {
         return this.t('feature.buffManager.sweepRoundsWhat', { n: rule.rounds });
       case 'name':
         return this.t('feature.buffManager.sweepNameWhat', { name: rule.name });
+      case 'all':
+        return this.t('feature.buffManager.sweepAllWhat');
+      case 'buffs':
+        return this.t('feature.buffManager.sweepBuffsWhat');
+      case 'debuffs':
+        return this.t('feature.buffManager.sweepDebuffsWhat');
     }
   }
 }

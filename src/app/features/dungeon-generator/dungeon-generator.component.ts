@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal, ViewContainerRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { SCENE_IMAGE_EXPORTER } from '@axe/application/file/scene-image-exporter';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
 import { PartyService } from '@axe/application/party/party.service';
 import { RolePermissionService } from '@axe/application/permission/role-permission.service';
@@ -78,7 +79,6 @@ import { withFieldMaterials } from '@axe/features/dungeon-generator/field-materi
 import { describeField } from '@axe/features/dungeon-generator/field-notes';
 import { MapGenerationService } from '@axe/features/dungeon-generator/map-generation.service';
 import { buildMapPreview, previewColors } from '@axe/features/dungeon-generator/map-preview';
-import { exportSceneToBlob } from '@axe/infrastructure/map-editor/export-image';
 import { TranslocoModule } from '@jsverse/transloco';
 
 const SEED_LIMIT = 2 ** 31;
@@ -287,7 +287,7 @@ export class DungeonGeneratorComponent {
   protected readonly tooMany = computed(() => this.terrainCount() > MAP_MAX_TERRAINS);
   protected readonly heavy = computed(() => this.terrainCount() > MAP_HEAVY_TERRAINS && !this.tooMany());
 
-  private readonly exportFn = exportSceneToBlob;
+  private readonly exportScene = inject(SCENE_IMAGE_EXPORTER);
 
   protected readonly preview = computed(() => {
     const wall = this.wall();
@@ -477,7 +477,7 @@ export class DungeonGeneratorComponent {
    * floor rather than the table.
    */
   private async paintFloor(plan: DungeonPlan | FieldPlan): Promise<string> {
-    const painted = await this.generation.paintFloor(plan, this.floor(), this.gridType(), this.exportFn);
+    const painted = await this.generation.paintFloor(plan, this.floor(), this.gridType(), this.exportScene);
     this.floorImage.set(painted);
     return painted;
   }

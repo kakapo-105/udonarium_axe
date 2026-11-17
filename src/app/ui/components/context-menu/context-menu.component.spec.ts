@@ -2,7 +2,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ContextMenuAction } from '@axe/application/ui/context-menu.service';
 import { ModalService } from '@axe/application/ui/modal.service';
 import { PanelService } from '@axe/application/ui/panel.service';
-import { UiSignalService } from '@axe/application/ui/ui-signal.service';
 import { TabletopObject } from '@axe/domain/tabletop/tabletop-object';
 import { ContextMenuComponent } from '@axe/ui/components/context-menu/context-menu.component';
 
@@ -38,6 +37,26 @@ describe('ContextMenuComponent', () => {
     expect(root.classList.contains('shadow-ui-lg')).toBe(true);
     expect(root.querySelector('[data-context-menu-backdrop]')).toBeTruthy();
     expect(root.querySelectorAll('[data-context-menu-item-gap]')).toHaveLength(0);
+  });
+
+  it('lists an index by line and name, and goes to the line of the row pressed', () => {
+    const goTo = vi.fn();
+    component.contextMenuService.title = component.indexTitle;
+    component.contextMenuService.actions = [
+      { name: '攻撃', line: 3, action: () => goTo(3) },
+      { name: '防御', line: 9, action: () => goTo(9) },
+    ];
+    fixture.detectChanges();
+
+    const rows = Array.from(
+      component.rootElementRef().nativeElement.querySelectorAll<HTMLElement>('[data-context-menu-item]')
+    );
+    expect(rows.map((row) => row.textContent?.trim())).toEqual(['3:攻撃', '9:防御']);
+
+    rows[1].click();
+
+    expect(goTo).toHaveBeenCalledTimes(1);
+    expect(goTo).toHaveBeenCalledWith(9);
   });
 
   it('draws an item that is not enabled dimmed, and does nothing when it is pressed', () => {
@@ -143,8 +162,8 @@ describe('ContextMenuComponent', () => {
   });
 
   it('jumps to an index entry and opens the entries nested under it when it is clicked', () => {
-    const jump = vi.spyOn(TestBed.inject(UiSignalService), 'requestJumpIndex');
-    const parent = { name: '戦闘', line: 4, id: 'palette', subActions: [{ name: '5:攻撃', action: vi.fn() }] };
+    const jump = vi.fn();
+    const parent = { name: '戦闘', line: 4, action: jump, subActions: [{ name: '5:攻撃', action: vi.fn() }] };
     component.contextMenuService.title = component.indexTitle;
     component.contextMenuService.actions = [parent as ContextMenuAction];
     fixture.detectChanges();
@@ -152,7 +171,7 @@ describe('ContextMenuComponent', () => {
     (fixture.nativeElement.querySelector('li') as HTMLLIElement).click();
     fixture.detectChanges();
 
-    expect(jump).toHaveBeenCalledWith('palette', 4);
+    expect(jump).toHaveBeenCalledOnce();
     expect(component.subMenu()).toEqual(parent.subActions);
     expect(fixture.nativeElement.querySelector('context-menu').textContent).toContain('5:攻撃');
   });

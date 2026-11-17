@@ -38,7 +38,7 @@ describe('SharedFocusService', () => {
     table.height = 20;
     table.gridSize = 50;
     table.initialize();
-    TestBed.inject(TableSelecter).viewTableIdentifier = table.identifier;
+    TableSelecter.instance.viewTableIdentifier = table.identifier;
     PeerCursor.createMyCursor();
     PeerCursor.myCursor.role = PeerRole.Player;
     selection = TestBed.inject(SelectionSignalService);

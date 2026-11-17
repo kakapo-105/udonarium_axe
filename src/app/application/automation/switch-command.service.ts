@@ -154,7 +154,10 @@ export function switchDefinitionOf(request: SwitchRequest, base: SwitchDefinitio
  */
 @Injectable({ providedIn: 'root' })
 export class SwitchCommandService {
-  private readonly tables = inject(TableSelecter);
+  /** The room's table selecter, read through `instance` as it is replaced with the room. */
+  private get tables(): TableSelecter {
+    return TableSelecter.instance;
+  }
   private readonly concealment = inject(ConcealmentService);
 
   private table(): GameTable {

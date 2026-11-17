@@ -76,8 +76,14 @@ export interface NoteRequest {
 @Injectable({ providedIn: 'root' })
 export class RoomPrepCommandService {
   private readonly store = inject(ObjectStore);
-  private readonly tables = inject(TableSelecter);
-  private readonly chatTabs = inject(ChatTabList);
+  /** The room's table selecter, read through `instance` as it is replaced with the room. */
+  private get tables(): TableSelecter {
+    return TableSelecter.instance;
+  }
+  /** The room's chat tabs, read through `instance` as it is replaced with the room. */
+  private get chatTabs(): ChatTabList {
+    return ChatTabList.instance;
+  }
   private readonly generator = inject(MAP_GENERATOR);
   private readonly tableBgm = inject(TableBgmService);
   private readonly cutIns = inject(CutInService);

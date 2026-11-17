@@ -61,7 +61,10 @@ export interface PieceAnchor {
 export class PieceCommandService {
   private readonly importer = inject(SheetReader);
   private readonly store = inject(ObjectStore);
-  private readonly tables = inject(TableSelecter);
+  /** The room's table selecter, read through `instance` as it is replaced with the room. */
+  private get tables(): TableSelecter {
+    return TableSelecter.instance;
+  }
   private readonly concealment = inject(ConcealmentService);
   private readonly serializer = inject(ObjectSerializer);
   private readonly images = inject(AutomationImageService);

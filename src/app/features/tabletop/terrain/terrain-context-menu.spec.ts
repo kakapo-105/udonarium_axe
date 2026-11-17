@@ -9,10 +9,7 @@ import {
   SlopeSide,
 } from '@axe/domain/tabletop/terrain-slope';
 import { CreateObjectMenu } from '@axe/features/tabletop/create-menu/create-object-context-menu';
-import {
-  buildTerrainContextMenu,
-  buildTerrainContextMenuModel,
-} from '@axe/features/tabletop/terrain/terrain-context-menu';
+import { buildTerrainContextMenuModel } from '@axe/features/tabletop/terrain/terrain-context-menu';
 import { createSyncTranslate } from '@axe/testing/transloco-testing';
 
 const t = createSyncTranslate('ja');
@@ -62,7 +59,7 @@ function makeTerrain(overrides: Partial<MutableTerrain> = {}): MutableTerrain {
     isDoor: false,
     mode: TerrainViewState.ALL,
     parent: null,
-    clone: vi.fn(() => ({ location: { x: 0, y: 0 }, isLocked: false })),
+    clone: vi.fn(() => ({ location: { x: 0, y: 0 }, isLocked: false, update: vi.fn() })),
     destroy: vi.fn(),
     slopeSideNames: '',
     slopeSides: [],
@@ -94,7 +91,7 @@ function makeActionService(): CreateObjectMenu {
 
 const names = (a: { name: string }[]) => a.map((x) => x.name);
 
-describe('buildTerrainContextMenu()', () => {
+describe('buildTerrainContextMenuModel()', () => {
   it('groups every terrain action for the rotating menu', () => {
     const overlapAction = { name: '重なり' };
     const surfaceAction = { name: '北壁へ移動' };
@@ -125,7 +122,7 @@ describe('buildTerrainContextMenu()', () => {
   });
 
   it('offers three items for the altitude', () => {
-    const menu = buildTerrainContextMenu(
+    const menu = buildTerrainContextMenuModel(
       makeTerrain() as unknown as Terrain,
       50,
       { x: 0, y: 0, z: 0 },
@@ -133,14 +130,14 @@ describe('buildTerrainContextMenu()', () => {
       makeActionService(),
       vi.fn(),
       t
-    );
+    ).actions;
     expect(menu[0].name).toBe('高度設定');
     expect(menu[0].subActions?.length).toBe(3);
   });
 
   it('offers to tile a stretched texture and to stretch a tiled one', () => {
     const build = (isTiledTexture: boolean) =>
-      buildTerrainContextMenu(
+      buildTerrainContextMenuModel(
         makeTerrain({ isTiledTexture }) as unknown as Terrain,
         50,
         { x: 0, y: 0, z: 0 },
@@ -148,7 +145,7 @@ describe('buildTerrainContextMenu()', () => {
         makeActionService(),
         vi.fn(),
         t
-      );
+      ).actions;
 
     expect(names(build(false))).toContain('テクスチャをタイル貼りにする');
     expect(names(build(true))).toContain('テクスチャを引き伸ばしに戻す');
@@ -156,7 +153,7 @@ describe('buildTerrainContextMenu()', () => {
 
   it('flips the tiling when that item is chosen', () => {
     const terrain = makeTerrain();
-    const menu = buildTerrainContextMenu(
+    const menu = buildTerrainContextMenuModel(
       terrain as unknown as Terrain,
       50,
       { x: 0, y: 0, z: 0 },
@@ -164,7 +161,7 @@ describe('buildTerrainContextMenu()', () => {
       makeActionService(),
       vi.fn(),
       t
-    );
+    ).actions;
 
     menu.find((item) => item.name === 'テクスチャをタイル貼りにする')?.action?.();
 
@@ -173,7 +170,7 @@ describe('buildTerrainContextMenu()', () => {
 
   it('offers to open a door and to shut an open one, and neither to a plain wall', () => {
     const build = (overrides: Partial<MutableTerrain>) =>
-      buildTerrainContextMenu(
+      buildTerrainContextMenuModel(
         makeTerrain(overrides) as unknown as Terrain,
         50,
         { x: 0, y: 0, z: 0 },
@@ -181,7 +178,7 @@ describe('buildTerrainContextMenu()', () => {
         makeActionService(),
         vi.fn(),
         t
-      );
+      ).actions;
 
     expect(names(build({ isDoor: true, doorStyle: 'swing' }))).toContain('扉を開く');
     expect(names(build({ isDoor: true, doorStyle: 'swing', isDoorOpen: true }))).toContain('扉を閉じる');
@@ -190,7 +187,7 @@ describe('buildTerrainContextMenu()', () => {
 
   it('swings the door when that item is chosen', () => {
     const terrain = makeTerrain({ isDoor: true, doorStyle: 'swing' });
-    const menu = buildTerrainContextMenu(
+    const menu = buildTerrainContextMenuModel(
       terrain as unknown as Terrain,
       50,
       { x: 0, y: 0, z: 0 },
@@ -198,7 +195,7 @@ describe('buildTerrainContextMenu()', () => {
       makeActionService(),
       vi.fn(),
       t
-    );
+    ).actions;
 
     menu.find((item) => item.name === '扉を開く')?.action?.();
 
@@ -207,7 +204,7 @@ describe('buildTerrainContextMenu()', () => {
 
   it('offers a locked door only to be unlocked, and locks an unlocked one', () => {
     const build = (overrides: Partial<MutableTerrain>) =>
-      buildTerrainContextMenu(
+      buildTerrainContextMenuModel(
         makeTerrain(overrides) as unknown as Terrain,
         50,
         { x: 0, y: 0, z: 0 },
@@ -215,7 +212,7 @@ describe('buildTerrainContextMenu()', () => {
         makeActionService(),
         vi.fn(),
         t
-      );
+      ).actions;
 
     const locked = names(build({ isDoor: true, doorStyle: 'swing', isDoorLocked: true }));
     expect(locked).toContain('扉の鍵を外す');
@@ -224,7 +221,7 @@ describe('buildTerrainContextMenu()', () => {
   });
 
   it('offers every way for a door to open, and none at all', () => {
-    const menu = buildTerrainContextMenu(
+    const menu = buildTerrainContextMenuModel(
       makeTerrain() as unknown as Terrain,
       50,
       { x: 0, y: 0, z: 0 },
@@ -232,7 +229,7 @@ describe('buildTerrainContextMenu()', () => {
       makeActionService(),
       vi.fn(),
       t
-    );
+    ).actions;
     const styles = menu.find((item) => item.name === '扉の開き方');
 
     // Not a door, plus every way one can open. A piece that is not a door cannot be turned round.
@@ -243,7 +240,7 @@ describe('buildTerrainContextMenu()', () => {
   });
 
   it('offers to unlock what is locked and to lock what is not', () => {
-    const lockedMenu = buildTerrainContextMenu(
+    const lockedMenu = buildTerrainContextMenuModel(
       makeTerrain({ isLocked: true }) as unknown as Terrain,
       50,
       { x: 0, y: 0, z: 0 },
@@ -251,10 +248,10 @@ describe('buildTerrainContextMenu()', () => {
       makeActionService(),
       vi.fn(),
       t
-    );
+    ).actions;
     expect(names(lockedMenu)).toContain('固定解除');
 
-    const unlockedMenu = buildTerrainContextMenu(
+    const unlockedMenu = buildTerrainContextMenuModel(
       makeTerrain({ isLocked: false }) as unknown as Terrain,
       50,
       { x: 0, y: 0, z: 0 },
@@ -262,7 +259,7 @@ describe('buildTerrainContextMenu()', () => {
       makeActionService(),
       vi.fn(),
       t
-    );
+    ).actions;
     expect(names(unlockedMenu)).toContain('固定する');
   });
 
@@ -370,7 +367,7 @@ describe('buildTerrainContextMenu()', () => {
   });
 
   it('offers to hide the walls that are shown and to show the ones that are hidden', () => {
-    const withWall = buildTerrainContextMenu(
+    const withWall = buildTerrainContextMenuModel(
       makeTerrain({ hasWall: true }) as unknown as Terrain,
       50,
       { x: 0, y: 0, z: 0 },
@@ -378,10 +375,10 @@ describe('buildTerrainContextMenu()', () => {
       makeActionService(),
       vi.fn(),
       t
-    );
+    ).actions;
     expect(names(withWall)).toContain('壁を非表示');
 
-    const noWall = buildTerrainContextMenu(
+    const noWall = buildTerrainContextMenuModel(
       makeTerrain({ hasWall: false }) as unknown as Terrain,
       50,
       { x: 0, y: 0, z: 0 },
@@ -389,12 +386,12 @@ describe('buildTerrainContextMenu()', () => {
       makeActionService(),
       vi.fn(),
       t
-    );
+    ).actions;
     expect(names(noWall)).toContain('壁を表示');
   });
 
   it('offers to show or hide the shadow by which it casts', () => {
-    const noShadow = buildTerrainContextMenu(
+    const noShadow = buildTerrainContextMenuModel(
       makeTerrain({ isDropShadow: false }) as unknown as Terrain,
       50,
       { x: 0, y: 0, z: 0 },
@@ -402,10 +399,10 @@ describe('buildTerrainContextMenu()', () => {
       makeActionService(),
       vi.fn(),
       t
-    );
+    ).actions;
     expect(names(noShadow)).toContain('影を表示');
 
-    const withShadow = buildTerrainContextMenu(
+    const withShadow = buildTerrainContextMenuModel(
       makeTerrain({ isDropShadow: true }) as unknown as Terrain,
       50,
       { x: 0, y: 0, z: 0 },
@@ -413,14 +410,14 @@ describe('buildTerrainContextMenu()', () => {
       makeActionService(),
       vi.fn(),
       t
-    );
+    ).actions;
     expect(names(withShadow)).toContain('影を非表示');
   });
 
   it('hands the terrain to the editor', () => {
     const terrain = makeTerrain();
     const onEdit = vi.fn();
-    const menu = buildTerrainContextMenu(
+    const menu = buildTerrainContextMenuModel(
       terrain as unknown as Terrain,
       50,
       { x: 0, y: 0, z: 0 },
@@ -428,14 +425,14 @@ describe('buildTerrainContextMenu()', () => {
       makeActionService(),
       onEdit,
       t
-    );
+    ).actions;
     menu.find((m) => m.name === '地形設定を編集')!.action!();
     expect(onEdit).toHaveBeenCalledWith(terrain);
   });
 
   it('destroys the terrain', () => {
     const terrain = makeTerrain();
-    const menu = buildTerrainContextMenu(
+    const menu = buildTerrainContextMenuModel(
       terrain as unknown as Terrain,
       50,
       { x: 0, y: 0, z: 0 },
@@ -443,7 +440,7 @@ describe('buildTerrainContextMenu()', () => {
       makeActionService(),
       vi.fn(),
       t
-    );
+    ).actions;
     menu.find((m) => m.name === '削除する')!.action!();
     expect(terrain.destroy).toHaveBeenCalled();
   });
@@ -452,7 +449,7 @@ describe('buildTerrainContextMenu()', () => {
 describe('turning a block to glass from the menu', () => {
   function menuFor(terrain: MutableTerrain, onEdit = vi.fn()) {
     return {
-      actions: buildTerrainContextMenu(
+      actions: buildTerrainContextMenuModel(
         terrain as unknown as Terrain,
         50,
         { x: 0, y: 0, z: 0 },
@@ -460,7 +457,7 @@ describe('turning a block to glass from the menu', () => {
         makeActionService(),
         onEdit,
         t
-      ),
+      ).actions,
       onEdit,
     };
   }

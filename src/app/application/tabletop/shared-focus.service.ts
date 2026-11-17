@@ -30,7 +30,10 @@ export interface SharedFocus {
 export class SharedFocusService {
   private readonly destroyRef = inject(DestroyRef);
   private readonly store = inject(ObjectStore);
-  private readonly tables = inject(TableSelecter);
+  /** The room's table selecter, read through `instance` as it is replaced with the room. */
+  private get tables(): TableSelecter {
+    return TableSelecter.instance;
+  }
   private readonly tableFocus = inject(TableFocusService);
   private readonly selection = inject(SelectionSignalService);
   private readonly follow = inject(FollowFocusPreferenceService);

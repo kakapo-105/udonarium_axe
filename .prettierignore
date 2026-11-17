@@ -13,3 +13,5 @@ tools/mcp-server/dist
 tools/mcp-server/.cache
 tools/mcp-server/.browser-profile
 tmp/automation-e2e
+# Working files of the yomiyasu skill (git-ignored)
+.yomiyasu

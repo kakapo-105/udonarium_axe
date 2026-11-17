@@ -1921,7 +1921,7 @@ describe('AutomationFacadeService', () => {
           ]),
         },
       });
-      expect(TestBed.inject(TableSelecter).viewTableIdentifier).toBe(town.identifier);
+      expect(TableSelecter.instance.viewTableIdentifier).toBe(town.identifier);
       error(await call('table_select', { identifier: piece.identifier }), 'NOT_FOUND');
     });
 

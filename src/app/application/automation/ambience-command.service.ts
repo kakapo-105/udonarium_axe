@@ -1,4 +1,4 @@
-import { inject, Injectable } from '@angular/core';
+import { Injectable } from '@angular/core';
 import { fail } from '@axe/application/automation/automation-contract';
 import { AMBIENCE_BRIGHTNESS } from '@axe/domain/effect/ambience/ambience-brightness';
 import {
@@ -50,7 +50,10 @@ export interface AmbienceAreaRequest {
  */
 @Injectable({ providedIn: 'root' })
 export class AmbienceCommandService {
-  private readonly tables = inject(TableSelecter);
+  /** The room's table selecter, read through `instance` as it is replaced with the room. */
+  private get tables(): TableSelecter {
+    return TableSelecter.instance;
+  }
 
   private view(): GameTable {
     const table = this.tables.viewTable;

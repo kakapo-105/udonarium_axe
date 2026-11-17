@@ -55,7 +55,10 @@ export function parseVoiceSay(raw: unknown): VoiceSay | string {
 @Injectable({ providedIn: 'root' })
 export class VoiceTranscriptService {
   private readonly chat = inject(ChatMessageService);
-  private readonly chatTabList = inject(ChatTabList);
+  /** The room's chat tabs, read through `instance` as it is replaced with the room. */
+  private get chatTabList(): ChatTabList {
+    return ChatTabList.instance;
+  }
   private readonly store = inject(ObjectStore);
 
   post(say: VoiceSay): VoicePostResult {

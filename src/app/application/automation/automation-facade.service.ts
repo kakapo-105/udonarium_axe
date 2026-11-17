@@ -353,7 +353,10 @@ export class AutomationFacadeService {
   private readonly gameClock = inject(GameClockService);
   private readonly chatLint = inject(ChatLintService);
   private readonly store = inject(ObjectStore);
-  private readonly tables = inject(TableSelecter);
+  /** The room's table selecter, read through `instance` as it is replaced with the room. */
+  private get tables(): TableSelecter {
+    return TableSelecter.instance;
+  }
   private readonly remembered = new Map<string, Remembered>();
   private identity = '';
   private epoch = '';
