@@ -13,9 +13,9 @@ import { tableBgmModeOf } from '@axe/domain/media/table-bgm';
 import { Config } from '@axe/domain/peer/config';
 import { PeerCursor } from '@axe/domain/peer/peer-cursor';
 import { GameTable } from '@axe/domain/tabletop/game-table';
-import { TextNote } from '@axe/domain/tabletop/text-note';
 import { asOwnable, clearOwnership } from '@axe/domain/tabletop/ownership';
 import { adoptLegacyTableBgm, tableBgmSettingOf } from '@axe/domain/tabletop/table-bgm';
+import { TextNote } from '@axe/domain/tabletop/text-note';
 
 /** What a saved room brings that is not a table but goes with one, as a battlefield's ranges and cut-ins do. */
 /** At most this many built pieces and notes are named in the answer. */
