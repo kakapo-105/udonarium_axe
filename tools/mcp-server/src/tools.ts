@@ -154,8 +154,32 @@ export function createServer(session: SessionInvoker, options: ServerOptions = {
       name: 'view_get',
       read: true,
       description:
-        "Read what this seat's own screen shows: its role, the table in view, whether the table is seen from straight above (view.flat, after this seat's view setting in view.mode), the room's music (playing, identifier, name) and whether novel mode is open on this screen with the stage's background. Run from a player's seat, it tells what the players see.",
-      shape: {},
+        "Read what this seat's own screen shows: its role, the table in view, whether the table is seen from straight above (view.flat, after this seat's view setting in view.mode), the room's music (playing, identifier, name), whether novel mode is open on this screen with the stage's background and who stands on the stage (novel.cast: name, slot 0-11 from the left, leaving), this seat's own volumes (percent), the cell the screen looks at the middle of (camera), whether the story clock widget is shown with the time, the weather and the area effects this seat can see, and, given area {x, y, w, h}, how many of its cells lie under the fog for this seat. Run from a player's seat, it tells what the players see.",
+      shape: {
+        area: z
+          .object({
+            x: z.number().int().min(0),
+            y: z.number().int().min(0),
+            w: z.number().int().min(1).max(40),
+            h: z.number().int().min(1).max(40),
+          })
+          .strict()
+          .optional(),
+      },
+    },
+    {
+      name: 'switch_press',
+      read: false,
+      description:
+        'Press the switch on the ground at a cell of the table in view, exactly as clicking it on this seat does: what it says, plays and shows happens, it counts its presses, and it may refuse (outcome names why, such as spent or out of reach). Only a switch this seat can see is pressed. A switch that has to be reached is pressed by the piece the seat speaks as: give characterId to speak as that piece first, as a player picks their character in the chat. Requires the move_piece browser grant.',
+      shape: { ...retry, x: z.number().int().min(0), y: z.number().int().min(0), characterId: id.optional() },
+    },
+    {
+      name: 'door_press',
+      read: false,
+      description:
+        'Press the door crossing a cell of the table in view, as clicking it does: it opens or shuts, unless it is locked, when it stays as it is (swung: false). A guest may not. Requires the move_piece browser grant.',
+      shape: { ...retry, x: z.number().int().min(0), y: z.number().int().min(0) },
     },
     {
       name: 'screenshot',

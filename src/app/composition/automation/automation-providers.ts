@@ -1,10 +1,11 @@
 import { inject, Injector, Provider } from '@angular/core';
+import { SWITCH_PRESSER, SwitchPresser } from '@axe/application/automation/automation-screen';
 import { MAP_GENERATOR, MapGenerator } from '@axe/application/automation/map-generator';
 
 /**
  * What automation is handed from the layers above it: the map generator panel's way of building a
- * map. It draws with the map editor, so it is loaded the first time a map is asked for rather than
- * with the app.
+ * map, and the board's way of pressing a switch. The map generator draws with the map editor, so it
+ * is loaded the first time a map is asked for rather than with the app.
  */
 export const AUTOMATION_PROVIDERS: Provider[] = [
   {
@@ -14,6 +15,16 @@ export const AUTOMATION_PROVIDERS: Provider[] = [
       return async (request) => {
         const { MapGenerationService } = await import('@axe/features/dungeon-generator/map-generation.service');
         return injector.get(MapGenerationService).generate(request);
+      };
+    },
+  },
+  {
+    provide: SWITCH_PRESSER,
+    useFactory: (): SwitchPresser => {
+      const injector = inject(Injector);
+      return async (x, y) => {
+        const { SwitchPressService } = await import('@axe/features/tabletop/board-switch/switch-press.service');
+        return injector.get(SwitchPressService).pressGroundAt(x, y);
       };
     },
   },

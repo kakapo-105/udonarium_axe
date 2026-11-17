@@ -52,6 +52,8 @@ export const AUTOMATION_COMMANDS = [
   'game_clock_set',
   'chat_check',
   'view_get',
+  'switch_press',
+  'door_press',
 ] as const;
 export type AutomationCommand = (typeof AUTOMATION_COMMANDS)[number];
 export const AUTOMATION_SCOPES = [
@@ -67,6 +69,8 @@ export const AUTOMATION_SCOPES = [
 /** The commands that change the room, which are run one at a time and may be replayed by request ID. */
 export const AUTOMATION_WRITES: readonly AutomationCommand[] = [
   'piece_move',
+  'switch_press',
+  'door_press',
   'chat_send',
   'palette_send',
   'buff_send',

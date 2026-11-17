@@ -18,6 +18,7 @@ import {
 } from '@axe/application/automation/automation-contract';
 import { automationImagesOf } from '@axe/application/automation/automation-image.service';
 import { AutomationPolicyService } from '@axe/application/automation/automation-policy.service';
+import { AutomationScreenService, SWITCH_PRESSER } from '@axe/application/automation/automation-screen';
 import { BuffChanges, BuffCommandService } from '@axe/application/automation/buff-command.service';
 import { characterSheetView } from '@axe/application/automation/character-sheet-view';
 import { ChatWaitService, isPublicMessage } from '@axe/application/automation/chat-wait.service';
@@ -41,12 +42,20 @@ import { SwitchCommandService, SwitchRequest } from '@axe/application/automation
 import { VnStageCommandService } from '@axe/application/automation/vn-stage-command.service';
 import { StealthService } from '@axe/application/character/stealth.service';
 import { ChatLintService } from '@axe/application/chat/chat-lint.service';
+import { ChatSpeakerService } from '@axe/application/chat/chat-speaker.service';
 import { EffectLibraryService } from '@axe/application/effect/effect-library.service';
 import { GameClockService } from '@axe/application/game-clock/game-clock.service';
+import { CoordinateService } from '@axe/application/input/coordinate.service';
+import { PersonalVolumeService } from '@axe/application/media/personal-volume.service';
+import { PERSONAL_VOLUME_KINDS } from '@axe/application/media/personal-volumes';
+import { RolePermissionService } from '@axe/application/permission/role-permission.service';
 import { SharedFocusService } from '@axe/application/tabletop/shared-focus.service';
+import { TableAmbienceService } from '@axe/application/tabletop/table-ambience.service';
+import { VisionService } from '@axe/application/tabletop/vision.service';
 import { TurnOrderService } from '@axe/application/turn/turn-order.service';
 import { ViewModePreferenceService } from '@axe/application/ui/view-mode-preference.service';
 import { VisualNovelModeService } from '@axe/application/ui/visual-novel-mode.service';
+import { WidgetVisibilityService } from '@axe/application/ui/widget-visibility.service';
 import { callSceneFade } from '@axe/core/event/domain-events';
 import { ObjectStore } from '@axe/core/sync/object-store';
 import { BuffRemovalRule } from '@axe/domain/character/buff-bulk-removal';
@@ -69,6 +78,8 @@ import { FilterType } from '@axe/domain/tabletop/game-table';
 import { MapMaterial } from '@axe/domain/tabletop/map-blocks';
 import { TableSelecter } from '@axe/domain/tabletop/table-selecter';
 import { TabletopObject } from '@axe/domain/tabletop/tabletop-object';
+import { Terrain } from '@axe/domain/tabletop/terrain';
+import { terrainBoxOf } from '@axe/domain/tabletop/terrain-box';
 import { TextNote } from '@axe/domain/tabletop/text-note';
 import { laysFlat } from '@axe/domain/ui/view-mode';
 import { VN_MESSAGE_KINDS, VnMessageKind } from '@axe/domain/visual-novel/vn-emote';
@@ -311,6 +322,30 @@ function disclosureOf(value: unknown): DisclosureMode {
   return fail('INVALID_ARGUMENT', 'disclosure must be all or gm.');
 }
 
+/** At most this many area effects are named in a view. */
+const MAX_VIEW_AREAS = 50;
+/** The largest rectangle whose fog a view counts, in cells on a side. */
+const MAX_VIEW_FOG_SIDE = 40;
+
+/** A cell of the table, as a whole number from 0. */
+function cellOf(value: unknown, key: string): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 10000)
+    fail('INVALID_ARGUMENT', `${key} must be a cell (a whole number from 0).`);
+  return value;
+}
+
+/** A rectangle of cells, { x, y, w, h }, no wider or taller than a view counts. */
+function viewAreaOf(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    fail('INVALID_ARGUMENT', 'area must be { x, y, w, h }.');
+  const area = value as Record<string, unknown>;
+  onlyKeys(area, ['x', 'y', 'w', 'h']);
+  const [x, y, w, h] = [cellOf(area['x'], 'x'), cellOf(area['y'], 'y'), cellOf(area['w'], 'w'), cellOf(area['h'], 'h')];
+  if (w < 1 || h < 1 || w > MAX_VIEW_FOG_SIDE || h > MAX_VIEW_FOG_SIDE)
+    fail('INVALID_ARGUMENT', `area must be 1 to ${MAX_VIEW_FOG_SIDE} cells on a side.`);
+  return { x, y, w, h };
+}
+
 function booleanOf(value: unknown, key: string): boolean {
   if (value === undefined) return false;
   if (typeof value !== 'boolean') fail('INVALID_ARGUMENT', `${key} must be boolean.`);
@@ -357,6 +392,15 @@ export class AutomationFacadeService {
   private readonly chatLint = inject(ChatLintService);
   private readonly viewMode = inject(ViewModePreferenceService);
   private readonly novelMode = inject(VisualNovelModeService);
+  private readonly screen = inject(AutomationScreenService);
+  private readonly speaker = inject(ChatSpeakerService);
+  private readonly switchPresser = inject(SWITCH_PRESSER);
+  private readonly volumes = inject(PersonalVolumeService);
+  private readonly coordinates = inject(CoordinateService);
+  private readonly widgets = inject(WidgetVisibilityService);
+  private readonly tableAmbience = inject(TableAmbienceService);
+  private readonly vision = inject(VisionService);
+  private readonly rolePermission = inject(RolePermissionService);
   private readonly store = inject(ObjectStore);
   /** The room's table selecter, read through `instance` as it is replaced with the room. */
   private get tables(): TableSelecter {
@@ -474,6 +518,10 @@ export class AutomationFacadeService {
       fail('NOT_READY', 'Start a new automation session.');
     this.policy.require('read_visible');
     const args = request.arguments;
+    if (request.command === 'switch_press' || request.command === 'door_press') {
+      this.policy.require('move_piece');
+      if (args['characterId'] !== undefined) this.policy.canControl(this.piece(textArgument(args['characterId'])));
+    }
     if (request.command === 'piece_move') {
       this.policy.require('move_piece');
       this.policy.canControl(this.piece(textArgument(args['identifier'])));
@@ -633,7 +681,7 @@ export class AutomationFacadeService {
         if (place !== 'table' && place !== 'concealed') fail('INVALID_ARGUMENT', 'place must be table or concealed.');
         const pieces = this.store
           .getObjects<GameCharacter>(GameCharacter)
-          .filter((p) => (place === 'table' ? this.policy.canSee(p) : this.policy.canSeeConcealed(p)))
+          .filter((p) => (place === 'table' ? this.policy.canSeeOnBoard(p) : this.policy.canSeeConcealed(p)))
           .map((p) => this.describe(p))
           .filter((p) => p.identifier > after && (!name || p.name.includes(name)))
           .sort((l, r) => (l.identifier < r.identifier ? -1 : l.identifier > r.identifier ? 1 : 0));
@@ -657,7 +705,7 @@ export class AutomationFacadeService {
         };
       }
       case 'view_get': {
-        onlyKeys(a, []);
+        onlyKeys(a, ['area']);
         // What this seat's own screen shows, so a seat in another role can tell what its players see.
         const table = this.tables.viewTable;
         const jukebox = this.store.get<Jukebox>('Jukebox');
@@ -672,8 +720,71 @@ export class AutomationFacadeService {
             identifier: jukebox?.audioIdentifier || null,
             name: track ? track.name.slice(0, 256) : null,
           },
-          novel: { open: this.novelMode.active(), background: stage?.backgroundImageIdentifier || null },
+          novel: {
+            open: this.novelMode.active(),
+            background: stage?.backgroundImageIdentifier || null,
+            cast: this.novelMode.active() ? this.screen.novelCast() : null,
+          },
+          volumes: Object.fromEntries(
+            PERSONAL_VOLUME_KINDS.map((kind) => [kind, Math.round(this.volumes.get(kind) * 100)])
+          ),
+          camera: this.cameraCentre(table?.gridSize ?? 0),
+          clock: {
+            shown: this.widgets.gameClock(),
+            day: this.gameClock.dayText(),
+            time: this.gameClock.timeText(),
+          },
+          ambience: {
+            weather: table?.weatherKind || null,
+            areas: this.tableAmbience
+              .shown()
+              .slice(0, MAX_VIEW_AREAS)
+              .map((area) => ({
+                name: area.name.slice(0, 256),
+                kind: area.ambienceKind,
+                x: area.location.x / (table?.gridSize || 50),
+                y: area.location.y / (table?.gridSize || 50),
+                w: area.width,
+                h: area.height,
+              })),
+          },
+          ...(a['area'] === undefined ? {} : { fog: this.fogIn(viewAreaOf(a['area'])) }),
         };
+      }
+      case 'switch_press': {
+        onlyKeys(a, ['x', 'y', 'characterId']);
+        // A switch that has to be reached is pressed by the piece the seat speaks as, as a player picks
+        // their character in the chat before clicking it.
+        if (a['characterId'] !== undefined) this.speaker.set(this.piece(textArgument(a['characterId'])).identifier);
+        const table = this.tables.viewTable;
+        if (!table) fail('NOT_READY', 'No table in view.');
+        if (!this.switchPresser) fail('NOT_READY', 'Switches cannot be pressed here.');
+        const [x, y] = [cellOf(a['x'], 'x'), cellOf(a['y'], 'y')];
+        // At the middle of the cell, as a click there would be.
+        const outcome = await this.switchPresser((x + 0.5) * table.gridSize, (y + 0.5) * table.gridSize);
+        guard();
+        if (outcome === null) fail('NOT_FOUND', 'No switch this seat can see stands on that cell.');
+        return { pressed: outcome === 'pressed', outcome };
+      }
+      case 'door_press': {
+        onlyKeys(a, ['x', 'y']);
+        const table = this.tables.viewTable;
+        if (!table) fail('NOT_READY', 'No table in view.');
+        const [x, y] = [cellOf(a['x'], 'x'), cellOf(a['y'], 'y')];
+        const grid = table.gridSize;
+        const door = table.terrains.find((terrain): terrain is Terrain => {
+          if (!(terrain instanceof Terrain) || !terrain.isDoor) return false;
+          // A door is thin, so one that crosses any part of the cell is the one there.
+          const box = terrainBoxOf(terrain, grid);
+          return box.minX < (x + 1) * grid && x * grid < box.maxX && box.minY < (y + 1) * grid && y * grid < box.maxY;
+        });
+        if (!door) fail('NOT_FOUND', 'No door stands on that cell.');
+        // As clicking the door does: a guest may not, and a locked door rattles and stays as it is.
+        if (!this.rolePermission.canEditTabletop()) fail('FORBIDDEN', 'This seat may not open doors.');
+        if (!door.canSwingDoor)
+          return { identifier: door.identifier, open: door.isDoorOpen, locked: true, swung: false };
+        door.isDoorOpen = !door.isDoorOpen;
+        return { identifier: door.identifier, open: door.isDoorOpen, locked: false, swung: true };
       }
       case 'object_get':
         onlyKeys(a, ['identifier']);
@@ -1428,6 +1539,25 @@ export class AutomationFacadeService {
     }
   }
 
+  /** The cell this seat's screen looks at the middle of, or null before a table is drawn. */
+  private cameraCentre(gridSize: number) {
+    if (gridSize <= 0 || typeof window === 'undefined') return null;
+    const point = this.coordinates.floorPointOf(window.innerWidth / 2, window.innerHeight / 2);
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return null;
+    return { x: Math.round((point.x / gridSize) * 10) / 10, y: Math.round((point.y / gridSize) * 10) / 10 };
+  }
+
+  /** How many cells of a rectangle of the table in view lie under the fog for this seat. */
+  private fogIn(rect: { x: number; y: number; w: number; h: number }) {
+    const grid = this.tables.viewTable?.gridSize ?? 0;
+    if (grid <= 0) fail('NOT_READY', 'No table in view.');
+    let hidden = 0;
+    for (let col = rect.x; col < rect.x + rect.w; col++)
+      for (let row = rect.y; row < rect.y + rect.h; row++)
+        if (this.vision.isHiddenByFog((col + 0.5) * grid, (row + 0.5) * grid)) hidden++;
+    return { ...rect, cells: rect.w * rect.h, hidden };
+  }
+
   /** Darkens every screen and waits for the dark, so what changes next changes unseen, as a scene that fades does. */
   private async darken(guard: () => void): Promise<void> {
     callSceneFade();
@@ -1469,7 +1599,13 @@ export class AutomationFacadeService {
     if (value === undefined) return undefined;
     if (!Array.isArray(value) || value.length > MAX_TARGETS)
       fail('INVALID_ARGUMENT', `targetIds must be a list of at most ${MAX_TARGETS} identifiers.`);
-    return value.map((identifier) => this.piece(textArgument(identifier)));
+    // Aimed at as the board shows it: a monster not yet identified can be aimed at, though not read.
+    return value.map((identifier) => {
+      const piece = this.store.get(textArgument(identifier));
+      if (!(piece instanceof GameCharacter) || !this.policy.canSeeOnBoard(piece))
+        fail('NOT_FOUND', 'Visible piece not found.');
+      return piece;
+    });
   }
 
   private piece(identifier: string): GameCharacter {

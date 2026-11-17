@@ -63,6 +63,14 @@ export class AutomationPolicyService {
     return piece.location.name === 'table' && this.disclosure.canView(piece) && this.vision.isTokenVisible(piece);
   }
   /**
+   * Whether a piece stands on the table where this seat sees it, as the board draws it: a piece whose
+   * sheet is kept to the game master still stands there with its name, as a monster does before it is
+   * identified, so it can be found and aimed at. Its sheet is read only where canSee allows.
+   */
+  canSeeOnBoard(piece: GameCharacter): boolean {
+    return piece.location.name === 'table' && this.vision.isTokenVisible(piece);
+  }
+  /**
    * Whether a piece put out of sight may be read: by the game master, as the out-of-sight tab lists
    * them, or by whoever owns it.
    */

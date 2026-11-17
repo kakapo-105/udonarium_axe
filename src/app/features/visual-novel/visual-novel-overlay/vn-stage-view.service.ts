@@ -1,4 +1,5 @@
-import { computed, inject, Injectable } from '@angular/core';
+import { computed, DestroyRef, inject, Injectable } from '@angular/core';
+import { AutomationScreenService } from '@axe/application/automation/automation-screen';
 import { SystemAvatarKind, SystemAvatarService } from '@axe/application/chat/system-avatar.service';
 import { LanguageService } from '@axe/application/i18n/language.service';
 import { TRANSLATE_FN } from '@axe/application/i18n/translate.token';
@@ -54,6 +55,19 @@ export class VnStageViewService {
   private readonly language = inject(LanguageService);
   private readonly settings = inject(VisualNovelSettingsService);
   private readonly playback = inject(VisualNovelPlaybackService);
+
+  constructor() {
+    // Automation reads who stands on this stage, for a seat a script plays to tell what its players see.
+    inject(DestroyRef).onDestroy(
+      inject(AutomationScreenService).lendNovelCast(() =>
+        this.stageCharacters().map((character) => ({
+          name: character.name,
+          slot: character.slot,
+          leaving: character.isLeaving,
+        }))
+      )
+    );
+  }
 
   private readonly chatTab = this.playback.chatTab;
   private readonly messages = this.playback.messages;

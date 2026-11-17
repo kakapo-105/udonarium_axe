@@ -137,10 +137,18 @@ describe('AutomationFacadeService', () => {
       data: {
         view: { mode: expect.any(String), flat: expect.any(Boolean) },
         bgm: { playing: expect.any(Boolean) },
-        novel: { open: false },
+        novel: { open: false, cast: null },
+        volumes: { bgm: expect.any(Number) },
+        clock: { shown: expect.any(Boolean) },
+        ambience: { weather: null, areas: [] },
       },
     });
+    expect(await call('view_get', { area: { x: 0, y: 0, w: 2, h: 3 } })).toMatchObject({
+      ok: true,
+      data: { fog: { x: 0, y: 0, w: 2, h: 3, cells: 6, hidden: expect.any(Number) } },
+    });
     error(await call('view_get', { extra: true }), 'INVALID_ARGUMENT');
+    error(await call('view_get', { area: { x: 0, y: 0, w: 0, h: 1 } }), 'INVALID_ARGUMENT');
   });
   it.each([NaN, Infinity, -1, 9999999, '3', null])('rejects invalid coordinates %s', async (x) => {
     error(await move({ x }), 'INVALID_ARGUMENT');
@@ -192,11 +200,13 @@ describe('AutomationFacadeService', () => {
     Config.instance.automationOwnedOnly = false;
     expect((await move()).ok).toBe(true);
   });
-  it('hides undisclosed and fog-hidden pieces, including from name searches', async () => {
+  it('lists an undisclosed piece as the board shows it but keeps it from being read, and hides fog-hidden ones', async () => {
     piece.owner = '';
     piece.disclosureMode = 'gm';
-    expect(await call('scene_list')).toMatchObject({ ok: true, data: { objects: [] } });
+    // The board shows a monster not yet identified, name and all; only its sheet is the master's.
+    expect(await call('scene_list')).toMatchObject({ ok: true, data: { objects: [{ identifier: piece.identifier }] } });
     error(await call('object_get', { identifier: piece.identifier }), 'NOT_FOUND');
+    error(await call('character_sheet_get', { identifier: piece.identifier }), 'NOT_FOUND');
     piece.disclosureMode = 'all';
     vi.spyOn(TestBed.inject(VisionService), 'isTokenVisible').mockReturnValue(false);
     expect(await call('scene_list', { name: 'Piece' })).toMatchObject({ ok: true, data: { objects: [] } });
@@ -1562,6 +1572,29 @@ describe('AutomationFacadeService', () => {
           data: { locked: false },
         });
         error(await call('door_set', { identifier: sealed.identifier, locked: 'yes' }), 'INVALID_ARGUMENT');
+      });
+
+      it('lets a player press a door as clicking it does: it swings, unless it is locked', async () => {
+        const plain = door('扉');
+        // Pressing is a table interaction, granted with moving pieces.
+        policy.setScope('move_piece', true);
+
+        expect(await call('door_press', { x: 2, y: 1 })).toMatchObject({ ok: true, data: { open: true, swung: true } });
+        expect(plain.isDoorOpen).toBe(true);
+        plain.isDoorLocked = true;
+        plain.isDoorOpen = false;
+        expect(await call('door_press', { x: 2, y: 1 })).toMatchObject({
+          ok: true,
+          data: { open: false, locked: true, swung: false },
+        });
+        expect(plain.isDoorOpen).toBe(false);
+        error(await call('door_press', { x: 9, y: 9 }), 'NOT_FOUND');
+        error(await call('door_press', { x: -1, y: 1 }), 'INVALID_ARGUMENT');
+      });
+
+      it('has nothing to press a switch with where the board has not handed it in', async () => {
+        policy.setScope('move_piece', true);
+        error(await call('switch_press', { x: 1, y: 1 }), 'NOT_READY');
       });
 
       it('gives the ground a building covers, so a cell beside it can be picked', async () => {
