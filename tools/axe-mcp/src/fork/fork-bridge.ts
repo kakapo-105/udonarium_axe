@@ -96,7 +96,7 @@ function reply(result: FacadeResult): CallToolResult {
 
 const sleepFor = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 
-/** The bridge's settings read from the environment, as tools/mcp-server read them. */
+/** The bridge's settings read from the environment, as the former tools/mcp-server read them. */
 export function forkBridgeOptionsFromEnv(env: NodeJS.ProcessEnv = process.env): ForkBridgeOptions {
   let pieceSources: string[] = [];
   try {

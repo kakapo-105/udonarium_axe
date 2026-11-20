@@ -1,6 +1,6 @@
 /**
  * The fork's tools that read this machine's files, as the bridge offers them to the AI: their input
- * is JSON Schema as tools/mcp-server gave it (it holds anyOf and patterns, which the app's own
+ * is JSON Schema as the former tools/mcp-server gave it (it holds anyOf and patterns, which the app's own
  * schema does not), without the sessionId and requestId the link fills in itself. Written once from
  * that tool list; kept by hand from here on.
  */

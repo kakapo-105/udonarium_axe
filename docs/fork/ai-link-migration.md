@@ -78,7 +78,8 @@ facadeを呼ぶだけで、Node側の処理がないもの。`application/automa
 
 ## 変わること
 
-- AI専用のブラウザがなくなる。遊ぶあいだ、誰かのPCでGMの席のタブを開いておく（多人数ではホストのPC）
+- Node側がブラウザを開くことはなくなる。遊ぶあいだ、誰かのPCでGMの席のタブを開いておく（多人数ではホストのPC）。
+  sw25-ai-gmは、そのタブを`tools/axe-seat/gm.mjs`（Playwright、設定を残すプロファイル）で開く
 - 番の渡し方・聞くタブ・出番・指示・メモは「AI連携」パネルの「GMを任せる」で決める。sw25-ai-gmのスキルはこれを前提に書き直す
 - 上流の`run_ai_gm`のGMの心得（`GM_GUIDE`）は使わず、sw25-ai-gmのスキルから`wait_for_turn`を直接呼ぶ
 - `automation=1`でfacadeを読み込む作りを、ブリッジにつながったタブで読み込む作りに変える
@@ -97,3 +98,14 @@ facadeを呼ぶだけで、Node側の処理がないもの。`application/automa
 2. Cの前処理をブリッジへ移す
 3. Aの置き換えと、駒の停止で番を起こすかを決める
 4. sw25-ai-gmのスキルと`/sw25-test`（run.mjs）を切り替え、全部が上流のしくみで通ったら`tools/mcp-server`を外す
+
+2026-11-20に4まで済んだ。台本PLで流せる確認を全部流し（sw25-ai-gm `tests/runs/20261120-1751`）、OK 51件。
+NGの1件（`ambience-area`）は移行の前からのもの（PCの駒がGMの持ち物で、PLの席に視界がない）。
+`tools/mcp-server`と、それを使っていたe2e（`e2e/automation/mcp.spec.mts`）を外した。
+
+### 遊ぶときと自動テストの形
+
+- GMの席: `gm.mjs`が開いたタブがブリッジ（ポート47610、Claude Codeの`.mcp.json`）につながる。「GMを任せる」を始めると、
+  PLの発言で`wait_for_turn`に番が来る
+- 台本PL（run.mjs）: PLとして入る2つ目のタブが、自分のブリッジ（ポート47611）につながる。PLの発言は**入力欄に打つ**。
+  AIの印が付いた行（`by_ai`）は、どの席のものでも上流のAI GMを起こさないため

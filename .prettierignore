@@ -7,11 +7,7 @@ CHANGELOG.md
 website/.vitepress/dist
 website/.vitepress/cache
 
-# Isolated optional MCP dependencies and generated files
-tools/mcp-server/node_modules
-tools/mcp-server/dist
-tools/mcp-server/.cache
-tools/mcp-server/.browser-profile
+# Build of the automation e2e
 tmp/automation-e2e
 # Working files of the yomiyasu skill (git-ignored)
 .yomiyasu

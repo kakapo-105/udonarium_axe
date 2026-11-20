@@ -23,7 +23,7 @@ const ERROR_CODES: Readonly<Record<AutomationErrorCode, AgentErrorCode>> = {
 /**
  * Runs the fork's own tools for the AI link, each through the fork's automation facade under the
  * same name, so the facade's checks of who may do what, its rate limit and its one write at a time
- * hold for the link as they hold for tools/mcp-server.
+ * hold for the link as they held for the former tools/mcp-server.
  *
  * The link's runner has already weighed the call against what the person at the seat lets the AI
  * do, so the facade is given every scope; a seat that lets the AI read only never reaches a tool

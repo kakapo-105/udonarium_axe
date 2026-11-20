@@ -61,14 +61,18 @@ git rm -q --ignore-unmatch .github/workflows/release.yml .github/workflows/deplo
 
 ```sh
 npx vitest run
-(cd tools/mcp-server && npm test)   # pre-commit では走らない
+npm run test:mcp                   # ブリッジとフォークの道具 (tools/axe-mcp)
+npm run build:mcp                  # sw25-ai-gm が使うブリッジ。AGENT_TOOLS が変わったら必ず作り直す
 npm run build
 npm --prefix website run build
 npx eslint <変えたファイル>
 npx prettier --check --end-of-line auto .
 ```
 
-ツールの数が変わったら `tools/mcp-server/test/contracts.test.mjs` の数も直す。
+フォークの道具は `src/app/core/agent/fork-agent-tools.ts` で `AGENT_TOOLS` の末尾に足している。上流が `agent-tools.ts`・
+`agent-tools-setup.service.ts`・`tools/axe-mcp/src/mcp-server.ts` を変えたら、フォークの 1 行ずつの差し込みが残っているか確かめる
+（[docs/fork/ai-link-migration.md](../../../docs/fork/ai-link-migration.md) の「上流のファイルに手を入れる所」）。
+上流に同じ名前の道具が増えたら、フォークの道具と名前がぶつからないか確かめる。
 
 ## 6. コミットする
 

@@ -42,7 +42,7 @@ export const FORK_BRIDGE_TOOL: AgentToolDefinition = {
  * The fork's own tools, as the AI link offers them beside upstream's: each one is run by the fork's
  * automation facade under the same name (see docs/fork/ai-link-migration.md).
  *
- * Written once from the tool list of tools/mcp-server, without the sessionId and requestId the link
+ * Written once from the tool list of the former tools/mcp-server, without the sessionId and requestId the link
  * fills in itself; kept by hand from here on.
  */
 export const FORK_AGENT_TOOLS: readonly AgentToolDefinition[] = [

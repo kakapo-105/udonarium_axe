@@ -44,7 +44,7 @@ GitHub は、リポジトリに 60 日間動きがないと定期実行を止め
 - テーブルごとの BGM — テーブル設定で曲を選んでおくと、一覧からそのテーブルを選んだときにジュークボックスで全員に流れる（[website/manual/table-setting.md](website/manual/table-setting.md#テーブルごとの-bgm)）
 - キャラクター一覧 — 卓のキャラクターを画面の端にリソースのバーと値で並べるウィジェット。項目はポップアップ表示と同じ。キャラごとに一覧から外せる（[website/manual/character.md](website/manual/character.md#画面の端のキャラクター一覧)）
 - マニュアル — 利用ガイドをアプリの隣（`docs/`）に公開し、アプリのメニューに「マニュアル」を追加
-- MCP による AI 操作 — okamichi さんの `feat/mcp`（1.50.0 ベース）を 1.57.1 へ移植。独自にシート・チャットパレット・バフの操作を追加し、「AI操作」パネルをドラッグで動かせるよう変更。MCP サーバーは `tools/mcp-server` の独立パッケージ（[tools/mcp-server/README.md](tools/mcp-server/README.md)）、`switch_set` / `ambience_set`（押せる仕掛けと環境エフェクト・天候を AI が置く）
+- MCP による AI 操作 — okamichi さんの `feat/mcp`（1.50.0 ベース）を 1.57.1 へ移植。独自にシート・チャットパレット・バフの操作を追加し、「AI操作」パネルをドラッグで動かせるよう変更。`switch_set` / `ambience_set`（押せる仕掛けと環境エフェクト・天候を AI が置く）。2026-11-20 に独自の MCP サーバー（`tools/mcp-server`）をやめ、上流の AI 連携（`tools/axe-mcp` のブリッジ）にフォークの道具を足す形へ移した（[docs/fork/ai-link-migration.md](docs/fork/ai-link-migration.md)）
 
 ## 上流から削除したワークフロー
 

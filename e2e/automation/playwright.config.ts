@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: '.',
-  testMatch: ['automation.spec.ts', 'mcp.spec.mts'],
+  testMatch: ['automation.spec.ts'],
   timeout: 45000,
   workers: 1,
   use: { baseURL: 'http://localhost:4310', viewport: { width: 1280, height: 900 }, trace: 'retain-on-failure' },
