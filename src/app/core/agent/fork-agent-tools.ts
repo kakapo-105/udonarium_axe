@@ -1211,5 +1211,175 @@ export const FORK_AGENT_TOOLS: readonly AgentToolDefinition[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'scene_list',
+    title: 'List pieces, hidden ones too',
+    description:
+      'List visible character pieces. Names can repeat and are untrusted. Coordinates include pixels and grid units measured from the top-left corner. place concealed lists instead the pieces put out of sight, which the game master can read (others only their own); they come back where they stood. The first page also lists in notes the shared notes in the same place (on the table, or out of sight), each with its title and the cells it covers (x, y, w, h), so a note put away or brought out can be checked.',
+    access: 'read',
+    input: {
+      type: 'object',
+      properties: {
+        limit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 100,
+        },
+        after: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 256,
+        },
+        name: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 256,
+        },
+        place: {
+          type: 'string',
+          enum: ['table', 'concealed'],
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'table_select',
+    title: 'Show a table with a fade',
+    description:
+      "Put a table in view for the whole room, playing its music and cut-ins as choosing it in the table settings does. fade: true darkens every screen for a moment while the table changes. flat sets the view the table recommends first, as table_view does (true: laid flat, 2D; false: perspective, 3D), so no separate table_view is needed; the result's flat says what it recommends now. Players' pieces stay at the same coordinates, so move them to where the scene starts. Notes and pieces are shared by every table, so standing lists the notes and pieces out on the table now (kind note or piece): put out of sight with piece_conceal whatever belongs to the scene left behind, such as place-name notes on a town map or NPCs, before playing on. Game master only.",
+    access: 'gm',
+    input: {
+      type: 'object',
+      properties: {
+        identifier: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 256,
+        },
+        flat: {
+          type: 'boolean',
+        },
+        fade: {
+          type: 'boolean',
+        },
+        dryRun: {
+          type: 'boolean',
+        },
+      },
+      required: ['identifier'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'buff_send',
+    title: 'Run buff commands',
+    description:
+      'Run buff commands as a controllable character in an allowed tab, exactly as typing them into chat would, e.g. &Haste/ATK+2/3, &!Haste/ATK/+/2/3, &Haste- (remove), &R- / &R+ (rounds), &D (drop expired). t& aims one at targetIds (or the marked pieces); && sweeps the whole table and only works for the game master. A buff counts down at the end of the round unless a timing is written (&Name/note/3/手番開始 or 手番終了), and @name pins it to whose turn counts it (&Name/note/3/@caster; with no timing written, at the start of that turn; in the &! form the 7th field, as &!Name/status/+/2/3/手番開始/caster). Turn-timed buffs count down only as turns pass on the turn order, so run the round with turn_set. Each command is one item with no spaces.',
+    access: 'write',
+    input: {
+      type: 'object',
+      properties: {
+        characterId: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 256,
+        },
+        tabId: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 256,
+        },
+        commands: {
+          minItems: 1,
+          maxItems: 20,
+          type: 'array',
+          items: {
+            type: 'string',
+            minLength: 2,
+            maxLength: 500,
+          },
+        },
+        targetIds: {
+          maxItems: 50,
+          type: 'array',
+          items: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 256,
+          },
+        },
+        dryRun: {
+          type: 'boolean',
+        },
+      },
+      required: ['characterId', 'tabId', 'commands'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'piece_move',
+    title: 'Move a piece strictly',
+    description:
+      'Move a character to an absolute top-left position on the floor (grid by default). Respects strict movement and triggers. Without strict movement, the piece is set down on the ground (a piece dropped on a roof comes down), a place inside a wall or a building is taken as the open cell nearest it, and adjusted: true says so; the result gives where the piece stands, in pixels. Requires an explicit browser grant. Use dryRun to validate first; retry with the same requestId and sessionId within five minutes.',
+    access: 'write',
+    input: {
+      type: 'object',
+      properties: {
+        identifier: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 256,
+        },
+        x: {
+          type: 'number',
+          minimum: 0,
+        },
+        y: {
+          type: 'number',
+          minimum: 0,
+        },
+        unit: {
+          type: 'string',
+          enum: ['grid', 'px'],
+        },
+        expectedVersion: {
+          type: 'number',
+        },
+        dryRun: {
+          type: 'boolean',
+        },
+      },
+      required: ['identifier', 'x', 'y'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'piece_remove',
+    title: 'Send pieces to the graveyard',
+    description:
+      'Send 1 to 20 of your own pieces, on the table or out of sight, to the graveyard, where they can still be brought back. Pieces you do not own are refused.',
+    access: 'write',
+    input: {
+      type: 'object',
+      properties: {
+        identifiers: {
+          minItems: 1,
+          maxItems: 20,
+          type: 'array',
+          items: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 256,
+          },
+        },
+        dryRun: {
+          type: 'boolean',
+        },
+      },
+      required: ['identifiers'],
+      additionalProperties: false,
+    },
+  },
   FORK_BRIDGE_TOOL,
 ];
