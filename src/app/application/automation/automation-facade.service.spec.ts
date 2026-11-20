@@ -291,6 +291,16 @@ describe('AutomationFacadeService', () => {
     error(await call('chat_read_recent', { tabId: tab.identifier }), 'NOT_FOUND');
     error(await call('chat_send', { tabId: tab.identifier, text: 'hello' }), 'NOT_FOUND');
   });
+  it('marks a line said for the AI link as the AI’s, and a line said for anyone else as the seat’s', async () => {
+    const said = async () => {
+      const result = await call('chat_send', { tabId: tab.identifier, text: 'hello' });
+      const { identifier } = (result as { data: { identifier: string } }).data;
+      return store.get<ChatMessage>(identifier);
+    };
+    expect((await said())?.isByAi).toBe(false);
+    expect((await policy.throughAiLink(said))?.isByAi).toBe(true);
+    expect(policy.viaAiLink).toBe(false);
+  });
   it('respects tab speaking permissions and prevents command scope escalation', async () => {
     tab.plCanSpeak = false;
     error(await call('chat_send', { tabId: tab.identifier, text: 'hello' }), 'FORBIDDEN');

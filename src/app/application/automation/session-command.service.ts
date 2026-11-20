@@ -1,6 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { fail } from '@axe/application/automation/automation-contract';
 import { AutomationImage, AutomationImageService } from '@axe/application/automation/automation-image.service';
+import { AutomationPolicyService } from '@axe/application/automation/automation-policy.service';
 import { ChatWaitService } from '@axe/application/automation/chat-wait.service';
 import { CharacterMacroService } from '@axe/application/chat/character-macro.service';
 import { ChatMessageService } from '@axe/application/chat/chat-message.service';
@@ -52,6 +53,7 @@ export class SessionCommandService {
   private readonly plan = inject(MovePlanService);
   private readonly triggers = inject(TriggerFireService);
   private readonly chat = inject(ChatMessageService);
+  private readonly policy = inject(AutomationPolicyService);
   private readonly macro = inject(CharacterMacroService);
   private readonly chatWait = inject(ChatWaitService);
   private readonly images = inject(AutomationImageService);
@@ -215,6 +217,11 @@ export class SessionCommandService {
    * scene heading, as picking that kind in the chat input does, so it stands out in the log and in
    * novel mode.
    */
+  /** Says a line as the seat says it, marked as the AI's when the AI link asked for it. */
+  private asSpeaker<T>(say: () => T): T {
+    return this.policy.viaAiLink ? this.chat.asAiWords(say) : say();
+  }
+
   async send(
     tab: ChatTab,
     text: string,
@@ -232,13 +239,15 @@ export class SessionCommandService {
       fail('CONFLICT', 'The speaker or chat tab was replaced while preparing the message.');
     }
     const before = this.chatWait.linesOf(tab);
-    const message = this.chatWait.said(() => {
-      const said = character
-        ? this.macro.send(character, text, { tab, gameSystem, targets: [] })
-        : this.chat.sendMessage(tab, text, gameSystem, PeerCursor.myCursor.identifier);
-      if (said && style !== 'normal') said.vnEmote = encodeVnEmote({ ...VN_EMOTE_DEFAULT, kind: style });
-      return said;
-    });
+    const message = this.chatWait.said(() =>
+      this.asSpeaker(() => {
+        const said = character
+          ? this.macro.send(character, text, { tab, gameSystem, targets: [] })
+          : this.chat.sendMessage(tab, text, gameSystem, PeerCursor.myCursor.identifier);
+        if (said && style !== 'normal') said.vnEmote = encodeVnEmote({ ...VN_EMOTE_DEFAULT, kind: style });
+        return said;
+      })
+    );
     if (!message) fail('NOT_READY', 'Chat is not ready.');
     const rolls = await this.chatWait.rollsSince(tab, before, message.text, guard, gameSystem?.COMMAND_PATTERN);
     return { identifier: message.identifier, tabId: tab.identifier, ...(rolls.length > 0 ? { rolls } : {}) };
@@ -265,7 +274,9 @@ export class SessionCommandService {
       fail('CONFLICT', 'The speaker or chat tab was replaced while preparing the message.');
     }
     const before = this.chatWait.linesOf(tab);
-    const message = this.chatWait.said(() => this.macro.send(character, line, { tab, gameSystem, targets }));
+    const message = this.chatWait.said(() =>
+      this.asSpeaker(() => this.macro.send(character, line, { tab, gameSystem, targets }))
+    );
     if (!message) fail('NOT_READY', 'Chat is not ready.');
     const rolls = await this.chatWait.rollsSince(tab, before, message.text, guard, gameSystem?.COMMAND_PATTERN);
     return {

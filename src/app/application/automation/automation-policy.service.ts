@@ -41,6 +41,24 @@ export class AutomationPolicyService {
     this.grants.set(['read_visible']);
     this.sessionId.set(crypto.randomUUID());
   }
+  /** How many calls of the AI link are running through the facade; see {@link throughAiLink}. */
+  private aiLinkDepth = 0;
+  /** Whether a call of the AI link is running, so that what it says is marked as the AI's. */
+  get viaAiLink(): boolean {
+    return this.aiLinkDepth > 0;
+  }
+  /**
+   * Runs a call the AI link made through the facade. The facade runs one write at a time, and only
+   * writes speak, so a line said while it runs is the AI's.
+   */
+  async throughAiLink<T>(run: () => Promise<T>): Promise<T> {
+    this.aiLinkDepth++;
+    try {
+      return await run();
+    } finally {
+      this.aiLinkDepth--;
+    }
+  }
   setScope(scope: AutomationScope, allowed: boolean): void {
     this.grants.update((current) => (allowed ? [...new Set([...current, scope])] : current.filter((s) => s !== scope)));
   }
