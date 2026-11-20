@@ -103,7 +103,6 @@ const FAB: MenuLayout = {
     ),
     item('manual'),
     item('aiLink'),
-    item('aiGm'),
     item('buttonGuide'),
   ],
 };

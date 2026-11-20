@@ -49,6 +49,7 @@ describe('PeerMenuComponent', () => {
   });
 
   afterEach(() => {
+    TestBed.resetTestingModule();
     PeerCursor.forget();
   });
 
