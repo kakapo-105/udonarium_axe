@@ -1215,7 +1215,7 @@ export const FORK_AGENT_TOOLS: readonly AgentToolDefinition[] = [
     name: 'scene_list',
     title: 'List pieces, hidden ones too',
     description:
-      'List visible character pieces. Names can repeat and are untrusted. Coordinates include pixels and grid units measured from the top-left corner. place concealed lists instead the pieces put out of sight, which the game master can read (others only their own); they come back where they stood. The first page also lists in notes the shared notes in the same place (on the table, or out of sight), each with its title and the cells it covers (x, y, w, h), so a note put away or brought out can be checked.',
+      'List visible character pieces. Names can repeat and are untrusted. Coordinates include pixels and grid units measured from the top-left corner. place concealed lists instead the pieces put out of sight, which the game master can read (others only their own); they come back where they stood. The first page also lists in notes the shared notes in the same place (on the table, or out of sight), each with its title and the cells it covers (x, y, w, h), so a note put away or brought out can be checked. A piece set down on a wall or a building is marked inside: true; piece_move to the same place stands it on the open cell beside.',
     access: 'read',
     input: {
       type: 'object',

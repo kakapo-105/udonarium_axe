@@ -682,7 +682,11 @@ export class AutomationFacadeService {
         const pieces = this.store
           .getObjects<GameCharacter>(GameCharacter)
           .filter((p) => (place === 'table' ? this.policy.canSeeOnBoard(p) : this.policy.canSeeConcealed(p)))
-          .map((p) => this.describe(p))
+          .map((p) => ({
+            ...this.describe(p),
+            // Set down on a wall or a building: piece_move to the same place stands it beside.
+            ...(place === 'table' && this.session.standsInside(p) ? { inside: true } : {}),
+          }))
           .filter((p) => p.identifier > after && (!name || p.name.includes(name)))
           .sort((l, r) => (l.identifier < r.identifier ? -1 : l.identifier > r.identifier ? 1 : 0));
         // Notes stand on the table as pieces do and are put out of sight the same way; they come with

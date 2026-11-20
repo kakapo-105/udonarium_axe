@@ -176,6 +176,20 @@ describe('AutomationFacadeService', () => {
     );
     building.destroy();
   });
+  it('lists a piece a player set down inside a building as inside, and one on open ground without the mark', async () => {
+    const building = Terrain.create('Building', 2, 2, 2, '', '');
+    building.location = { name: 'table', x: 150, y: 100 };
+    table.appendChild(building);
+    const listed = async () =>
+      ((await call('scene_list')) as { data: { objects: { identifier: string; inside?: true }[] } }).data.objects.find(
+        (each) => each.identifier === piece.identifier
+      );
+
+    expect(await listed()).not.toHaveProperty('inside');
+    piece.location = { name: 'table', x: 150, y: 100 };
+    expect(await listed()).toMatchObject({ inside: true });
+    building.destroy();
+  });
   it('rejects locked pieces, guests, missing scopes and stale versions', async () => {
     piece.isLock = true;
     expect((await move()).ok).toBe(true); // a lock keeps others out, not the one who owns the piece
