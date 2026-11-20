@@ -1,5 +1,6 @@
 import { AgentSchema, checkAgentInput } from '@axe/core/agent/agent-schema';
 import { AGENT_TOOLS, agentToolOf, agentToolsDigest } from '@axe/core/agent/agent-tools';
+import { FORK_AGENT_TOOLS } from '@axe/core/agent/fork-agent-tools';
 
 /** Every schema in a schema, itself included. */
 function schemasIn(schema: AgentSchema): AgentSchema[] {
@@ -39,7 +40,9 @@ describe('AGENT_TOOLS', () => {
   });
 
   it('keeps the tools that change nothing apart from those that change the room, and the master’s apart', () => {
-    const reading = AGENT_TOOLS.filter((tool) => tool.access === 'read').map((tool) => tool.name);
+    const reading = AGENT_TOOLS.filter((tool) => tool.access === 'read' && !FORK_AGENT_TOOLS.includes(tool)).map(
+      (tool) => tool.name
+    );
     expect(reading).toEqual([
       'get_room',
       'list_pieces',
