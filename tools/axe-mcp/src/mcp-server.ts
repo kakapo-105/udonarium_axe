@@ -27,6 +27,7 @@ import {
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
+import { forkBridge, withForkBridgeTools } from './fork/fork-bridge';
 import type { TurnDesk } from './gm/turn-desk';
 import type { TabLink } from './tab-link';
 
@@ -57,7 +58,9 @@ function waitOf(args: Readonly<Record<string, unknown>>): number {
  * it the instructions and the notebook it has not had; taking the prompt or the guide begins one anew.
  */
 export function createMcpServer(link: TabLink, version: string, desk?: TurnDesk): Server {
-  const tools: readonly AgentToolDefinition[] = desk ? [...AGENT_TOOLS, ...GM_DESK_TOOLS] : AGENT_TOOLS;
+  const tools: readonly AgentToolDefinition[] = withForkBridgeTools(
+    desk ? [...AGENT_TOOLS, ...GM_DESK_TOOLS] : AGENT_TOOLS
+  );
   const prompts = [
     {
       name: RUN_SESSION_PROMPT_NAME,
@@ -102,6 +105,11 @@ export function createMcpServer(link: TabLink, version: string, desk?: TurnDesk)
     const tool = tools.find((each) => each.name === request.params.name);
     if (!tool) return failure(`unknown_tool: There is no tool named ${request.params.name}.`);
     const args = request.params.arguments ?? {};
+    // The fork's tools that read this machine's files: the bridge reads them, then hands the tab the rest.
+    if (forkBridge().has(tool.name)) {
+      desk?.noteCall(server);
+      return forkBridge().call(tool.name, args, (name, input, ms) => link.call(name, input, ms, extra.signal));
+    }
     const problems = checkAgentInput(tool.input, args);
     if (problems.length > 0) return failure(`invalid_input: ${problems.join('; ')}`);
     desk?.noteCall(server);

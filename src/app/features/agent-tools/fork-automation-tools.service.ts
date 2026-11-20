@@ -5,7 +5,7 @@ import { AutomationFacadeService } from '@axe/application/automation/automation-
 import { AutomationPolicyService } from '@axe/application/automation/automation-policy.service';
 import { AgentToolError } from '@axe/core/agent/agent-error';
 import type { AgentErrorCode } from '@axe/core/agent/agent-protocol';
-import { FORK_AGENT_TOOLS } from '@axe/core/agent/fork-agent-tools';
+import { FORK_AGENT_TOOLS, FORK_BRIDGE_TOOL_NAME } from '@axe/core/agent/fork-agent-tools';
 
 /** How each refusal of the fork's facade reads to the AI link. */
 const ERROR_CODES: Readonly<Record<AutomationErrorCode, AgentErrorCode>> = {
@@ -35,17 +35,38 @@ export class ForkAutomationTools {
   private readonly policy = inject(AutomationPolicyService);
 
   readonly handlers: Readonly<Record<string, AgentHandler>> = Object.fromEntries(
-    FORK_AGENT_TOOLS.map((tool) => [tool.name, (args: Readonly<Record<string, unknown>>) => this.run(tool.name, args)])
+    FORK_AGENT_TOOLS.map((tool) => [
+      tool.name,
+      tool.name === FORK_BRIDGE_TOOL_NAME
+        ? (args: Readonly<Record<string, unknown>>) => this.runPrepared(args)
+        : (args: Readonly<Record<string, unknown>>) => this.run(tool.name, args),
+    ])
   );
+
+  /** Runs a command the bridge prepared from this machine's files, its arguments given as JSON text. */
+  private async runPrepared(args: Readonly<Record<string, unknown>>): Promise<unknown> {
+    let prepared: unknown;
+    try {
+      prepared = JSON.parse(String(args['payload']));
+    } catch {
+      throw new AgentToolError('invalid_input', 'The payload is not JSON.');
+    }
+    if (typeof prepared !== 'object' || prepared === null || Array.isArray(prepared)) {
+      throw new AgentToolError('invalid_input', 'The payload is not an object.');
+    }
+    return this.run(String(args['command']), prepared as Record<string, unknown>);
+  }
 
   private async run(command: string, args: Readonly<Record<string, unknown>>): Promise<unknown> {
     this.ready();
-    const result = await this.facade.invoke({
-      sessionId: this.policy.sessionId(),
-      requestId: crypto.randomUUID(),
-      command,
-      arguments: { ...args },
-    });
+    const result = await this.policy.throughAiLink(() =>
+      this.facade.invoke({
+        sessionId: this.policy.sessionId(),
+        requestId: crypto.randomUUID(),
+        command,
+        arguments: { ...args },
+      })
+    );
     if (result.ok) return result.data;
     throw new AgentToolError(ERROR_CODES[result.error.code] ?? 'failed', result.error.message);
   }

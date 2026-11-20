@@ -10,6 +10,7 @@ import { AGENT_TOOLS } from '@axe/core/agent/agent-tools';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
+import { withForkBridgeTools } from './fork/fork-bridge';
 import { TurnDesk } from './gm/turn-desk';
 import { createMcpServer } from './mcp-server';
 import { TabLink } from './tab-link';
@@ -60,7 +61,7 @@ describe('createMcpServer', () => {
   it('lists every tool Axe defines, marking those that change nothing and those that take things away', async () => {
     const { tools } = await client.listTools();
 
-    expect(tools.map((tool) => tool.name)).toEqual(AGENT_TOOLS.map((tool) => tool.name));
+    expect(tools.map((tool) => tool.name)).toEqual(withForkBridgeTools(AGENT_TOOLS).map((tool) => tool.name));
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     expect(byName.get('get_room')?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
     expect(byName.get('send_chat')?.annotations).toMatchObject({ readOnlyHint: false });
@@ -153,7 +154,7 @@ describe('createMcpServer', () => {
       const { tools } = await gm.listTools();
 
       expect(tools.map((tool) => tool.name)).toEqual([
-        ...AGENT_TOOLS.map((tool) => tool.name),
+        ...withForkBridgeTools(AGENT_TOOLS).map((tool) => tool.name),
         'wait_for_turn',
         'update_notes',
       ]);
